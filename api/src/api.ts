@@ -19,10 +19,13 @@ import type { Federation } from "@fedify/fedify";
 import type { DB, Actor, Post, PostWithActor, User } from "./db.ts";
 import { processActivity, persistActor } from "./activities.ts";
 import { saveAvatar } from "./storage.ts";
-
-declare const Temporal: {
-  Now: { instant(): { toString(): string } };
-};
+import {
+  getCachedProfilePosts,
+  setCachedProfilePosts,
+  invalidateProfileCache,
+  getCachedHashtagPosts,
+  setCachedHashtagPosts,
+} from "./cache.ts";
 
 type Env = {
   Variables: {
@@ -228,24 +231,49 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // Get posts by a specific user (local)
   // ?filter=replies to get only replies
-  api.get("/users/:username/posts", (c) => {
+  api.get("/users/:username/posts", async (c) => {
     const username = c.req.param("username");
     const filter = c.req.query("filter");
     const db = c.get("db");
     const currentActor = c.get("actor");
+    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
     const actor = db.getActorByUsername(username);
 
     if (!actor) {
       return c.json({ error: "User not found" }, 404);
     }
 
-    // Use optimized batch methods
+    // Only cache main posts (not replies) for logged-out users
+    if (!filter && !currentActor) {
+      const cached = await getCachedProfilePosts(actor.id, limit, before);
+      if (cached) {
+        return c.json(cached);
+      }
+    }
+
+    // Use optimized batch methods with pagination
     const posts = filter === "replies"
-      ? db.getRepliesByActorWithActor(actor.id)
-      : db.getPostsByActorWithActor(actor.id);
-    return c.json({
-      posts: enrichPostsBatch(db, posts, currentActor?.id),
-    });
+      ? db.getRepliesByActorWithActor(actor.id, limit + 1, before)
+      : db.getPostsByActorWithActor(actor.id, limit + 1, before);
+
+    const hasMore = posts.length > limit;
+    const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+    const nextCursor = hasMore && resultPosts.length > 0
+      ? resultPosts[resultPosts.length - 1].id
+      : null;
+
+    const result = {
+      posts: enrichPostsBatch(db, resultPosts, currentActor?.id),
+      next_cursor: nextCursor,
+    };
+
+    // Cache for logged-out users viewing main posts
+    if (!filter && !currentActor) {
+      await setCachedProfilePosts(actor.id, limit, before, result);
+    }
+
+    return c.json(result);
   });
 
   // Get actor by ID (works for both local and remote)
@@ -271,24 +299,49 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // Get posts by actor ID (works for both local and remote)
   // ?filter=replies to get only replies
-  api.get("/actors/:id/posts", (c) => {
+  api.get("/actors/:id/posts", async (c) => {
     const id = parseInt(c.req.param("id"));
     const filter = c.req.query("filter");
     const db = c.get("db");
     const currentActor = c.get("actor");
+    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
     const actor = db.getActorById(id);
 
     if (!actor) {
       return c.json({ error: "Actor not found" }, 404);
     }
 
-    // Use optimized batch methods
+    // Only cache main posts (not replies) for logged-out users
+    if (!filter && !currentActor) {
+      const cached = await getCachedProfilePosts(actor.id, limit, before);
+      if (cached) {
+        return c.json(cached);
+      }
+    }
+
+    // Use optimized batch methods with pagination
     const posts = filter === "replies"
-      ? db.getRepliesByActorWithActor(actor.id)
-      : db.getPostsByActorWithActor(actor.id);
-    return c.json({
-      posts: enrichPostsBatch(db, posts, currentActor?.id),
-    });
+      ? db.getRepliesByActorWithActor(actor.id, limit + 1, before)
+      : db.getPostsByActorWithActor(actor.id, limit + 1, before);
+
+    const hasMore = posts.length > limit;
+    const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+    const nextCursor = hasMore && resultPosts.length > 0
+      ? resultPosts[resultPosts.length - 1].id
+      : null;
+
+    const result = {
+      posts: enrichPostsBatch(db, resultPosts, currentActor?.id),
+      next_cursor: nextCursor,
+    };
+
+    // Cache for logged-out users viewing main posts
+    if (!filter && !currentActor) {
+      await setCachedProfilePosts(actor.id, limit, before, result);
+    }
+
+    return c.json(result);
   });
 
   // Get pinned posts for an actor (works for both local and remote)
@@ -435,14 +488,24 @@ export function createApi(db: DB, federation: Federation<void>) {
     const db = c.get("db");
     const actor = c.get("actor");
     const timeline = c.req.query("timeline") || "public";
+    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
 
-    // Use optimized batch methods with actor JOIN
+    // Use optimized batch methods with actor JOIN and pagination
     const posts = timeline === "home" && actor
-      ? db.getHomeFeedWithActor(actor.id)
-      : db.getPublicTimelineWithActor();
+      ? db.getHomeFeedWithActor(actor.id, limit + 1, before)
+      : db.getPublicTimelineWithActor(limit + 1, before);
+
+    // Check if there are more posts
+    const hasMore = posts.length > limit;
+    const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+    const nextCursor = hasMore && resultPosts.length > 0
+      ? resultPosts[resultPosts.length - 1].id
+      : null;
 
     return c.json({
-      posts: enrichPostsBatch(db, posts, actor?.id),
+      posts: enrichPostsBatch(db, resultPosts, actor?.id),
+      next_cursor: nextCursor,
     });
   });
 
@@ -514,6 +577,9 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Post not found after creation" }, 500);
     }
 
+    // Invalidate the author's profile cache
+    await invalidateProfileCache(actor.id);
+
     return c.json({ post: enrichPost(db, post, actor?.id) });
   });
 
@@ -534,16 +600,26 @@ export function createApi(db: DB, federation: Federation<void>) {
     const id = parseInt(c.req.param("id"));
     const db = c.get("db");
     const actor = c.get("actor");
+    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const after = c.req.query("after") ? parseInt(c.req.query("after")!) : undefined;
     const post = db.getPostById(id);
 
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
 
-    // Use optimized batch method
-    const replies = db.getRepliesWithActor(post.id);
+    // Use optimized batch method with pagination (replies use "after" since they're ASC)
+    const replies = db.getRepliesWithActor(post.id, limit + 1, after);
+
+    const hasMore = replies.length > limit;
+    const resultReplies = hasMore ? replies.slice(0, limit) : replies;
+    const nextCursor = hasMore && resultReplies.length > 0
+      ? resultReplies[resultReplies.length - 1].id
+      : null;
+
     return c.json({
-      replies: enrichPostsBatch(db, replies, actor?.id),
+      replies: enrichPostsBatch(db, resultReplies, actor?.id),
+      next_cursor: nextCursor,
     });
   });
 
@@ -581,6 +657,9 @@ export function createApi(db: DB, federation: Federation<void>) {
     if (!result.success) {
       return c.json({ error: result.error || "Failed to delete post" }, 500);
     }
+
+    // Invalidate the author's profile cache
+    await invalidateProfileCache(actor.id);
 
     return c.json({ ok: true });
   });
@@ -837,15 +916,25 @@ export function createApi(db: DB, federation: Federation<void>) {
     const username = c.req.param("username");
     const db = c.get("db");
     const currentActor = c.get("actor");
+    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
     const actor = db.getActorByUsername(username);
 
     if (!actor) {
       return c.json({ error: "User not found" }, 404);
     }
 
-    const posts = db.getBoostedPostsWithActor(actor.id);
+    const posts = db.getBoostedPostsWithActor(actor.id, limit + 1, before);
+
+    const hasMore = posts.length > limit;
+    const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+    const nextCursor = hasMore && resultPosts.length > 0
+      ? resultPosts[resultPosts.length - 1].id
+      : null;
+
     return c.json({
-      posts: enrichPostsBatch(db, posts, currentActor?.id),
+      posts: enrichPostsBatch(db, resultPosts, currentActor?.id),
+      next_cursor: nextCursor,
     });
   });
 
@@ -1126,16 +1215,41 @@ export function createApi(db: DB, federation: Federation<void>) {
     return c.json({ tags });
   });
 
-  api.get("/tags/:tag", (c) => {
+  api.get("/tags/:tag", async (c) => {
     const tag = c.req.param("tag");
     const db = c.get("db");
     const actor = c.get("actor");
-    const posts = db.getPostsByHashtagWithActor(tag);
+    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
 
-    return c.json({
+    // Try cache for logged-out users
+    if (!actor) {
+      const cached = await getCachedHashtagPosts(tag, limit, before);
+      if (cached) {
+        return c.json(cached);
+      }
+    }
+
+    const posts = db.getPostsByHashtagWithActor(tag, limit + 1, before);
+
+    const hasMore = posts.length > limit;
+    const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+    const nextCursor = hasMore && resultPosts.length > 0
+      ? resultPosts[resultPosts.length - 1].id
+      : null;
+
+    const result = {
       tag,
-      posts: enrichPostsBatch(db, posts, actor?.id),
-    });
+      posts: enrichPostsBatch(db, resultPosts, actor?.id),
+      next_cursor: nextCursor,
+    };
+
+    // Cache for logged-out users
+    if (!actor) {
+      await setCachedHashtagPosts(tag, limit, before, result);
+    }
+
+    return c.json(result);
   });
 
   return api;

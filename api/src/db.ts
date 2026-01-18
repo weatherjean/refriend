@@ -464,65 +464,112 @@ export class DB {
     a.created_at as author_created_at
   `;
 
-  getPublicTimelineWithActor(limit = 50): PostWithActor[] {
-    const rows = this.db.prepare(`
-      SELECT ${this.postWithActorSelect}
-      FROM posts p
-      JOIN actors a ON p.actor_id = a.id
-      WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NULL
-      ORDER BY p.created_at DESC
-      LIMIT ?
-    `).all(limit) as Record<string, unknown>[];
-    return rows.map(row => this.parsePostWithActor(row));
+  getPublicTimelineWithActor(limit = 20, before?: number): PostWithActor[] {
+    const rows = before
+      ? this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NULL AND p.id < ?
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(before, limit)
+      : this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NULL
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(limit);
+    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
   }
 
-  getHomeFeedWithActor(actorId: number, limit = 50): PostWithActor[] {
-    const rows = this.db.prepare(`
-      SELECT ${this.postWithActorSelect}
-      FROM posts p
-      JOIN actors a ON p.actor_id = a.id
-      JOIN follows f ON p.actor_id = f.following_id
-      WHERE f.follower_id = ? AND p.in_reply_to_id IS NULL
-      ORDER BY p.created_at DESC
-      LIMIT ?
-    `).all(actorId, limit) as Record<string, unknown>[];
-    return rows.map(row => this.parsePostWithActor(row));
+  getHomeFeedWithActor(actorId: number, limit = 20, before?: number): PostWithActor[] {
+    const rows = before
+      ? this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          JOIN follows f ON p.actor_id = f.following_id
+          WHERE f.follower_id = ? AND p.in_reply_to_id IS NULL AND p.id < ?
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(actorId, before, limit)
+      : this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          JOIN follows f ON p.actor_id = f.following_id
+          WHERE f.follower_id = ? AND p.in_reply_to_id IS NULL
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(actorId, limit);
+    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
   }
 
-  getPostsByActorWithActor(actorId: number, limit = 50): PostWithActor[] {
-    const rows = this.db.prepare(`
-      SELECT ${this.postWithActorSelect}
-      FROM posts p
-      JOIN actors a ON p.actor_id = a.id
-      WHERE p.actor_id = ? AND p.in_reply_to_id IS NULL
-      ORDER BY p.created_at DESC
-      LIMIT ?
-    `).all(actorId, limit) as Record<string, unknown>[];
-    return rows.map(row => this.parsePostWithActor(row));
+  getPostsByActorWithActor(actorId: number, limit = 20, before?: number): PostWithActor[] {
+    const rows = before
+      ? this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          WHERE p.actor_id = ? AND p.in_reply_to_id IS NULL AND p.id < ?
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(actorId, before, limit)
+      : this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          WHERE p.actor_id = ? AND p.in_reply_to_id IS NULL
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(actorId, limit);
+    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
   }
 
-  getRepliesByActorWithActor(actorId: number, limit = 50): PostWithActor[] {
-    const rows = this.db.prepare(`
-      SELECT ${this.postWithActorSelect}
-      FROM posts p
-      JOIN actors a ON p.actor_id = a.id
-      WHERE p.actor_id = ? AND p.in_reply_to_id IS NOT NULL
-      ORDER BY p.created_at DESC
-      LIMIT ?
-    `).all(actorId, limit) as Record<string, unknown>[];
-    return rows.map(row => this.parsePostWithActor(row));
+  getRepliesByActorWithActor(actorId: number, limit = 20, before?: number): PostWithActor[] {
+    const rows = before
+      ? this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          WHERE p.actor_id = ? AND p.in_reply_to_id IS NOT NULL AND p.id < ?
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(actorId, before, limit)
+      : this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          WHERE p.actor_id = ? AND p.in_reply_to_id IS NOT NULL
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(actorId, limit);
+    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
   }
 
-  getRepliesWithActor(postId: number, limit = 50): PostWithActor[] {
-    const rows = this.db.prepare(`
-      SELECT ${this.postWithActorSelect}
-      FROM posts p
-      JOIN actors a ON p.actor_id = a.id
-      WHERE p.in_reply_to_id = ?
-      ORDER BY p.created_at ASC
-      LIMIT ?
-    `).all(postId, limit) as Record<string, unknown>[];
-    return rows.map(row => this.parsePostWithActor(row));
+  getRepliesWithActor(postId: number, limit = 20, after?: number): PostWithActor[] {
+    // Replies are ordered ASC (oldest first), so we use "after" cursor
+    const rows = after
+      ? this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          WHERE p.in_reply_to_id = ? AND p.id > ?
+          ORDER BY p.id ASC
+          LIMIT ?
+        `).all(postId, after, limit)
+      : this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          WHERE p.in_reply_to_id = ?
+          ORDER BY p.id ASC
+          LIMIT ?
+        `).all(postId, limit);
+    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
   }
 
   // Batch methods for reducing N+1 queries
@@ -604,32 +651,53 @@ export class DB {
     return rows.map(row => this.parsePostWithActor(row));
   }
 
-  getBoostedPostsWithActor(actorId: number, limit = 50): PostWithActor[] {
-    const rows = this.db.prepare(`
-      SELECT ${this.postWithActorSelect}
-      FROM posts p
-      JOIN actors a ON p.actor_id = a.id
-      JOIN boosts b ON p.id = b.post_id
-      WHERE b.actor_id = ?
-      ORDER BY b.created_at DESC
-      LIMIT ?
-    `).all(actorId, limit) as Record<string, unknown>[];
-    return rows.map(row => this.parsePostWithActor(row));
+  getBoostedPostsWithActor(actorId: number, limit = 20, before?: number): PostWithActor[] {
+    const rows = before
+      ? this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          JOIN boosts b ON p.id = b.post_id
+          WHERE b.actor_id = ? AND p.id < ?
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(actorId, before, limit)
+      : this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          JOIN boosts b ON p.id = b.post_id
+          WHERE b.actor_id = ?
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(actorId, limit);
+    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
   }
 
-  getPostsByHashtagWithActor(hashtagName: string, limit = 50): PostWithActor[] {
+  getPostsByHashtagWithActor(hashtagName: string, limit = 20, before?: number): PostWithActor[] {
     const normalized = hashtagName.toLowerCase().replace(/^#/, "");
-    const rows = this.db.prepare(`
-      SELECT ${this.postWithActorSelect}
-      FROM posts p
-      JOIN actors a ON p.actor_id = a.id
-      JOIN post_hashtags ph ON p.id = ph.post_id
-      JOIN hashtags h ON ph.hashtag_id = h.id
-      WHERE h.name = ?
-      ORDER BY p.created_at DESC
-      LIMIT ?
-    `).all(normalized, limit) as Record<string, unknown>[];
-    return rows.map(row => this.parsePostWithActor(row));
+    const rows = before
+      ? this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          JOIN post_hashtags ph ON p.id = ph.post_id
+          JOIN hashtags h ON ph.hashtag_id = h.id
+          WHERE h.name = ? AND p.id < ?
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(normalized, before, limit)
+      : this.db.prepare(`
+          SELECT ${this.postWithActorSelect}
+          FROM posts p
+          JOIN actors a ON p.actor_id = a.id
+          JOIN post_hashtags ph ON p.id = ph.post_id
+          JOIN hashtags h ON ph.hashtag_id = h.id
+          WHERE h.name = ?
+          ORDER BY p.id DESC
+          LIMIT ?
+        `).all(normalized, limit);
+    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
   }
 
   deletePost(id: number): void {

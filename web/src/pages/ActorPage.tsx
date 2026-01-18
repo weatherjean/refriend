@@ -19,6 +19,14 @@ export function ActorPage() {
   const [boosts, setBoosts] = useState<Post[]>([]);
   const [repliesLoaded, setRepliesLoaded] = useState(false);
   const [boostsLoaded, setBoostsLoaded] = useState(false);
+
+  // Pagination cursors
+  const [postsCursor, setPostsCursor] = useState<number | null>(null);
+  const [repliesCursor, setRepliesCursor] = useState<number | null>(null);
+  const [boostsCursor, setBoostsCursor] = useState<number | null>(null);
+  const [loadingMorePosts, setLoadingMorePosts] = useState(false);
+  const [loadingMoreReplies, setLoadingMoreReplies] = useState(false);
+  const [loadingMoreBoosts, setLoadingMoreBoosts] = useState(false);
   const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'boosts'>('posts');
   const [followers, setFollowers] = useState<Actor[]>([]);
   const [following, setFollowing] = useState<Actor[]>([]);
@@ -49,6 +57,9 @@ export function ActorPage() {
     setBoosts([]);
     setPinnedPosts([]);
     setActiveTab('posts');
+    setPostsCursor(null);
+    setRepliesCursor(null);
+    setBoostsCursor(null);
 
     try {
       // First, try to load as local user
@@ -69,6 +80,7 @@ export function ActorPage() {
         ]);
 
         setPosts(postsData.posts);
+        setPostsCursor(postsData.next_cursor);
         setPinnedPosts(pinnedData.posts);
         setFollowers(followersData.followers);
         setFollowing(followingData.following);
@@ -86,13 +98,14 @@ export function ActorPage() {
           // Fetch follow status, posts, and pinned posts in parallel
           const [actorData, postsData, pinnedData] = await Promise.all([
             actors.get(remoteActor.id).catch(() => ({ is_following: false, is_own_profile: false })),
-            actors.getPosts(remoteActor.id).catch(() => ({ posts: [] })),
+            actors.getPosts(remoteActor.id).catch(() => ({ posts: [], next_cursor: null })),
             actors.getPinned(remoteActor.id).catch(() => ({ posts: [] })),
           ]);
 
           setIsFollowing(actorData.is_following);
           setIsOwnProfile(actorData.is_own_profile);
           setPosts(postsData.posts);
+          setPostsCursor(postsData.next_cursor);
           setPinnedPosts(pinnedData.posts);
         } else {
           setError('User not found');
@@ -113,6 +126,7 @@ export function ActorPage() {
         ? await users.getReplies(username)
         : await actors.getReplies(actor.id);
       setPostsWithReplies(postsData.posts);
+      setRepliesCursor(postsData.next_cursor);
       setRepliesLoaded(true);
     } catch (err) {
       console.error('Failed to load replies:', err);
@@ -125,11 +139,58 @@ export function ActorPage() {
     try {
       const postsData = await users.getBoosts(username);
       setBoosts(postsData.posts);
+      setBoostsCursor(postsData.next_cursor);
       setBoostsLoaded(true);
     } catch (err) {
       console.error('Failed to load boosts:', err);
     }
   }, [actor, boostsLoaded, isLocalUser, username]);
+
+  const loadMorePosts = useCallback(async () => {
+    if (!actor || !postsCursor || loadingMorePosts) return;
+    setLoadingMorePosts(true);
+    try {
+      const postsData = isLocalUser
+        ? await users.getPosts(username, { before: postsCursor })
+        : await actors.getPosts(actor.id, { before: postsCursor });
+      setPosts(prev => [...prev, ...postsData.posts]);
+      setPostsCursor(postsData.next_cursor);
+    } catch (err) {
+      console.error('Failed to load more posts:', err);
+    } finally {
+      setLoadingMorePosts(false);
+    }
+  }, [actor, postsCursor, loadingMorePosts, isLocalUser, username]);
+
+  const loadMoreReplies = useCallback(async () => {
+    if (!actor || !repliesCursor || loadingMoreReplies) return;
+    setLoadingMoreReplies(true);
+    try {
+      const postsData = isLocalUser
+        ? await users.getReplies(username, { before: repliesCursor })
+        : await actors.getReplies(actor.id, { before: repliesCursor });
+      setPostsWithReplies(prev => [...prev, ...postsData.posts]);
+      setRepliesCursor(postsData.next_cursor);
+    } catch (err) {
+      console.error('Failed to load more replies:', err);
+    } finally {
+      setLoadingMoreReplies(false);
+    }
+  }, [actor, repliesCursor, loadingMoreReplies, isLocalUser, username]);
+
+  const loadMoreBoosts = useCallback(async () => {
+    if (!actor || !boostsCursor || loadingMoreBoosts || !isLocalUser) return;
+    setLoadingMoreBoosts(true);
+    try {
+      const postsData = await users.getBoosts(username, { before: boostsCursor });
+      setBoosts(prev => [...prev, ...postsData.posts]);
+      setBoostsCursor(postsData.next_cursor);
+    } catch (err) {
+      console.error('Failed to load more boosts:', err);
+    } finally {
+      setLoadingMoreBoosts(false);
+    }
+  }, [actor, boostsCursor, loadingMoreBoosts, isLocalUser, username]);
 
   useEffect(() => {
     loadProfile();
@@ -349,6 +410,21 @@ export function ActorPage() {
             {posts.filter(p => !pinnedPosts.some(pp => pp.id === p.id)).map((post) => (
               <PostCard key={post.id} post={post} />
             ))}
+            {postsCursor && (
+              <div className="text-center py-3">
+                <button
+                  className="btn btn-outline-primary"
+                  onClick={loadMorePosts}
+                  disabled={loadingMorePosts}
+                >
+                  {loadingMorePosts ? (
+                    <><span className="spinner-border spinner-border-sm me-1"></span> Loading...</>
+                  ) : (
+                    'Load More'
+                  )}
+                </button>
+              </div>
+            )}
           </>
         )
       )}
@@ -364,34 +440,51 @@ export function ActorPage() {
             <p>No replies yet.</p>
           </div>
         ) : (
-          postsWithReplies.map((post) => (
-            <div key={post.id} className="mb-3">
-              {/* Show the original post this is replying to */}
-              {post.in_reply_to && (
-                <Link to={`/posts/${post.in_reply_to.id}`} className="text-decoration-none d-block mb-2 ms-4 ps-3 border-start border-2 text-muted">
-                  <div className="d-flex align-items-center small mb-1">
-                    {post.in_reply_to.author?.avatar_url ? (
-                      <img
-                        src={post.in_reply_to.author.avatar_url}
-                        alt=""
-                        className="rounded-circle me-1"
-                        style={{ width: 16, height: 16, objectFit: 'cover' }}
-                      />
-                    ) : (
-                      <span className="me-1">@</span>
-                    )}
-                    <span>{post.in_reply_to.author?.name || post.in_reply_to.author?.handle || 'Unknown'}</span>
-                  </div>
-                  <div
-                    className="small"
-                    style={{ maxHeight: '2.5em', overflow: 'hidden', opacity: 0.8 }}
-                    dangerouslySetInnerHTML={{ __html: post.in_reply_to.content }}
-                  />
-                </Link>
-              )}
-              <PostCard post={post} />
-            </div>
-          ))
+          <>
+            {postsWithReplies.map((post) => (
+              <div key={post.id} className="mb-3">
+                {/* Show the original post this is replying to */}
+                {post.in_reply_to && (
+                  <Link to={`/posts/${post.in_reply_to.id}`} className="text-decoration-none d-block mb-2 ms-4 ps-3 border-start border-2 text-muted">
+                    <div className="d-flex align-items-center small mb-1">
+                      {post.in_reply_to.author?.avatar_url ? (
+                        <img
+                          src={post.in_reply_to.author.avatar_url}
+                          alt=""
+                          className="rounded-circle me-1"
+                          style={{ width: 16, height: 16, objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <span className="me-1">@</span>
+                      )}
+                      <span>{post.in_reply_to.author?.name || post.in_reply_to.author?.handle || 'Unknown'}</span>
+                    </div>
+                    <div
+                      className="small"
+                      style={{ maxHeight: '2.5em', overflow: 'hidden', opacity: 0.8 }}
+                      dangerouslySetInnerHTML={{ __html: post.in_reply_to.content }}
+                    />
+                  </Link>
+                )}
+                <PostCard post={post} />
+              </div>
+            ))}
+            {repliesCursor && (
+              <div className="text-center py-3">
+                <button
+                  className="btn btn-outline-primary"
+                  onClick={loadMoreReplies}
+                  disabled={loadingMoreReplies}
+                >
+                  {loadingMoreReplies ? (
+                    <><span className="spinner-border spinner-border-sm me-1"></span> Loading...</>
+                  ) : (
+                    'Load More'
+                  )}
+                </button>
+              </div>
+            )}
+          </>
         )
       )}
 
@@ -406,14 +499,31 @@ export function ActorPage() {
             <p>No boosts yet.</p>
           </div>
         ) : (
-          boosts.map((post) => (
-            <div key={post.id} className="position-relative">
-              <span className="badge bg-success position-absolute" style={{ top: 8, right: 8, zIndex: 1 }}>
-                <i className="bi bi-arrow-repeat me-1"></i>Boosted
-              </span>
-              <PostCard post={post} />
-            </div>
-          ))
+          <>
+            {boosts.map((post) => (
+              <div key={post.id} className="position-relative">
+                <span className="badge bg-success position-absolute" style={{ top: 8, right: 8, zIndex: 1 }}>
+                  <i className="bi bi-arrow-repeat me-1"></i>Boosted
+                </span>
+                <PostCard post={post} />
+              </div>
+            ))}
+            {boostsCursor && (
+              <div className="text-center py-3">
+                <button
+                  className="btn btn-outline-primary"
+                  onClick={loadMoreBoosts}
+                  disabled={loadingMoreBoosts}
+                >
+                  {loadingMoreBoosts ? (
+                    <><span className="spinner-border spinner-border-sm me-1"></span> Loading...</>
+                  ) : (
+                    'Load More'
+                  )}
+                </button>
+              </div>
+            )}
+          </>
         )
       )}
 

@@ -14,6 +14,7 @@ import {
   PUBLIC_COLLECTION,
 } from "@fedify/fedify";
 import type { DB, Actor } from "./db.ts";
+import { invalidateProfileCache } from "./cache.ts";
 
 // Activity processing result
 export interface ProcessResult {
@@ -502,6 +503,9 @@ async function processCreate(
       }
     }
   }
+
+  // Invalidate the author's profile cache
+  await invalidateProfileCache(authorActor.id);
 }
 
 async function processLike(
@@ -925,6 +929,9 @@ async function processDelete(
   if (post && post.actor_id === actorRecord.id) {
     db.deletePost(post.id);
     console.log(`[Delete] Post ${post.id} by ${actorRecord.handle}`);
+
+    // Invalidate the author's profile cache
+    await invalidateProfileCache(actorRecord.id);
 
     // For outbound: send to followers
     if (direction === "outbound" && localUsername) {

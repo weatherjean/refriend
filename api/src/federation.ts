@@ -1,3 +1,4 @@
+/// <reference lib="deno.unstable" />
 import {
   Accept,
   Activity,
@@ -19,10 +20,6 @@ import {
 import { DenoKvStore, DenoKvMessageQueue } from "@fedify/denokv";
 import type { DB } from "./db.ts";
 import { processActivity } from "./activities.ts";
-
-declare const Temporal: {
-  Instant: { from(s: string): { toString(): string } };
-};
 
 // Domain will be set at runtime
 let DOMAIN = "localhost:8000";

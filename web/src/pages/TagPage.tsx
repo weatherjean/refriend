@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { tags, Post } from '../api';
 import { PostCard } from '../components/PostCard';
@@ -7,13 +7,19 @@ export function TagPage() {
   const { tag } = useParams<{ tag: string }>();
   const [postList, setPostList] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true);
+      setPostList([]);
+      setNextCursor(null);
       try {
-        const { posts } = await tags.get(tag!);
+        const { posts, next_cursor } = await tags.get(tag!);
         setPostList(posts);
+        setNextCursor(next_cursor);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load posts');
       } finally {
@@ -22,6 +28,20 @@ export function TagPage() {
     };
     load();
   }, [tag]);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const { posts, next_cursor } = await tags.get(tag!, { before: nextCursor });
+      setPostList(prev => [...prev, ...posts]);
+      setNextCursor(next_cursor);
+    } catch (err) {
+      console.error('Failed to load more posts:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [tag, nextCursor, loadingMore]);
 
   if (loading) {
     return (
@@ -47,9 +67,26 @@ export function TagPage() {
           <p>No posts with this hashtag yet.</p>
         </div>
       ) : (
-        postList.map((post) => (
-          <PostCard key={post.id} post={post} />
-        ))
+        <>
+          {postList.map((post) => (
+            <PostCard key={post.id} post={post} />
+          ))}
+          {nextCursor && (
+            <div className="text-center py-3">
+              <button
+                className="btn btn-outline-primary"
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <><span className="spinner-border spinner-border-sm me-1"></span> Loading...</>
+                ) : (
+                  'Load More'
+                )}
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

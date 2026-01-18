@@ -93,6 +93,17 @@ export const auth = {
     }),
 };
 
+// Pagination params
+export interface PaginationParams {
+  limit?: number;
+  before?: number;
+}
+
+export interface PaginatedPosts {
+  posts: Post[];
+  next_cursor: number | null;
+}
+
 // Users
 export const users = {
   get: (username: string) =>
@@ -102,14 +113,28 @@ export const users = {
       is_following: boolean;
       is_own_profile: boolean;
     }>(`/users/${username}`),
-  getPosts: (username: string) =>
-    fetchJson<{ posts: Post[] }>(`/users/${username}/posts`),
-  getReplies: (username: string) =>
-    fetchJson<{ posts: Post[] }>(`/users/${username}/posts?filter=replies`),
+  getPosts: (username: string, params?: PaginationParams) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const queryStr = query.toString();
+    return fetchJson<PaginatedPosts>(`/users/${username}/posts${queryStr ? '?' + queryStr : ''}`);
+  },
+  getReplies: (username: string, params?: PaginationParams) => {
+    const query = new URLSearchParams({ filter: 'replies' });
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    return fetchJson<PaginatedPosts>(`/users/${username}/posts?${query}`);
+  },
   getPinned: (username: string) =>
     fetchJson<{ posts: Post[] }>(`/users/${username}/pinned`),
-  getBoosts: (username: string) =>
-    fetchJson<{ posts: Post[] }>(`/users/${username}/boosts`),
+  getBoosts: (username: string, params?: PaginationParams) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const queryStr = query.toString();
+    return fetchJson<PaginatedPosts>(`/users/${username}/boosts${queryStr ? '?' + queryStr : ''}`);
+  },
   getFollowers: (username: string) =>
     fetchJson<{ followers: Actor[] }>(`/users/${username}/followers`),
   getFollowing: (username: string) =>
@@ -120,18 +145,31 @@ export const users = {
 export const actors = {
   get: (actorId: number) =>
     fetchJson<{ actor: Actor; is_following: boolean; is_own_profile: boolean }>(`/actors/${actorId}`),
-  getPosts: (actorId: number) =>
-    fetchJson<{ posts: Post[] }>(`/actors/${actorId}/posts`),
-  getReplies: (actorId: number) =>
-    fetchJson<{ posts: Post[] }>(`/actors/${actorId}/posts?filter=replies`),
+  getPosts: (actorId: number, params?: PaginationParams) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const queryStr = query.toString();
+    return fetchJson<PaginatedPosts>(`/actors/${actorId}/posts${queryStr ? '?' + queryStr : ''}`);
+  },
+  getReplies: (actorId: number, params?: PaginationParams) => {
+    const query = new URLSearchParams({ filter: 'replies' });
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    return fetchJson<PaginatedPosts>(`/actors/${actorId}/posts?${query}`);
+  },
   getPinned: (actorId: number) =>
     fetchJson<{ posts: Post[] }>(`/actors/${actorId}/pinned`),
 };
 
 // Posts
 export const posts = {
-  getTimeline: (timeline: 'public' | 'home' = 'public') =>
-    fetchJson<{ posts: Post[] }>(`/posts?timeline=${timeline}`),
+  getTimeline: (timeline: 'public' | 'home' = 'public', params?: PaginationParams) => {
+    const query = new URLSearchParams({ timeline });
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    return fetchJson<PaginatedPosts>(`/posts?${query}`);
+  },
   get: (id: number) => fetchJson<{ post: Post }>(`/posts/${id}`),
   getReplies: (id: number) => fetchJson<{ replies: Post[] }>(`/posts/${id}/replies`),
   create: (content: string, inReplyTo?: number) =>
@@ -189,8 +227,13 @@ export const search = {
 
 // Tags
 export const tags = {
-  get: (tag: string) =>
-    fetchJson<{ tag: string; posts: Post[] }>(`/tags/${encodeURIComponent(tag)}`),
+  get: (tag: string, params?: PaginationParams) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const queryStr = query.toString();
+    return fetchJson<PaginatedPosts & { tag: string }>(`/tags/${encodeURIComponent(tag)}${queryStr ? '?' + queryStr : ''}`);
+  },
   getTrending: () =>
     fetchJson<{ tags: { name: string; count: number }[] }>('/tags/trending'),
   getPopular: () =>

@@ -180,37 +180,44 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
                 )}
               </button>
 
-              <button
-                className={`btn btn-sm me-2 ${boosted ? '' : 'btn-outline-secondary'}`}
-                onClick={handleBoost}
-                disabled={!user || boostLoading || isOwnPost}
-                title={isOwnPost ? "Can't boost own post" : (user ? (boosted ? 'Unboost' : 'Boost') : 'Login to boost')}
-                style={boosted ? {
-                  backgroundColor: 'hsl(140, 70%, 90%)',
-                  color: 'hsl(140, 70%, 30%)',
-                  border: 'none',
-                } : undefined}
-              >
-                {boostLoading ? (
-                  <span className="spinner-border spinner-border-sm"></span>
-                ) : (
-                  <>
-                    <i className="bi bi-arrow-repeat me-1"></i>
-                    {boostsCount}
-                  </>
-                )}
-              </button>
-
               {linkToPost && (
                 <Link
                   to={postLink}
-                  className="btn btn-sm btn-outline-secondary me-2"
+                  className="btn btn-sm me-2"
                   onClick={(e) => e.stopPropagation()}
                   title="View replies"
+                  style={{
+                    backgroundColor: 'hsl(210, 50%, 95%)',
+                    color: 'hsl(210, 50%, 40%)',
+                    border: 'none',
+                  }}
                 >
                   <i className="bi bi-chat me-1"></i>
                   {post.replies_count}
                 </Link>
+              )}
+
+              {!linkToPost && (
+                <button
+                  className={`btn btn-sm me-2 ${boosted ? '' : 'btn-outline-secondary'}`}
+                  onClick={handleBoost}
+                  disabled={!user || boostLoading || isOwnPost}
+                  title={isOwnPost ? "Can't boost own post" : (user ? (boosted ? 'Unboost' : 'Boost') : 'Login to boost')}
+                  style={boosted ? {
+                    backgroundColor: 'hsl(140, 70%, 90%)',
+                    color: 'hsl(140, 70%, 30%)',
+                    border: 'none',
+                  } : undefined}
+                >
+                  {boostLoading ? (
+                    <span className="spinner-border spinner-border-sm"></span>
+                  ) : (
+                    <>
+                      <i className="bi bi-arrow-repeat me-1"></i>
+                      {boostsCount}
+                    </>
+                  )}
+                </button>
               )}
 
               {isOwnPost && (

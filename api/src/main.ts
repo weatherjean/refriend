@@ -6,6 +6,7 @@ import { DB } from "./db.ts";
 import { federation, setDomain, setDB } from "./federation.ts";
 import { createApi } from "./api.ts";
 import { initStorage, getUploadsDir } from "./storage.ts";
+import { initCache } from "./cache.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
 const DB_PATH = Deno.env.get("DB_PATH") || "./data.db";
@@ -17,6 +18,9 @@ db.init(new URL("../schema.sql", import.meta.url).pathname);
 
 // Initialize storage
 await initStorage();
+
+// Initialize KV cache
+await initCache();
 
 // Create Hono app
 const app = new Hono();
