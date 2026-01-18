@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS posts (
   content TEXT NOT NULL,                       -- HTML content
   url TEXT,                                    -- Web URL for the post
   in_reply_to_id INTEGER REFERENCES posts(id) ON DELETE SET NULL,  -- For replies
+  likes_count INTEGER NOT NULL DEFAULT 0,     -- Denormalized for performance
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

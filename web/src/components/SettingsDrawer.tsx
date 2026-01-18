@@ -39,7 +39,7 @@ export function SettingsDrawer({ actor, onClose, onSave }: SettingsDrawerProps) 
 
     try {
       setError('');
-      const webpData = await resizeAndConvertToWebP(file, 300);
+      const webpData = await resizeAndConvertToWebP(file, 100);
       setAvatarPreview(webpData);
       setAvatarData(webpData);
     } catch (err) {
@@ -204,7 +204,7 @@ export function SettingsDrawer({ actor, onClose, onSave }: SettingsDrawerProps) 
                     onChange={handleFileSelect}
                     style={{ display: 'none' }}
                   />
-                  <div className="form-text">Image will be resized to 300x300</div>
+                  <div className="form-text">Image will be resized to 100x100</div>
                 </div>
 
                 {/* Name */}

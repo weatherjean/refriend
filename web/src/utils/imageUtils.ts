@@ -3,12 +3,12 @@
  * All processing happens client-side - no server round trip needed
  *
  * @param file - The input file (from file input or drag/drop)
- * @param maxSize - Maximum width/height (default 300 for avatars)
+ * @param maxSize - Maximum width/height (default 100 for avatars)
  * @returns Promise<string> - Base64 encoded WebP image
  */
 export async function resizeAndConvertToWebP(
   file: File,
-  maxSize: number = 300
+  maxSize: number = 100
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();

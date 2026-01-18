@@ -44,7 +44,13 @@ export interface Post {
   content: string;
   url: string | null;
   in_reply_to_id: number | null;
+  likes_count: number;
   created_at: string;
+}
+
+// Post with actor data already joined (reduces N+1 queries)
+export interface PostWithActor extends Post {
+  author: Actor;
 }
 
 export interface Hashtag {
@@ -88,6 +94,23 @@ export class DB {
   init(schemaPath: string) {
     const schema = Deno.readTextFileSync(schemaPath);
     this.db.exec(schema);
+    this.migrate();
+  }
+
+  // Run migrations for existing databases
+  private migrate() {
+    // Add likes_count column if it doesn't exist
+    const columns = this.db.prepare("PRAGMA table_info(posts)").all() as { name: string }[];
+    const hasLikesCount = columns.some(c => c.name === "likes_count");
+    if (!hasLikesCount) {
+      this.db.exec("ALTER TABLE posts ADD COLUMN likes_count INTEGER NOT NULL DEFAULT 0");
+      // Backfill existing counts
+      this.db.exec(`
+        UPDATE posts SET likes_count = (
+          SELECT COUNT(*) FROM likes WHERE likes.post_id = posts.id
+        )
+      `);
+    }
   }
 
   // Migrate local actors to a new domain
@@ -337,7 +360,7 @@ export class DB {
 
   // ============ Posts ============
 
-  createPost(post: Omit<Post, "id" | "created_at"> & { created_at?: string }): Post {
+  createPost(post: Omit<Post, "id" | "created_at" | "likes_count"> & { created_at?: string }): Post {
     if (post.created_at) {
       this.db.prepare(`
         INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, created_at)
@@ -402,6 +425,211 @@ export class DB {
       ORDER BY p.created_at DESC
       LIMIT ?
     `).all(limit) as Post[];
+  }
+
+  // ============ Feed methods with actor JOIN (optimized) ============
+
+  // Helper to parse joined post+actor rows
+  private parsePostWithActor(row: Record<string, unknown>): PostWithActor {
+    return {
+      id: row.id as number,
+      uri: row.uri as string,
+      actor_id: row.actor_id as number,
+      content: row.content as string,
+      url: row.url as string | null,
+      in_reply_to_id: row.in_reply_to_id as number | null,
+      likes_count: row.likes_count as number,
+      created_at: row.created_at as string,
+      author: {
+        id: row.author_id as number,
+        uri: row.author_uri as string,
+        handle: row.author_handle as string,
+        name: row.author_name as string | null,
+        bio: row.author_bio as string | null,
+        avatar_url: row.author_avatar_url as string | null,
+        inbox_url: row.author_inbox_url as string,
+        shared_inbox_url: row.author_shared_inbox_url as string | null,
+        url: row.author_url as string | null,
+        user_id: row.author_user_id as number | null,
+        created_at: row.author_created_at as string,
+      },
+    };
+  }
+
+  private readonly postWithActorSelect = `
+    p.id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.created_at,
+    a.id as author_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
+    a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
+    a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,
+    a.created_at as author_created_at
+  `;
+
+  getPublicTimelineWithActor(limit = 50): PostWithActor[] {
+    const rows = this.db.prepare(`
+      SELECT ${this.postWithActorSelect}
+      FROM posts p
+      JOIN actors a ON p.actor_id = a.id
+      WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NULL
+      ORDER BY p.created_at DESC
+      LIMIT ?
+    `).all(limit) as Record<string, unknown>[];
+    return rows.map(row => this.parsePostWithActor(row));
+  }
+
+  getHomeFeedWithActor(actorId: number, limit = 50): PostWithActor[] {
+    const rows = this.db.prepare(`
+      SELECT ${this.postWithActorSelect}
+      FROM posts p
+      JOIN actors a ON p.actor_id = a.id
+      JOIN follows f ON p.actor_id = f.following_id
+      WHERE f.follower_id = ? AND p.in_reply_to_id IS NULL
+      ORDER BY p.created_at DESC
+      LIMIT ?
+    `).all(actorId, limit) as Record<string, unknown>[];
+    return rows.map(row => this.parsePostWithActor(row));
+  }
+
+  getPostsByActorWithActor(actorId: number, limit = 50): PostWithActor[] {
+    const rows = this.db.prepare(`
+      SELECT ${this.postWithActorSelect}
+      FROM posts p
+      JOIN actors a ON p.actor_id = a.id
+      WHERE p.actor_id = ? AND p.in_reply_to_id IS NULL
+      ORDER BY p.created_at DESC
+      LIMIT ?
+    `).all(actorId, limit) as Record<string, unknown>[];
+    return rows.map(row => this.parsePostWithActor(row));
+  }
+
+  getRepliesByActorWithActor(actorId: number, limit = 50): PostWithActor[] {
+    const rows = this.db.prepare(`
+      SELECT ${this.postWithActorSelect}
+      FROM posts p
+      JOIN actors a ON p.actor_id = a.id
+      WHERE p.actor_id = ? AND p.in_reply_to_id IS NOT NULL
+      ORDER BY p.created_at DESC
+      LIMIT ?
+    `).all(actorId, limit) as Record<string, unknown>[];
+    return rows.map(row => this.parsePostWithActor(row));
+  }
+
+  getRepliesWithActor(postId: number, limit = 50): PostWithActor[] {
+    const rows = this.db.prepare(`
+      SELECT ${this.postWithActorSelect}
+      FROM posts p
+      JOIN actors a ON p.actor_id = a.id
+      WHERE p.in_reply_to_id = ?
+      ORDER BY p.created_at ASC
+      LIMIT ?
+    `).all(postId, limit) as Record<string, unknown>[];
+    return rows.map(row => this.parsePostWithActor(row));
+  }
+
+  // Batch methods for reducing N+1 queries
+  getHashtagsForPosts(postIds: number[]): Map<number, string[]> {
+    if (postIds.length === 0) return new Map();
+    const placeholders = postIds.map(() => "?").join(",");
+    const rows = this.db.prepare(`
+      SELECT ph.post_id, h.name
+      FROM post_hashtags ph
+      JOIN hashtags h ON ph.hashtag_id = h.id
+      WHERE ph.post_id IN (${placeholders})
+    `).all(...postIds) as { post_id: number; name: string }[];
+
+    const map = new Map<number, string[]>();
+    for (const row of rows) {
+      const existing = map.get(row.post_id) || [];
+      existing.push(row.name);
+      map.set(row.post_id, existing);
+    }
+    return map;
+  }
+
+  getLikedPostIds(actorId: number, postIds: number[]): Set<number> {
+    if (postIds.length === 0) return new Set();
+    const placeholders = postIds.map(() => "?").join(",");
+    const rows = this.db.prepare(`
+      SELECT post_id FROM likes
+      WHERE actor_id = ? AND post_id IN (${placeholders})
+    `).all(actorId, ...postIds) as { post_id: number }[];
+    return new Set(rows.map(r => r.post_id));
+  }
+
+  getBoostedPostIds(actorId: number, postIds: number[]): Set<number> {
+    if (postIds.length === 0) return new Set();
+    const placeholders = postIds.map(() => "?").join(",");
+    const rows = this.db.prepare(`
+      SELECT post_id FROM boosts
+      WHERE actor_id = ? AND post_id IN (${placeholders})
+    `).all(actorId, ...postIds) as { post_id: number }[];
+    return new Set(rows.map(r => r.post_id));
+  }
+
+  getPinnedPostIds(actorId: number, postIds: number[]): Set<number> {
+    if (postIds.length === 0) return new Set();
+    const placeholders = postIds.map(() => "?").join(",");
+    const rows = this.db.prepare(`
+      SELECT post_id FROM pinned_posts
+      WHERE actor_id = ? AND post_id IN (${placeholders})
+    `).all(actorId, ...postIds) as { post_id: number }[];
+    return new Set(rows.map(r => r.post_id));
+  }
+
+  getRepliesCounts(postIds: number[]): Map<number, number> {
+    if (postIds.length === 0) return new Map();
+    const placeholders = postIds.map(() => "?").join(",");
+    const rows = this.db.prepare(`
+      SELECT in_reply_to_id as post_id, COUNT(*) as count
+      FROM posts
+      WHERE in_reply_to_id IN (${placeholders})
+      GROUP BY in_reply_to_id
+    `).all(...postIds) as { post_id: number; count: number }[];
+
+    const map = new Map<number, number>();
+    for (const row of rows) {
+      map.set(row.post_id, row.count);
+    }
+    return map;
+  }
+
+  getPinnedPostsWithActor(actorId: number): PostWithActor[] {
+    const rows = this.db.prepare(`
+      SELECT ${this.postWithActorSelect}
+      FROM posts p
+      JOIN actors a ON p.actor_id = a.id
+      JOIN pinned_posts pp ON p.id = pp.post_id
+      WHERE pp.actor_id = ?
+      ORDER BY pp.pinned_at DESC
+    `).all(actorId) as Record<string, unknown>[];
+    return rows.map(row => this.parsePostWithActor(row));
+  }
+
+  getBoostedPostsWithActor(actorId: number, limit = 50): PostWithActor[] {
+    const rows = this.db.prepare(`
+      SELECT ${this.postWithActorSelect}
+      FROM posts p
+      JOIN actors a ON p.actor_id = a.id
+      JOIN boosts b ON p.id = b.post_id
+      WHERE b.actor_id = ?
+      ORDER BY b.created_at DESC
+      LIMIT ?
+    `).all(actorId, limit) as Record<string, unknown>[];
+    return rows.map(row => this.parsePostWithActor(row));
+  }
+
+  getPostsByHashtagWithActor(hashtagName: string, limit = 50): PostWithActor[] {
+    const normalized = hashtagName.toLowerCase().replace(/^#/, "");
+    const rows = this.db.prepare(`
+      SELECT ${this.postWithActorSelect}
+      FROM posts p
+      JOIN actors a ON p.actor_id = a.id
+      JOIN post_hashtags ph ON p.id = ph.post_id
+      JOIN hashtags h ON ph.hashtag_id = h.id
+      WHERE h.name = ?
+      ORDER BY p.created_at DESC
+      LIMIT ?
+    `).all(normalized, limit) as Record<string, unknown>[];
+    return rows.map(row => this.parsePostWithActor(row));
   }
 
   deletePost(id: number): void {
@@ -516,15 +744,43 @@ export class DB {
   // ============ Likes ============
 
   addLike(actorId: number, postId: number): void {
-    this.db.prepare(
-      "INSERT OR IGNORE INTO likes (actor_id, post_id) VALUES (?, ?)"
-    ).run(actorId, postId);
+    // Use transaction to atomically insert like and update count
+    this.db.exec("BEGIN");
+    try {
+      const result = this.db.prepare(
+        "INSERT OR IGNORE INTO likes (actor_id, post_id) VALUES (?, ?)"
+      ).run(actorId, postId);
+      // Only increment if a row was actually inserted
+      if (result > 0) {
+        this.db.prepare(
+          "UPDATE posts SET likes_count = likes_count + 1 WHERE id = ?"
+        ).run(postId);
+      }
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
   }
 
   removeLike(actorId: number, postId: number): void {
-    this.db.prepare(
-      "DELETE FROM likes WHERE actor_id = ? AND post_id = ?"
-    ).run(actorId, postId);
+    // Use transaction to atomically delete like and update count
+    this.db.exec("BEGIN");
+    try {
+      const result = this.db.prepare(
+        "DELETE FROM likes WHERE actor_id = ? AND post_id = ?"
+      ).run(actorId, postId);
+      // Only decrement if a row was actually deleted
+      if (result > 0) {
+        this.db.prepare(
+          "UPDATE posts SET likes_count = MAX(0, likes_count - 1) WHERE id = ?"
+        ).run(postId);
+      }
+      this.db.exec("COMMIT");
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
   }
 
   hasLiked(actorId: number, postId: number): boolean {

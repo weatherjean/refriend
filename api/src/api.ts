@@ -16,7 +16,7 @@ import {
   PUBLIC_COLLECTION,
 } from "@fedify/fedify";
 import type { Federation } from "@fedify/fedify";
-import type { DB, Actor, Post, User } from "./db.ts";
+import type { DB, Actor, Post, PostWithActor, User } from "./db.ts";
 import { processActivity, persistActor } from "./activities.ts";
 import { saveAvatar } from "./storage.ts";
 
@@ -239,11 +239,12 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "User not found" }, 404);
     }
 
+    // Use optimized batch methods
     const posts = filter === "replies"
-      ? db.getRepliesByActor(actor.id)
-      : db.getPostsByActor(actor.id);
+      ? db.getRepliesByActorWithActor(actor.id)
+      : db.getPostsByActorWithActor(actor.id);
     return c.json({
-      posts: posts.map((p) => enrichPost(db, p, currentActor?.id)),
+      posts: enrichPostsBatch(db, posts, currentActor?.id),
     });
   });
 
@@ -281,11 +282,12 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Actor not found" }, 404);
     }
 
+    // Use optimized batch methods
     const posts = filter === "replies"
-      ? db.getRepliesByActor(actor.id)
-      : db.getPostsByActor(actor.id);
+      ? db.getRepliesByActorWithActor(actor.id)
+      : db.getPostsByActorWithActor(actor.id);
     return c.json({
-      posts: posts.map((p) => enrichPost(db, p, currentActor?.id)),
+      posts: enrichPostsBatch(db, posts, currentActor?.id),
     });
   });
 
@@ -303,9 +305,9 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     // For local actors, return from our pinned_posts table
     if (actor.user_id !== null) {
-      const posts = db.getPinnedPosts(actor.id);
+      const posts = db.getPinnedPostsWithActor(actor.id);
       return c.json({
-        posts: posts.map((p) => enrichPost(db, p, currentActor?.id)),
+        posts: enrichPostsBatch(db, posts, currentActor?.id),
       });
     }
 
@@ -434,15 +436,13 @@ export function createApi(db: DB, federation: Federation<void>) {
     const actor = c.get("actor");
     const timeline = c.req.query("timeline") || "public";
 
-    let posts: Post[];
-    if (timeline === "home" && actor) {
-      posts = db.getHomeFeed(actor.id);
-    } else {
-      posts = db.getPublicTimeline();
-    }
+    // Use optimized batch methods with actor JOIN
+    const posts = timeline === "home" && actor
+      ? db.getHomeFeedWithActor(actor.id)
+      : db.getPublicTimelineWithActor();
 
     return c.json({
-      posts: posts.map((p) => enrichPost(db, p, actor?.id)),
+      posts: enrichPostsBatch(db, posts, actor?.id),
     });
   });
 
@@ -540,9 +540,10 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Post not found" }, 404);
     }
 
-    const replies = db.getReplies(post.id);
+    // Use optimized batch method
+    const replies = db.getRepliesWithActor(post.id);
     return c.json({
-      replies: replies.map((p) => enrichPost(db, p, actor?.id)),
+      replies: enrichPostsBatch(db, replies, actor?.id),
     });
   });
 
@@ -825,9 +826,9 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "User not found" }, 404);
     }
 
-    const posts = db.getPinnedPosts(actor.id);
+    const posts = db.getPinnedPostsWithActor(actor.id);
     return c.json({
-      posts: posts.map((p) => enrichPost(db, p, currentActor?.id)),
+      posts: enrichPostsBatch(db, posts, currentActor?.id),
     });
   });
 
@@ -842,9 +843,9 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "User not found" }, 404);
     }
 
-    const posts = db.getBoostedPosts(actor.id);
+    const posts = db.getBoostedPostsWithActor(actor.id);
     return c.json({
-      posts: posts.map((p) => enrichPost(db, p, currentActor?.id)),
+      posts: enrichPostsBatch(db, posts, currentActor?.id),
     });
   });
 
@@ -1129,11 +1130,11 @@ export function createApi(db: DB, federation: Federation<void>) {
     const tag = c.req.param("tag");
     const db = c.get("db");
     const actor = c.get("actor");
-    const posts = db.getPostsByHashtag(tag);
+    const posts = db.getPostsByHashtagWithActor(tag);
 
     return c.json({
       tag,
-      posts: posts.map((p) => enrichPost(db, p, actor?.id)),
+      posts: enrichPostsBatch(db, posts, actor?.id),
     });
   });
 
@@ -1164,10 +1165,10 @@ function sanitizeActor(actor: Actor) {
   };
 }
 
+// Single post enrichment (for individual post views - includes boost count)
 function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
   const actor = db.getActorById(post.actor_id);
   const hashtags = db.getPostHashtags(post.id);
-  const likesCount = db.getLikesCount(post.id);
   const boostsCount = db.getBoostsCount(post.id);
   const liked = currentActorId ? db.hasLiked(currentActorId, post.id) : false;
   const boosted = currentActorId ? db.hasBoosted(currentActorId, post.id) : false;
@@ -1199,7 +1200,7 @@ function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
     created_at: post.created_at,
     author: actor ? sanitizeActor(actor) : null,
     hashtags: hashtags.map((h) => h.name),
-    likes_count: likesCount,
+    likes_count: post.likes_count, // Use denormalized count
     boosts_count: boostsCount,
     liked,
     boosted,
@@ -1207,6 +1208,70 @@ function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
     replies_count: repliesCount,
     in_reply_to: inReplyTo,
   };
+}
+
+// Batch enrichment for feeds (optimized - no boost count)
+function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: number | null) {
+  if (posts.length === 0) return [];
+
+  const postIds = posts.map(p => p.id);
+
+  // Batch fetch all related data
+  const hashtagsMap = db.getHashtagsForPosts(postIds);
+  const repliesCountMap = db.getRepliesCounts(postIds);
+  const likedSet = currentActorId ? db.getLikedPostIds(currentActorId, postIds) : new Set<number>();
+  const boostedSet = currentActorId ? db.getBoostedPostIds(currentActorId, postIds) : new Set<number>();
+  const pinnedSet = currentActorId ? db.getPinnedPostIds(currentActorId, postIds) : new Set<number>();
+
+  // Batch fetch parent posts for replies
+  const parentIds = posts.filter(p => p.in_reply_to_id).map(p => p.in_reply_to_id!);
+  const parentPosts = new Map<number, Post>();
+  const parentActors = new Map<number, Actor>();
+  if (parentIds.length > 0) {
+    for (const id of parentIds) {
+      const post = db.getPostById(id);
+      if (post) {
+        parentPosts.set(id, post);
+        const actor = db.getActorById(post.actor_id);
+        if (actor) parentActors.set(post.actor_id, actor);
+      }
+    }
+  }
+
+  return posts.map(post => {
+    let inReplyTo = null;
+    if (post.in_reply_to_id) {
+      const parentPost = parentPosts.get(post.in_reply_to_id);
+      if (parentPost) {
+        const parentActor = parentActors.get(parentPost.actor_id);
+        inReplyTo = {
+          id: parentPost.id,
+          uri: parentPost.uri,
+          content: parentPost.content,
+          url: parentPost.url,
+          created_at: parentPost.created_at,
+          author: parentActor ? sanitizeActor(parentActor) : null,
+        };
+      }
+    }
+
+    return {
+      id: post.id,
+      uri: post.uri,
+      content: post.content,
+      url: post.url,
+      created_at: post.created_at,
+      author: sanitizeActor(post.author),
+      hashtags: hashtagsMap.get(post.id) || [],
+      likes_count: post.likes_count,
+      boosts_count: 0, // Skip boost count in feeds for performance
+      liked: likedSet.has(post.id),
+      boosted: boostedSet.has(post.id),
+      pinned: pinnedSet.has(post.id),
+      replies_count: repliesCountMap.get(post.id) || 0,
+      in_reply_to: inReplyTo,
+    };
+  });
 }
 
 function escapeHtml(text: string): string {
