@@ -358,6 +358,20 @@ export class DB {
     return row.count;
   }
 
+  // Get users with most new followers in the last 24 hours
+  getTrendingUsers(limit: number = 3): (Actor & { new_followers: number })[] {
+    return this.db.prepare(`
+      SELECT a.*, COUNT(f.follower_id) as new_followers
+      FROM actors a
+      JOIN follows f ON f.following_id = a.id
+      WHERE f.created_at > datetime('now', '-24 hours')
+        AND a.user_id IS NOT NULL
+      GROUP BY a.id
+      ORDER BY new_followers DESC
+      LIMIT ?
+    `).all(limit) as (Actor & { new_followers: number })[];
+  }
+
   // ============ Posts ============
 
   createPost(post: Omit<Post, "id" | "created_at" | "likes_count"> & { created_at?: string }): Post {

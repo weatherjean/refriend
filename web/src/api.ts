@@ -104,8 +104,18 @@ export interface PaginatedPosts {
   next_cursor: number | null;
 }
 
+export interface TrendingUser {
+  id: number;
+  handle: string;
+  name: string | null;
+  avatar_url: string | null;
+  new_followers: number;
+}
+
 // Users
 export const users = {
+  getTrending: () =>
+    fetchJson<{ users: TrendingUser[] }>('/users/trending'),
   get: (username: string) =>
     fetchJson<{
       actor: Actor;

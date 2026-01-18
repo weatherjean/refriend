@@ -48,3 +48,18 @@ export async function setCachedHashtagPosts(tag: string, limit: number, before: 
   const key = ["hashtag", tag.toLowerCase(), `${limit}`, before?.toString() ?? "none"];
   await kv.set(key, value, { expireIn: CACHE_TTL_MS });
 }
+
+// ============ Trending Users Cache ============
+
+const TRENDING_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+export async function getCachedTrendingUsers(): Promise<unknown | null> {
+  if (!kv) return null;
+  const entry = await kv.get(["trending", "users"]);
+  return entry.value;
+}
+
+export async function setCachedTrendingUsers(value: unknown): Promise<void> {
+  if (!kv) return;
+  await kv.set(["trending", "users"], value, { expireIn: TRENDING_TTL_MS });
+}

@@ -2,7 +2,7 @@ import { ReactNode, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
-import { tags } from '../api';
+import { tags, users, TrendingUser } from '../api';
 import { TagBadge } from './TagBadge';
 import { SettingsDrawer } from './SettingsDrawer';
 
@@ -14,12 +14,16 @@ export function Layout({ children }: LayoutProps) {
   const { user, actor, logout, setActor } = useAuth();
   const navigate = useNavigate();
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
+  const [trendingUsers, setTrendingUsers] = useState<TrendingUser[]>([]);
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     tags.getPopular()
       .then(({ tags }) => setPopularTags(tags))
-      .catch(() => {}); // Silently fail
+      .catch(() => {});
+    users.getTrending()
+      .then(({ users }) => setTrendingUsers(users))
+      .catch(() => {});
   }, []);
 
   const handleLogout = async () => {
@@ -73,6 +77,46 @@ export function Layout({ children }: LayoutProps) {
                 <div className="d-flex flex-wrap gap-2">
                   {popularTags.map((tag) => (
                     <TagBadge key={tag.name} tag={tag.name} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Trending Users */}
+          {trendingUsers.length > 0 && (
+            <div className="card mb-4">
+              <div className="card-body">
+                <h6 className="card-title mb-3">
+                  <i className="bi bi-graph-up-arrow me-1"></i> Rising
+                </h6>
+                <div className="d-flex flex-column gap-2">
+                  {trendingUsers.map((u) => (
+                    <Link
+                      key={u.id}
+                      to={`/u/${u.handle}`}
+                      className="d-flex align-items-center text-decoration-none text-reset"
+                    >
+                      {u.avatar_url ? (
+                        <img
+                          src={u.avatar_url}
+                          alt=""
+                          className="rounded-circle me-2"
+                          style={{ width: 28, height: 28, objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <div
+                          className="rounded-circle bg-secondary d-flex align-items-center justify-content-center me-2"
+                          style={{ width: 28, height: 28, fontSize: 12 }}
+                        >
+                          {(u.name || u.handle)[0]?.toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex-grow-1 text-truncate" style={{ minWidth: 0 }}>
+                        <div className="small fw-semibold text-truncate">{u.name || getUsername(u.handle)}</div>
+                      </div>
+                      <span className="badge bg-success ms-2">+{u.new_followers}</span>
+                    </Link>
                   ))}
                 </div>
               </div>

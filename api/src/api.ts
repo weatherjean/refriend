@@ -25,6 +25,8 @@ import {
   invalidateProfileCache,
   getCachedHashtagPosts,
   setCachedHashtagPosts,
+  getCachedTrendingUsers,
+  setCachedTrendingUsers,
 } from "./cache.ts";
 
 type Env = {
@@ -203,6 +205,29 @@ export function createApi(db: DB, federation: Federation<void>) {
   });
 
   // ============ Profile ============
+
+  // Trending users (most new followers in last 24h) - must be before :username route
+  api.get("/users/trending", async (c) => {
+    const cached = await getCachedTrendingUsers();
+    if (cached) {
+      return c.json(cached);
+    }
+
+    const db = c.get("db");
+    const users = db.getTrendingUsers(3);
+    const result = {
+      users: users.map(u => ({
+        id: u.id,
+        handle: u.handle,
+        name: u.name,
+        avatar_url: u.avatar_url,
+        new_followers: u.new_followers,
+      })),
+    };
+
+    await setCachedTrendingUsers(result);
+    return c.json(result);
+  });
 
   api.get("/users/:username", (c) => {
     const username = c.req.param("username");
@@ -1196,7 +1221,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ tags: popularCache.tags });
     }
 
-    const tags = db.getPopularTags(5);
+    const tags = db.getPopularTags(10);
     popularCache = { tags, cachedAt: now };
     return c.json({ tags });
   });
