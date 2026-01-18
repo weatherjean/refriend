@@ -517,6 +517,16 @@ export class DB {
     `).all(postId) as Actor[];
   }
 
+  getBoostedPosts(actorId: number, limit = 50): Post[] {
+    return this.db.prepare(`
+      SELECT p.* FROM posts p
+      JOIN boosts b ON p.id = b.post_id
+      WHERE b.actor_id = ?
+      ORDER BY b.created_at DESC
+      LIMIT ?
+    `).all(actorId, limit) as Post[];
+  }
+
   // ============ Pinned Posts ============
 
   pinPost(actorId: number, postId: number): void {

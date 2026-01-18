@@ -13,9 +13,12 @@ export function ActorPage() {
   const [actor, setActor] = useState<Actor | null>(null);
   const [stats, setStats] = useState({ followers: 0, following: 0 });
   const [posts, setPosts] = useState<Post[]>([]);
+  const [pinnedPosts, setPinnedPosts] = useState<Post[]>([]);
   const [postsWithReplies, setPostsWithReplies] = useState<Post[]>([]);
+  const [boosts, setBoosts] = useState<Post[]>([]);
   const [repliesLoaded, setRepliesLoaded] = useState(false);
-  const [activeTab, setActiveTab] = useState<'posts' | 'replies'>('posts');
+  const [boostsLoaded, setBoostsLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'boosts'>('posts');
   const [followers, setFollowers] = useState<Actor[]>([]);
   const [following, setFollowing] = useState<Actor[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -39,7 +42,10 @@ export function ActorPage() {
     setError('');
     setMessage('');
     setRepliesLoaded(false);
+    setBoostsLoaded(false);
     setPostsWithReplies([]);
+    setBoosts([]);
+    setPinnedPosts([]);
     setActiveTab('posts');
 
     try {
@@ -52,14 +58,16 @@ export function ActorPage() {
         setIsOwnProfile(profileData.is_own_profile);
         setIsLocalUser(true);
 
-        // Load posts and follow lists in parallel
-        const [postsData, followersData, followingData] = await Promise.all([
+        // Load posts, pinned, and follow lists in parallel
+        const [postsData, pinnedData, followersData, followingData] = await Promise.all([
           users.getPosts(username),
+          users.getPinned(username),
           users.getFollowers(username),
           users.getFollowing(username),
         ]);
 
         setPosts(postsData.posts);
+        setPinnedPosts(pinnedData.posts);
         setFollowers(followersData.followers);
         setFollowing(followingData.following);
       } catch {
@@ -73,15 +81,17 @@ export function ActorPage() {
           setFollowing([]);
           setIsLocalUser(false);
 
-          // Fetch follow status and posts in parallel
-          const [actorData, postsData] = await Promise.all([
+          // Fetch follow status, posts, and pinned posts in parallel
+          const [actorData, postsData, pinnedData] = await Promise.all([
             actors.get(remoteActor.id).catch(() => ({ is_following: false, is_own_profile: false })),
             actors.getPosts(remoteActor.id).catch(() => ({ posts: [] })),
+            actors.getPinned(remoteActor.id).catch(() => ({ posts: [] })),
           ]);
 
           setIsFollowing(actorData.is_following);
           setIsOwnProfile(actorData.is_own_profile);
           setPosts(postsData.posts);
+          setPinnedPosts(pinnedData.posts);
         } else {
           setError('User not found');
         }
@@ -107,6 +117,18 @@ export function ActorPage() {
     }
   }, [actor, repliesLoaded, isLocalUser, username]);
 
+  const loadBoosts = useCallback(async () => {
+    if (!actor || boostsLoaded || !isLocalUser) return;
+
+    try {
+      const postsData = await users.getBoosts(username);
+      setBoosts(postsData.posts);
+      setBoostsLoaded(true);
+    } catch (err) {
+      console.error('Failed to load boosts:', err);
+    }
+  }, [actor, boostsLoaded, isLocalUser, username]);
+
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
@@ -117,6 +139,13 @@ export function ActorPage() {
       loadReplies();
     }
   }, [activeTab, repliesLoaded, loadReplies]);
+
+  // Load boosts when switching to boosts tab
+  useEffect(() => {
+    if (activeTab === 'boosts' && !boostsLoaded) {
+      loadBoosts();
+    }
+  }, [activeTab, boostsLoaded, loadBoosts]);
 
   const handleFollow = async () => {
     if (!actor || !user) return;
@@ -267,11 +296,21 @@ export function ActorPage() {
             Replies
           </button>
         </li>
+        {actor.is_local && (
+          <li className="nav-item">
+            <button
+              className={`nav-link ${activeTab === 'boosts' ? 'active' : ''}`}
+              onClick={() => setActiveTab('boosts')}
+            >
+              Boosts
+            </button>
+          </li>
+        )}
       </ul>
 
       {/* Posts Content */}
       {activeTab === 'posts' && (
-        posts.length === 0 ? (
+        posts.length === 0 && pinnedPosts.length === 0 ? (
           <div className="text-center text-muted py-5">
             {actor.is_local ? (
               <p>No posts yet.</p>
@@ -283,9 +322,21 @@ export function ActorPage() {
             )}
           </div>
         ) : (
-          posts.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))
+          <>
+            {/* Pinned posts first */}
+            {pinnedPosts.map((post) => (
+              <div key={`pinned-${post.id}`} className="position-relative">
+                <span className="badge bg-warning text-dark position-absolute" style={{ top: 8, right: 8, zIndex: 1 }}>
+                  <i className="bi bi-pin-fill me-1"></i>Pinned
+                </span>
+                <PostCard post={post} />
+              </div>
+            ))}
+            {/* Regular posts (excluding pinned to avoid duplicates) */}
+            {posts.filter(p => !pinnedPosts.some(pp => pp.id === p.id)).map((post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </>
         )
       )}
 
@@ -325,6 +376,28 @@ export function ActorPage() {
                   />
                 </Link>
               )}
+              <PostCard post={post} />
+            </div>
+          ))
+        )
+      )}
+
+      {/* Boosts Content */}
+      {activeTab === 'boosts' && (
+        !boostsLoaded ? (
+          <div className="text-center py-5">
+            <div className="spinner-border text-primary"></div>
+          </div>
+        ) : boosts.length === 0 ? (
+          <div className="text-center text-muted py-5">
+            <p>No boosts yet.</p>
+          </div>
+        ) : (
+          boosts.map((post) => (
+            <div key={post.id} className="position-relative">
+              <span className="badge bg-success position-absolute" style={{ top: 8, right: 8, zIndex: 1 }}>
+                <i className="bi bi-arrow-repeat me-1"></i>Boosted
+              </span>
               <PostCard post={post} />
             </div>
           ))

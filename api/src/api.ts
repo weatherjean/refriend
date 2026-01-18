@@ -3,11 +3,13 @@ import { cors } from "@hono/hono/cors";
 import { getCookie, setCookie, deleteCookie } from "@hono/hono/cookie";
 import {
   Announce,
+  Collection,
   Create,
   Delete,
   Follow,
   Like,
   Note,
+  OrderedCollection,
   Tombstone,
   Undo,
   isActor,
@@ -251,6 +253,135 @@ export function createApi(db: DB, federation: Federation<void>) {
     return c.json({
       posts: posts.map((p) => enrichPost(db, p, currentActor?.id)),
     });
+  });
+
+  // Get pinned posts for an actor (works for both local and remote)
+  api.get("/actors/:id/pinned", async (c) => {
+    const id = parseInt(c.req.param("id"));
+    const db = c.get("db");
+    const domain = c.get("domain");
+    const currentActor = c.get("actor");
+    const actor = db.getActorById(id);
+
+    if (!actor) {
+      return c.json({ error: "Actor not found" }, 404);
+    }
+
+    // For local actors, return from our pinned_posts table
+    if (actor.user_id !== null) {
+      const posts = db.getPinnedPosts(actor.id);
+      return c.json({
+        posts: posts.map((p) => enrichPost(db, p, currentActor?.id)),
+      });
+    }
+
+    // For remote actors, fetch their Featured collection
+    try {
+      const ctx = federation.createContext(c.req.raw, undefined);
+
+      // Look up the remote actor to get their featured collection URL
+      const remoteActor = await ctx.lookupObject(actor.uri);
+      if (!remoteActor || !isActor(remoteActor)) {
+        return c.json({ error: "Failed to fetch remote actor" }, 500);
+      }
+
+      // Get the featured collection URL
+      const featuredUrl = remoteActor.featuredId?.href;
+      if (!featuredUrl) {
+        // Actor doesn't have a featured collection
+        return c.json({ posts: [] });
+      }
+
+      console.log(`[Featured] Fetching featured collection: ${featuredUrl}`);
+
+      // Fetch the featured collection
+      const docLoader = ctx.documentLoader;
+      const collectionDoc = await docLoader(featuredUrl);
+      const collection = await OrderedCollection.fromJsonLd(collectionDoc.document, {
+        documentLoader: docLoader,
+        contextLoader: ctx.contextLoader,
+      }) ?? await Collection.fromJsonLd(collectionDoc.document, {
+        documentLoader: docLoader,
+        contextLoader: ctx.contextLoader,
+      });
+
+      if (!collection) {
+        console.log(`[Featured] Failed to parse collection: ${featuredUrl}`);
+        return c.json({ posts: [] });
+      }
+
+      // Get items from the collection using getItems() async iterator
+      const posts: ReturnType<typeof enrichPost>[] = [];
+
+      for await (const item of collection.getItems()) {
+        // Item might be a URL reference or an actual Note object
+        let note: Note | null = null;
+
+        if (item instanceof Note) {
+          note = item;
+        } else if (item instanceof URL || (item && typeof item === "object" && "href" in item)) {
+          // It's a URL reference, we need to fetch the actual Note
+          const noteUrl = item instanceof URL ? item.href : String(item.href);
+          try {
+            const noteDoc = await docLoader(noteUrl);
+            note = await Note.fromJsonLd(noteDoc.document, {
+              documentLoader: docLoader,
+              contextLoader: ctx.contextLoader,
+            });
+          } catch (e) {
+            console.log(`[Featured] Failed to fetch note: ${noteUrl}`, e);
+            continue;
+          }
+        }
+
+        if (!note) continue;
+
+        // Try to persist this note to our database
+        const noteUri = note.id?.href;
+        if (!noteUri) continue;
+
+        // Check if we already have this post
+        let post = db.getPostByUri(noteUri);
+        if (!post) {
+          // Get content
+          const content = typeof note.content === "string"
+            ? note.content
+            : note.content?.toString() ?? "";
+
+          // Get URL
+          const itemUrl = note.url;
+          let urlString: string | null = null;
+          if (itemUrl) {
+            if (itemUrl instanceof URL) {
+              urlString = itemUrl.href;
+            } else if (typeof itemUrl === "string") {
+              urlString = itemUrl;
+            } else if (itemUrl && "href" in itemUrl) {
+              urlString = String(itemUrl.href);
+            }
+          }
+
+          // Create the post
+          post = db.createPost({
+            uri: noteUri,
+            actor_id: actor.id,
+            content,
+            url: urlString,
+            in_reply_to_id: null,
+          });
+
+          console.log(`[Featured] Stored pinned post: ${post.id}`);
+        }
+
+        posts.push(enrichPost(db, post, currentActor?.id));
+      }
+
+      console.log(`[Featured] Found ${posts.length} pinned posts for ${actor.handle}`);
+      return c.json({ posts });
+    } catch (err) {
+      console.error(`[Featured] Error fetching featured collection:`, err);
+      return c.json({ posts: [] });
+    }
   });
 
   // ============ Posts ============
@@ -652,6 +783,23 @@ export function createApi(db: DB, federation: Federation<void>) {
     }
 
     const posts = db.getPinnedPosts(actor.id);
+    return c.json({
+      posts: posts.map((p) => enrichPost(db, p, currentActor?.id)),
+    });
+  });
+
+  // GET /users/:username/boosts - Get posts boosted by a user
+  api.get("/users/:username/boosts", (c) => {
+    const username = c.req.param("username");
+    const db = c.get("db");
+    const currentActor = c.get("actor");
+    const actor = db.getActorByUsername(username);
+
+    if (!actor) {
+      return c.json({ error: "User not found" }, 404);
+    }
+
+    const posts = db.getBoostedPosts(actor.id);
     return c.json({
       posts: posts.map((p) => enrichPost(db, p, currentActor?.id)),
     });

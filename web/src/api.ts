@@ -27,7 +27,10 @@ export interface Post {
   author: Actor | null;
   hashtags: string[];
   likes_count: number;
+  boosts_count: number;
   liked: boolean;
+  boosted: boolean;
+  pinned: boolean;
   replies_count: number;
   in_reply_to: {
     id: number;
@@ -84,6 +87,10 @@ export const users = {
     fetchJson<{ posts: Post[] }>(`/users/${username}/posts`),
   getReplies: (username: string) =>
     fetchJson<{ posts: Post[] }>(`/users/${username}/posts?filter=replies`),
+  getPinned: (username: string) =>
+    fetchJson<{ posts: Post[] }>(`/users/${username}/pinned`),
+  getBoosts: (username: string) =>
+    fetchJson<{ posts: Post[] }>(`/users/${username}/boosts`),
   getFollowers: (username: string) =>
     fetchJson<{ followers: Actor[] }>(`/users/${username}/followers`),
   getFollowing: (username: string) =>
@@ -98,6 +105,8 @@ export const actors = {
     fetchJson<{ posts: Post[] }>(`/actors/${actorId}/posts`),
   getReplies: (actorId: number) =>
     fetchJson<{ posts: Post[] }>(`/actors/${actorId}/posts?filter=replies`),
+  getPinned: (actorId: number) =>
+    fetchJson<{ posts: Post[] }>(`/actors/${actorId}/pinned`),
 };
 
 // Posts
@@ -119,6 +128,22 @@ export const posts = {
     }),
   unlike: (id: number) =>
     fetchJson<{ ok: boolean; likes_count: number; liked: boolean }>(`/posts/${id}/like`, {
+      method: 'DELETE',
+    }),
+  boost: (id: number) =>
+    fetchJson<{ ok: boolean; boosts_count: number; boosted: boolean }>(`/posts/${id}/boost`, {
+      method: 'POST',
+    }),
+  unboost: (id: number) =>
+    fetchJson<{ ok: boolean; boosts_count: number; boosted: boolean }>(`/posts/${id}/boost`, {
+      method: 'DELETE',
+    }),
+  pin: (id: number) =>
+    fetchJson<{ ok: boolean; pinned: boolean }>(`/posts/${id}/pin`, {
+      method: 'POST',
+    }),
+  unpin: (id: number) =>
+    fetchJson<{ ok: boolean; pinned: boolean }>(`/posts/${id}/pin`, {
       method: 'DELETE',
     }),
 };

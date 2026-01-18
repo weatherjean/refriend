@@ -11,10 +11,17 @@ interface PostCardProps {
 
 export function PostCard({ post, linkToPost = true }: PostCardProps) {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, actor } = useAuth();
   const [liked, setLiked] = useState(post.liked);
   const [likesCount, setLikesCount] = useState(post.likes_count);
   const [likeLoading, setLikeLoading] = useState(false);
+  const [boosted, setBoosted] = useState(post.boosted);
+  const [boostsCount, setBoostsCount] = useState(post.boosts_count);
+  const [boostLoading, setBoostLoading] = useState(false);
+  const [pinned, setPinned] = useState(post.pinned);
+  const [pinLoading, setPinLoading] = useState(false);
+
+  const isOwnPost = !!(actor && post.author && actor.id === post.author.id);
 
   if (!post.author) return null;
 
@@ -49,6 +56,48 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
       console.error('Like/unlike failed:', err);
     } finally {
       setLikeLoading(false);
+    }
+  };
+
+  const handleBoost = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user || boostLoading || isOwnPost) return;
+
+    setBoostLoading(true);
+    try {
+      if (boosted) {
+        const result = await postsApi.unboost(post.id);
+        setBoosted(result.boosted);
+        setBoostsCount(result.boosts_count);
+      } else {
+        const result = await postsApi.boost(post.id);
+        setBoosted(result.boosted);
+        setBoostsCount(result.boosts_count);
+      }
+    } catch (err) {
+      console.error('Boost/unboost failed:', err);
+    } finally {
+      setBoostLoading(false);
+    }
+  };
+
+  const handlePin = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user || pinLoading || !isOwnPost) return;
+
+    setPinLoading(true);
+    try {
+      if (pinned) {
+        const result = await postsApi.unpin(post.id);
+        setPinned(result.pinned);
+      } else {
+        const result = await postsApi.pin(post.id);
+        setPinned(result.pinned);
+      }
+    } catch (err) {
+      console.error('Pin/unpin failed:', err);
+    } finally {
+      setPinLoading(false);
     }
   };
 
@@ -131,6 +180,22 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
                 )}
               </button>
 
+              <button
+                className={`btn btn-sm ${boosted ? 'btn-success' : 'btn-outline-secondary'} me-2`}
+                onClick={handleBoost}
+                disabled={!user || boostLoading || isOwnPost}
+                title={isOwnPost ? "Can't boost own post" : (user ? (boosted ? 'Unboost' : 'Boost') : 'Login to boost')}
+              >
+                {boostLoading ? (
+                  <span className="spinner-border spinner-border-sm"></span>
+                ) : (
+                  <>
+                    <i className={`bi ${boosted ? 'bi-arrow-repeat' : 'bi-arrow-repeat'} me-1`}></i>
+                    {boostsCount > 0 && boostsCount}
+                  </>
+                )}
+              </button>
+
               {linkToPost && (
                 <Link
                   to={postLink}
@@ -141,6 +206,21 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
                   <i className="bi bi-chat me-1"></i>
                   {post.replies_count > 0 && post.replies_count}
                 </Link>
+              )}
+
+              {isOwnPost && (
+                <button
+                  className={`btn btn-sm ${pinned ? 'btn-warning' : 'btn-outline-secondary'} me-2`}
+                  onClick={handlePin}
+                  disabled={pinLoading}
+                  title={pinned ? 'Unpin from profile' : 'Pin to profile'}
+                >
+                  {pinLoading ? (
+                    <span className="spinner-border spinner-border-sm"></span>
+                  ) : (
+                    <i className={`bi ${pinned ? 'bi-pin-fill' : 'bi-pin'}`}></i>
+                  )}
+                </button>
               )}
 
               {!post.author.is_local && (
