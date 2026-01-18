@@ -18,6 +18,15 @@ export interface Actor {
   created_at: string;
 }
 
+export interface Attachment {
+  id: number;
+  url: string;
+  media_type: string;
+  alt_text: string | null;
+  width: number | null;
+  height: number | null;
+}
+
 export interface Post {
   id: number;
   uri: string;
@@ -32,6 +41,8 @@ export interface Post {
   boosted: boolean;
   pinned: boolean;
   replies_count: number;
+  sensitive: boolean;
+  attachments: Attachment[];
   in_reply_to: {
     id: number;
     uri: string;
@@ -67,6 +78,22 @@ export const profile = {
     }),
   uploadAvatar: (image: string) =>
     fetchJson<{ actor: Actor; avatar_url: string }>('/profile/avatar', {
+      method: 'POST',
+      body: JSON.stringify({ image }),
+    }),
+};
+
+// Media
+export interface AttachmentInput {
+  url: string;
+  alt_text?: string;
+  width: number;
+  height: number;
+}
+
+export const media = {
+  upload: (image: string) =>
+    fetchJson<{ url: string; media_type: string }>('/media', {
       method: 'POST',
       body: JSON.stringify({ image }),
     }),
@@ -182,10 +209,10 @@ export const posts = {
   },
   get: (id: number) => fetchJson<{ post: Post }>(`/posts/${id}`),
   getReplies: (id: number) => fetchJson<{ replies: Post[] }>(`/posts/${id}/replies`),
-  create: (content: string, inReplyTo?: number) =>
+  create: (content: string, inReplyTo?: number, attachments?: AttachmentInput[], sensitive?: boolean) =>
     fetchJson<{ post: Post }>('/posts', {
       method: 'POST',
-      body: JSON.stringify({ content, in_reply_to: inReplyTo }),
+      body: JSON.stringify({ content, in_reply_to: inReplyTo, attachments, sensitive }),
     }),
   delete: (id: number) =>
     fetchJson<{ ok: boolean }>(`/posts/${id}`, { method: 'DELETE' }),

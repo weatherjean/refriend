@@ -45,6 +45,18 @@ export interface Post {
   url: string | null;
   in_reply_to_id: number | null;
   likes_count: number;
+  sensitive: boolean;
+  created_at: string;
+}
+
+export interface Media {
+  id: number;
+  post_id: number;
+  url: string;
+  media_type: string;
+  alt_text: string | null;
+  width: number | null;
+  height: number | null;
   created_at: string;
 }
 
@@ -99,8 +111,9 @@ export class DB {
 
   // Run migrations for existing databases
   private migrate() {
-    // Add likes_count column if it doesn't exist
     const columns = this.db.prepare("PRAGMA table_info(posts)").all() as { name: string }[];
+
+    // Add likes_count column if it doesn't exist
     const hasLikesCount = columns.some(c => c.name === "likes_count");
     if (!hasLikesCount) {
       this.db.exec("ALTER TABLE posts ADD COLUMN likes_count INTEGER NOT NULL DEFAULT 0");
@@ -111,6 +124,15 @@ export class DB {
         )
       `);
     }
+
+    // Add sensitive column if it doesn't exist
+    const hasSensitive = columns.some(c => c.name === "sensitive");
+    if (!hasSensitive) {
+      this.db.exec("ALTER TABLE posts ADD COLUMN sensitive INTEGER NOT NULL DEFAULT 0");
+    }
+
+    // Create media table if it doesn't exist (handled by schema, but ensure index)
+    this.db.exec("CREATE INDEX IF NOT EXISTS idx_media_post ON media(post_id)");
   }
 
   // Migrate local actors to a new domain
@@ -375,16 +397,17 @@ export class DB {
   // ============ Posts ============
 
   createPost(post: Omit<Post, "id" | "created_at" | "likes_count"> & { created_at?: string }): Post {
+    const sensitive = post.sensitive ? 1 : 0;
     if (post.created_at) {
       this.db.prepare(`
-        INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(post.uri, post.actor_id, post.content, post.url, post.in_reply_to_id, post.created_at);
+        INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(post.uri, post.actor_id, post.content, post.url, post.in_reply_to_id, sensitive, post.created_at);
     } else {
       this.db.prepare(`
-        INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(post.uri, post.actor_id, post.content, post.url, post.in_reply_to_id);
+        INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(post.uri, post.actor_id, post.content, post.url, post.in_reply_to_id, sensitive);
     }
     return this.getPostByUri(post.uri)!;
   }
@@ -393,52 +416,79 @@ export class DB {
     this.db.prepare("UPDATE posts SET uri = ?, url = ? WHERE id = ?").run(uri, url, id);
   }
 
+  updatePostSensitive(id: number, sensitive: boolean): void {
+    this.db.prepare("UPDATE posts SET sensitive = ? WHERE id = ?").run(sensitive ? 1 : 0, id);
+  }
+
+  // Helper to parse Post rows (converts sensitive from int to boolean)
+  private parsePost(row: Record<string, unknown> | undefined): Post | null {
+    if (!row) return null;
+    return {
+      ...row,
+      sensitive: !!(row.sensitive as number),
+    } as Post;
+  }
+
   getPostById(id: number): Post | null {
-    return this.db.prepare("SELECT * FROM posts WHERE id = ?").get(id) as Post | null;
+    const row = this.db.prepare("SELECT * FROM posts WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+    return this.parsePost(row);
   }
 
   getPostByUri(uri: string): Post | null {
-    return this.db.prepare("SELECT * FROM posts WHERE uri = ?").get(uri) as Post | null;
+    const row = this.db.prepare("SELECT * FROM posts WHERE uri = ?").get(uri) as Record<string, unknown> | undefined;
+    return this.parsePost(row);
+  }
+
+  // Helper to parse array of Post rows
+  private parsePosts(rows: Record<string, unknown>[]): Post[] {
+    return rows.map(row => ({
+      ...row,
+      sensitive: !!(row.sensitive as number),
+    } as Post));
   }
 
   getPostsByActor(actorId: number, limit = 50): Post[] {
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       SELECT * FROM posts
       WHERE actor_id = ? AND in_reply_to_id IS NULL
       ORDER BY created_at DESC
       LIMIT ?
-    `).all(actorId, limit) as Post[];
+    `).all(actorId, limit) as Record<string, unknown>[];
+    return this.parsePosts(rows);
   }
 
   getRepliesByActor(actorId: number, limit = 50): Post[] {
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       SELECT * FROM posts
       WHERE actor_id = ? AND in_reply_to_id IS NOT NULL
       ORDER BY created_at DESC
       LIMIT ?
-    `).all(actorId, limit) as Post[];
+    `).all(actorId, limit) as Record<string, unknown>[];
+    return this.parsePosts(rows);
   }
 
   // Home feed: posts from followed actors
   getHomeFeed(actorId: number, limit = 50): Post[] {
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       SELECT p.* FROM posts p
       JOIN follows f ON p.actor_id = f.following_id
       WHERE f.follower_id = ? AND p.in_reply_to_id IS NULL
       ORDER BY p.created_at DESC
       LIMIT ?
-    `).all(actorId, limit) as Post[];
+    `).all(actorId, limit) as Record<string, unknown>[];
+    return this.parsePosts(rows);
   }
 
   // Public timeline: all local posts
   getPublicTimeline(limit = 50): Post[] {
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       SELECT p.* FROM posts p
       JOIN actors a ON p.actor_id = a.id
       WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NULL
       ORDER BY p.created_at DESC
       LIMIT ?
-    `).all(limit) as Post[];
+    `).all(limit) as Record<string, unknown>[];
+    return this.parsePosts(rows);
   }
 
   // ============ Feed methods with actor JOIN (optimized) ============
@@ -453,6 +503,7 @@ export class DB {
       url: row.url as string | null,
       in_reply_to_id: row.in_reply_to_id as number | null,
       likes_count: row.likes_count as number,
+      sensitive: !!(row.sensitive as number),
       created_at: row.created_at as string,
       author: {
         id: row.author_id as number,
@@ -471,7 +522,7 @@ export class DB {
   }
 
   private readonly postWithActorSelect = `
-    p.id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.created_at,
+    p.id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.sensitive, p.created_at,
     a.id as author_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
     a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
     a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,
@@ -718,13 +769,44 @@ export class DB {
     this.db.prepare("DELETE FROM posts WHERE id = ?").run(id);
   }
 
+  // ============ Media ============
+
+  createMedia(postId: number, url: string, mediaType: string, altText: string | null, width: number | null, height: number | null): Media {
+    this.db.prepare(`
+      INSERT INTO media (post_id, url, media_type, alt_text, width, height)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(postId, url, mediaType, altText, width, height);
+    return this.db.prepare("SELECT * FROM media WHERE post_id = ? ORDER BY id DESC LIMIT 1").get(postId) as Media;
+  }
+
+  getMediaByPostId(postId: number): Media[] {
+    return this.db.prepare("SELECT * FROM media WHERE post_id = ? ORDER BY id ASC").all(postId) as Media[];
+  }
+
+  getMediaForPosts(postIds: number[]): Map<number, Media[]> {
+    if (postIds.length === 0) return new Map();
+    const placeholders = postIds.map(() => "?").join(",");
+    const rows = this.db.prepare(`
+      SELECT * FROM media WHERE post_id IN (${placeholders}) ORDER BY id ASC
+    `).all(...postIds) as Media[];
+
+    const map = new Map<number, Media[]>();
+    for (const row of rows) {
+      const existing = map.get(row.post_id) || [];
+      existing.push(row);
+      map.set(row.post_id, existing);
+    }
+    return map;
+  }
+
   getReplies(postId: number, limit = 50): Post[] {
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       SELECT * FROM posts
       WHERE in_reply_to_id = ?
       ORDER BY created_at ASC
       LIMIT ?
-    `).all(postId, limit) as Post[];
+    `).all(postId, limit) as Record<string, unknown>[];
+    return this.parsePosts(rows);
   }
 
   getRepliesCount(postId: number): number {
@@ -762,14 +844,15 @@ export class DB {
 
   getPostsByHashtag(hashtagName: string, limit = 50): Post[] {
     const normalized = hashtagName.toLowerCase().replace(/^#/, "");
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       SELECT p.* FROM posts p
       JOIN post_hashtags ph ON p.id = ph.post_id
       JOIN hashtags h ON ph.hashtag_id = h.id
       WHERE h.name = ?
       ORDER BY p.created_at DESC
       LIMIT ?
-    `).all(normalized, limit) as Post[];
+    `).all(normalized, limit) as Record<string, unknown>[];
+    return this.parsePosts(rows);
   }
 
   // Get most popular tags (all-time) - simple and fast, no time filter
@@ -889,13 +972,14 @@ export class DB {
   }
 
   getLikedPosts(actorId: number, limit = 50): Post[] {
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       SELECT p.* FROM posts p
       JOIN likes l ON p.id = l.post_id
       WHERE l.actor_id = ?
       ORDER BY l.created_at DESC
       LIMIT ?
-    `).all(actorId, limit) as Post[];
+    `).all(actorId, limit) as Record<string, unknown>[];
+    return this.parsePosts(rows);
   }
 
   getLikedPostsCount(actorId: number): number {
@@ -943,13 +1027,14 @@ export class DB {
   }
 
   getBoostedPosts(actorId: number, limit = 50): Post[] {
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       SELECT p.* FROM posts p
       JOIN boosts b ON p.id = b.post_id
       WHERE b.actor_id = ?
       ORDER BY b.created_at DESC
       LIMIT ?
-    `).all(actorId, limit) as Post[];
+    `).all(actorId, limit) as Record<string, unknown>[];
+    return this.parsePosts(rows);
   }
 
   // ============ Pinned Posts ============
@@ -974,12 +1059,13 @@ export class DB {
   }
 
   getPinnedPosts(actorId: number): Post[] {
-    return this.db.prepare(`
+    const rows = this.db.prepare(`
       SELECT p.* FROM posts p
       JOIN pinned_posts pp ON p.id = pp.post_id
       WHERE pp.actor_id = ?
       ORDER BY pp.pinned_at DESC
-    `).all(actorId) as Post[];
+    `).all(actorId) as Record<string, unknown>[];
+    return this.parsePosts(rows);
   }
 
   getPinnedPostsCount(actorId: number): number {

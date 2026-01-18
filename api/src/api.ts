@@ -6,6 +6,7 @@ import {
   Collection,
   Create,
   Delete,
+  Document,
   Follow,
   Like,
   Note,
@@ -18,7 +19,7 @@ import {
 import type { Federation } from "@fedify/fedify";
 import type { DB, Actor, Post, PostWithActor, User } from "./db.ts";
 import { processActivity, persistActor } from "./activities.ts";
-import { saveAvatar } from "./storage.ts";
+import { saveAvatar, saveMedia, deleteMedia } from "./storage.ts";
 import {
   getCachedProfilePosts,
   setCachedProfilePosts,
@@ -483,6 +484,9 @@ export function createApi(db: DB, federation: Federation<void>) {
             createdAt = isoDate.replace("T", " ").replace("Z", "").split(".")[0];
           }
 
+          // Get sensitive flag
+          const sensitive = note.sensitive ?? false;
+
           // Create the post
           post = db.createPost({
             uri: noteUri,
@@ -490,8 +494,38 @@ export function createApi(db: DB, federation: Federation<void>) {
             content,
             url: urlString,
             in_reply_to_id: null,
+            sensitive,
             created_at: createdAt,
           });
+
+          // Extract attachments
+          try {
+            const attachments = await note.getAttachments();
+            for await (const att of attachments) {
+              if (att instanceof Document) {
+                const attUrl = att.url;
+                let attUrlString: string | null = null;
+                if (attUrl instanceof URL) {
+                  attUrlString = attUrl.href;
+                } else if (typeof attUrl === 'string') {
+                  attUrlString = attUrl;
+                } else if (attUrl && 'href' in attUrl) {
+                  attUrlString = String(attUrl.href);
+                }
+
+                if (attUrlString) {
+                  const mediaType = att.mediaType ?? "image/jpeg";
+                  const altText = typeof att.name === 'string' ? att.name : att.name?.toString() ?? null;
+                  const width = att.width ?? null;
+                  const height = att.height ?? null;
+
+                  db.createMedia(post.id, attUrlString, mediaType, altText, width, height);
+                }
+              }
+            }
+          } catch {
+            // Attachments may not be present
+          }
 
           console.log(`[Featured] Stored pinned post: ${post.id}`);
         }
@@ -545,9 +579,27 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const { content, in_reply_to } = await c.req.json<{ content: string; in_reply_to?: number }>();
+    interface AttachmentInput {
+      url: string;
+      alt_text?: string;
+      width: number;
+      height: number;
+    }
+
+    const { content, in_reply_to, attachments, sensitive } = await c.req.json<{
+      content: string;
+      in_reply_to?: number;
+      attachments?: AttachmentInput[];
+      sensitive?: boolean;
+    }>();
+
     if (!content?.trim()) {
       return c.json({ error: "Content required" }, 400);
+    }
+
+    // Validate attachments (max 4)
+    if (attachments && attachments.length > 4) {
+      return c.json({ error: "Maximum 4 attachments allowed" }, 400);
     }
 
     // Check if replying to a valid post
@@ -569,6 +621,15 @@ export function createApi(db: DB, federation: Federation<void>) {
     const noteUri = `https://${domain}/users/${user.username}/posts/${noteId}`;
     const noteUrl = `https://${domain}/@${user.username}/posts/${noteId}`;
 
+    // Build attachments for ActivityPub Note
+    const noteAttachments = (attachments ?? []).map(att => new Document({
+      url: new URL(`https://${domain}${att.url}`),
+      mediaType: "image/webp",
+      name: att.alt_text ?? null,
+      width: att.width,
+      height: att.height,
+    }));
+
     // Create the Note
     const note = new Note({
       id: new URL(noteUri),
@@ -579,6 +640,8 @@ export function createApi(db: DB, federation: Federation<void>) {
       url: new URL(noteUrl),
       published: Temporal.Now.instant(),
       replyTarget: replyToPost ? new URL(replyToPost.uri) : undefined,
+      attachments: noteAttachments.length > 0 ? noteAttachments : undefined,
+      sensitive: sensitive ?? false,
     });
 
     // Create the activity
@@ -601,6 +664,9 @@ export function createApi(db: DB, federation: Federation<void>) {
     if (!post) {
       return c.json({ error: "Post not found after creation" }, 500);
     }
+
+    // Note: Media records are created by processCreate from the Note attachments
+    // No need to create them here again
 
     // Invalidate the author's profile cache
     await invalidateProfileCache(actor.id);
@@ -665,6 +731,9 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Not found or unauthorized" }, 404);
     }
 
+    // Get media files before deleting (CASCADE will delete DB records)
+    const mediaFiles = db.getMediaByPostId(id);
+
     const ctx = federation.createContext(c.req.raw, undefined);
 
     // Create the Delete activity
@@ -681,6 +750,15 @@ export function createApi(db: DB, federation: Federation<void>) {
     const result = await processActivity(ctx, db, domain, deleteActivity, "outbound", user.username);
     if (!result.success) {
       return c.json({ error: result.error || "Failed to delete post" }, 500);
+    }
+
+    // Clean up local media files from disk
+    for (const media of mediaFiles) {
+      // Only delete local uploads (not remote URLs)
+      if (media.url.startsWith('/uploads/media/')) {
+        const filename = media.url.replace('/uploads/media/', '');
+        await deleteMedia(filename);
+      }
     }
 
     // Invalidate the author's profile cache
@@ -1165,6 +1243,35 @@ export function createApi(db: DB, federation: Federation<void>) {
     return c.json({ actor: sanitizeActor(updated), avatar_url: avatarUrl });
   });
 
+  // ============ Media ============
+
+  // Upload media (expects base64 WebP image, already resized on client)
+  api.post("/media", async (c) => {
+    const user = c.get("user");
+    if (!user) {
+      return c.json({ error: "Not authenticated" }, 401);
+    }
+
+    const body = await c.req.json();
+    const { image } = body; // base64 encoded WebP (data URL)
+
+    if (!image) {
+      return c.json({ error: "No image provided" }, 400);
+    }
+
+    // Decode base64 image
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+    const imageData = Uint8Array.from(atob(base64Data), (ch) => ch.charCodeAt(0));
+
+    // Generate unique filename
+    const filename = `${crypto.randomUUID()}.webp`;
+
+    // Save to storage
+    const mediaUrl = await saveMedia(filename, imageData);
+
+    return c.json({ url: mediaUrl, media_type: "image/webp" });
+  });
+
   // ============ Search ============
 
   api.get("/search", async (c) => {
@@ -1313,6 +1420,7 @@ function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
   const boosted = currentActorId ? db.hasBoosted(currentActorId, post.id) : false;
   const pinned = currentActorId ? db.isPinned(currentActorId, post.id) : false;
   const repliesCount = db.getRepliesCount(post.id);
+  const attachments = db.getMediaByPostId(post.id);
 
   // Get parent post info if this is a reply
   let inReplyTo = null;
@@ -1346,6 +1454,15 @@ function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
     pinned,
     replies_count: repliesCount,
     in_reply_to: inReplyTo,
+    sensitive: post.sensitive,
+    attachments: attachments.map(a => ({
+      id: a.id,
+      url: a.url,
+      media_type: a.media_type,
+      alt_text: a.alt_text,
+      width: a.width,
+      height: a.height,
+    })),
   };
 }
 
@@ -1361,6 +1478,7 @@ function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: numbe
   const likedSet = currentActorId ? db.getLikedPostIds(currentActorId, postIds) : new Set<number>();
   const boostedSet = currentActorId ? db.getBoostedPostIds(currentActorId, postIds) : new Set<number>();
   const pinnedSet = currentActorId ? db.getPinnedPostIds(currentActorId, postIds) : new Set<number>();
+  const mediaMap = db.getMediaForPosts(postIds);
 
   // Batch fetch parent posts for replies
   const parentIds = posts.filter(p => p.in_reply_to_id).map(p => p.in_reply_to_id!);
@@ -1394,6 +1512,8 @@ function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: numbe
       }
     }
 
+    const attachments = mediaMap.get(post.id) || [];
+
     return {
       id: post.id,
       uri: post.uri,
@@ -1409,6 +1529,15 @@ function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: numbe
       pinned: pinnedSet.has(post.id),
       replies_count: repliesCountMap.get(post.id) || 0,
       in_reply_to: inReplyTo,
+      sensitive: post.sensitive,
+      attachments: attachments.map(a => ({
+        id: a.id,
+        url: a.url,
+        media_type: a.media_type,
+        alt_text: a.alt_text,
+        width: a.width,
+        height: a.height,
+      })),
     };
   });
 }

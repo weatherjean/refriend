@@ -3,7 +3,9 @@ import {
   Announce,
   Create,
   Delete,
+  Document,
   Follow,
+  Image,
   Like,
   Note,
   Tombstone,
@@ -154,6 +156,9 @@ async function fetchAndStoreNote(
       inReplyToId = await fetchAndStoreNote(ctx, db, domain, parentReplyUri);
     }
 
+    // Get sensitive flag
+    const sensitive = note.sensitive ?? false;
+
     // Create the post
     const post = db.createPost({
       uri: note.id.href,
@@ -161,6 +166,7 @@ async function fetchAndStoreNote(
       content,
       url: urlString,
       in_reply_to_id: inReplyToId,
+      sensitive,
     });
 
     // Extract hashtags
@@ -168,6 +174,35 @@ async function fetchAndStoreNote(
     for (const tag of hashtags) {
       const hashtag = db.getOrCreateHashtag(tag);
       db.addPostHashtag(post.id, hashtag.id);
+    }
+
+    // Extract attachments
+    try {
+      const attachments = await note.getAttachments();
+      for await (const att of attachments) {
+        if (att instanceof Document || att instanceof Image) {
+          const attUrl = att.url;
+          let attUrlString: string | null = null;
+          if (attUrl instanceof URL) {
+            attUrlString = attUrl.href;
+          } else if (typeof attUrl === 'string') {
+            attUrlString = attUrl;
+          } else if (attUrl && 'href' in attUrl) {
+            attUrlString = String(attUrl.href);
+          }
+
+          if (attUrlString) {
+            const mediaType = att.mediaType ?? "image/jpeg";
+            const altText = typeof att.name === 'string' ? att.name : att.name?.toString() ?? null;
+            const width = att.width ?? null;
+            const height = att.height ?? null;
+
+            db.createMedia(post.id, attUrlString, mediaType, altText, width, height);
+          }
+        }
+      }
+    } catch {
+      // Attachments may not be present
     }
 
     console.log(`[Reply] Fetched and stored parent post: ${post.id}`);
@@ -455,6 +490,9 @@ async function processCreate(
     console.log(`[Create] Reply to ${inReplyToUri} -> local ID: ${inReplyToId}`);
   }
 
+  // Get sensitive flag
+  const sensitive = object.sensitive ?? false;
+
   // Create the post
   const post = db.createPost({
     uri: noteUri,
@@ -462,6 +500,7 @@ async function processCreate(
     content,
     url: postUrlString,
     in_reply_to_id: inReplyToId,
+    sensitive,
   });
 
   // Extract and add hashtags
@@ -469,6 +508,42 @@ async function processCreate(
   for (const tag of hashtags) {
     const hashtag = db.getOrCreateHashtag(tag);
     db.addPostHashtag(post.id, hashtag.id);
+  }
+
+  // Extract attachments from incoming Note
+  try {
+    const attachments = await object.getAttachments();
+    for await (const att of attachments) {
+      if (att instanceof Document || att instanceof Image) {
+        const attUrl = att.url;
+        let urlString: string | null = null;
+        if (attUrl instanceof URL) {
+          urlString = attUrl.href;
+        } else if (typeof attUrl === 'string') {
+          urlString = attUrl;
+        } else if (attUrl && 'href' in attUrl) {
+          urlString = String(attUrl.href);
+        }
+
+        if (urlString) {
+          // For outbound (local) posts, convert full URLs to relative paths
+          if (direction === "outbound" && urlString.includes(`https://${domain}/uploads/`)) {
+            urlString = urlString.replace(`https://${domain}`, "");
+          }
+
+          const mediaType = att.mediaType ?? "image/jpeg";
+          const altText = typeof att.name === 'string' ? att.name : att.name?.toString() ?? null;
+          const width = att.width ?? null;
+          const height = att.height ?? null;
+
+          db.createMedia(post.id, urlString, mediaType, altText, width, height);
+          console.log(`[Create] Added attachment: ${urlString}`);
+        }
+      }
+    }
+  } catch (e) {
+    // Attachments may not be present or may fail to parse
+    console.log(`[Create] Failed to extract attachments:`, e);
   }
 
   console.log(`[Create] Post from ${authorActor.handle}: ${post.id}`);

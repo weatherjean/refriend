@@ -21,6 +21,11 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
   const [boostLoading, setBoostLoading] = useState(false);
   const [pinned, setPinned] = useState(post.pinned);
   const [pinLoading, setPinLoading] = useState(false);
+  const [showSensitive, setShowSensitive] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [sliderIndex, setSliderIndex] = useState(0);
+  const [imageLoaded, setImageLoaded] = useState<Record<number, boolean>>({});
 
   const isOwnPost = !!(actor && post.author && actor.id === post.author.id);
 
@@ -147,7 +152,184 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
               </div>
             )}
 
-            <div className="mb-2" dangerouslySetInnerHTML={{ __html: post.content }} />
+            {/* Sensitive content wrapper */}
+            {post.sensitive && !showSensitive ? (
+              <div
+                className="sensitive-content position-relative mb-2 p-3 rounded"
+                style={{ backgroundColor: 'var(--bs-tertiary-bg)', cursor: 'pointer' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSensitive(true);
+                }}
+              >
+                <div className="text-center text-muted">
+                  <i className="bi bi-eye-slash fs-4 mb-2 d-block"></i>
+                  <span>Sensitive content</span>
+                  <br />
+                  <small>Click to reveal</small>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="mb-2" dangerouslySetInnerHTML={{ __html: post.content }} />
+
+                {/* Image attachments */}
+                {post.attachments && post.attachments.length > 0 && (
+                  <div className="mb-2 post-images-container position-relative">
+                    {/* Main image display */}
+                    <div
+                      className="post-image-wrapper position-relative rounded overflow-hidden"
+                      style={{ cursor: 'pointer', minHeight: 200, backgroundColor: 'var(--bs-tertiary-bg)' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setLightboxIndex(sliderIndex);
+                        setLightboxOpen(true);
+                      }}
+                    >
+                      {/* Placeholder spinner */}
+                      {!imageLoaded[sliderIndex] && (
+                        <div className="position-absolute top-50 start-50 translate-middle">
+                          <div className="spinner-border text-secondary" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                          </div>
+                        </div>
+                      )}
+                      <img
+                        src={post.attachments[sliderIndex].url}
+                        alt={post.attachments[sliderIndex].alt_text ?? ''}
+                        className="w-100"
+                        style={{
+                          maxHeight: 400,
+                          objectFit: 'cover',
+                          opacity: imageLoaded[sliderIndex] ? 1 : 0,
+                          transition: 'opacity 0.3s',
+                        }}
+                        loading="lazy"
+                        onLoad={() => setImageLoaded(prev => ({ ...prev, [sliderIndex]: true }))}
+                      />
+                      {/* Gradient overlays */}
+                      <div className="position-absolute top-0 start-0 end-0" style={{
+                        height: 60,
+                        background: 'linear-gradient(to bottom, rgba(0,0,0,0.3), transparent)',
+                        pointerEvents: 'none',
+                      }} />
+                      <div className="position-absolute bottom-0 start-0 end-0" style={{
+                        height: 60,
+                        background: 'linear-gradient(to top, rgba(0,0,0,0.3), transparent)',
+                        pointerEvents: 'none',
+                      }} />
+                      {/* Expand icon */}
+                      <div className="position-absolute top-0 end-0 m-2 text-white" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
+                        <i className="bi bi-arrows-fullscreen"></i>
+                      </div>
+                      {/* Image counter for multiple images */}
+                      {post.attachments.length > 1 && (
+                        <div className="position-absolute bottom-0 end-0 m-2 badge bg-dark bg-opacity-75">
+                          {sliderIndex + 1} / {post.attachments.length}
+                        </div>
+                      )}
+                    </div>
+                    {/* Slider arrows for multiple images */}
+                    {post.attachments.length > 1 && (
+                      <>
+                        <button
+                          className="btn btn-sm btn-dark bg-opacity-50 position-absolute start-0 top-50 translate-middle-y ms-2 rounded-circle"
+                          style={{ width: 32, height: 32, zIndex: 5 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSliderIndex((sliderIndex - 1 + post.attachments.length) % post.attachments.length);
+                          }}
+                        >
+                          <i className="bi bi-chevron-left"></i>
+                        </button>
+                        <button
+                          className="btn btn-sm btn-dark bg-opacity-50 position-absolute end-0 top-50 translate-middle-y me-2 rounded-circle"
+                          style={{ width: 32, height: 32, zIndex: 5 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSliderIndex((sliderIndex + 1) % post.attachments.length);
+                          }}
+                        >
+                          <i className="bi bi-chevron-right"></i>
+                        </button>
+                        {/* Dots indicator */}
+                        <div className="d-flex justify-content-center gap-1 mt-2">
+                          {post.attachments.map((_, idx) => (
+                            <button
+                              key={idx}
+                              className={`btn btn-sm p-0 rounded-circle ${idx === sliderIndex ? 'btn-primary' : 'btn-outline-secondary'}`}
+                              style={{ width: 8, height: 8, minWidth: 8 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSliderIndex(idx);
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Lightbox */}
+                {lightboxOpen && post.attachments && post.attachments.length > 0 && (
+                  <div
+                    className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 9999 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setLightboxOpen(false);
+                    }}
+                  >
+                    <button
+                      className="btn btn-link text-white position-absolute top-0 end-0 m-3 fs-3"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        setLightboxOpen(false);
+                      }}
+                    >
+                      <i className="bi bi-x-lg"></i>
+                    </button>
+                    {post.attachments.length > 1 && (
+                      <>
+                        <button
+                          className="btn btn-link text-white position-absolute start-0 top-50 translate-middle-y ms-3 fs-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLightboxIndex((lightboxIndex - 1 + post.attachments.length) % post.attachments.length);
+                          }}
+                        >
+                          <i className="bi bi-chevron-left"></i>
+                        </button>
+                        <button
+                          className="btn btn-link text-white position-absolute end-0 top-50 translate-middle-y me-3 fs-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLightboxIndex((lightboxIndex + 1) % post.attachments.length);
+                          }}
+                        >
+                          <i className="bi bi-chevron-right"></i>
+                        </button>
+                      </>
+                    )}
+                    <img
+                      src={post.attachments[lightboxIndex].url}
+                      alt={post.attachments[lightboxIndex].alt_text ?? ''}
+                      style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    {post.attachments.length > 1 && (
+                      <div className="position-absolute bottom-0 start-50 translate-middle-x mb-4 text-white">
+                        {lightboxIndex + 1} / {post.attachments.length}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
 
             {post.hashtags.length > 0 && (
               <div className="mb-2 d-flex flex-wrap gap-1">

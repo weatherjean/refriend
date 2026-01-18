@@ -5,6 +5,7 @@ import {
   Announce,
   Create,
   Delete,
+  Document,
   createFederation,
   Endpoints,
   Follow,
@@ -209,14 +210,27 @@ federation
     if (!actor) return null;
 
     const pinnedPosts = db.getPinnedPosts(actor.id);
-    // Return Note objects for pinned posts
-    const items = pinnedPosts.map((p) => new Note({
-      id: new URL(p.uri),
-      attribution: ctx.getActorUri(identifier),
-      content: p.content,
-      url: p.url ? new URL(p.url) : undefined,
-      published: Temporal.Instant.from(p.created_at.replace(" ", "T") + "Z"),
-    }));
+    // Return Note objects for pinned posts with attachments
+    const items = pinnedPosts.map((p) => {
+      const mediaList = db.getMediaByPostId(p.id);
+      const attachments = mediaList.map(m => new Document({
+        url: m.url.startsWith('http') ? new URL(m.url) : new URL(`https://${DOMAIN}${m.url}`),
+        mediaType: m.media_type,
+        name: m.alt_text ?? undefined,
+        width: m.width ?? undefined,
+        height: m.height ?? undefined,
+      }));
+
+      return new Note({
+        id: new URL(p.uri),
+        attribution: ctx.getActorUri(identifier),
+        content: p.content,
+        url: p.url ? new URL(p.url) : undefined,
+        published: Temporal.Instant.from(p.created_at.replace(" ", "T") + "Z"),
+        sensitive: p.sensitive,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      });
+    });
 
     return { items };
   });
@@ -260,6 +274,16 @@ federation.setObjectDispatcher(Note, "/users/{identifier}/posts/{id}", async (ct
   const post = db.getPostById(parseInt(id));
   if (!post || post.actor_id !== actor.id) return null;
 
+  // Get attachments
+  const mediaList = db.getMediaByPostId(post.id);
+  const attachments = mediaList.map(m => new Document({
+    url: m.url.startsWith('http') ? new URL(m.url) : new URL(`https://${DOMAIN}${m.url}`),
+    mediaType: m.media_type,
+    name: m.alt_text ?? undefined,
+    width: m.width ?? undefined,
+    height: m.height ?? undefined,
+  }));
+
   return new Note({
     id: ctx.getObjectUri(Note, { identifier, id }),
     attribution: ctx.getActorUri(identifier),
@@ -268,6 +292,8 @@ federation.setObjectDispatcher(Note, "/users/{identifier}/posts/{id}", async (ct
     content: post.content,
     url: post.url ? new URL(post.url) : undefined,
     published: Temporal.Instant.from(post.created_at.replace(" ", "T") + "Z"),
+    sensitive: post.sensitive,
+    attachments: attachments.length > 0 ? attachments : undefined,
   });
 });
 

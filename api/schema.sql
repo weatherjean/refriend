@@ -52,8 +52,22 @@ CREATE TABLE IF NOT EXISTS posts (
   url TEXT,                                    -- Web URL for the post
   in_reply_to_id INTEGER REFERENCES posts(id) ON DELETE SET NULL,  -- For replies
   likes_count INTEGER NOT NULL DEFAULT 0,     -- Denormalized for performance
+  sensitive INTEGER NOT NULL DEFAULT 0,       -- Content warning/sensitive media flag
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Media: Attachments for posts (images, etc.)
+CREATE TABLE IF NOT EXISTS media (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  media_type TEXT NOT NULL DEFAULT 'image/webp',
+  alt_text TEXT,
+  width INTEGER,
+  height INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_media_post ON media(post_id);
 
 -- Hashtags: Tags used in posts
 CREATE TABLE IF NOT EXISTS hashtags (

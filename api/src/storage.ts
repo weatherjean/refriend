@@ -29,6 +29,7 @@ export interface StorageConfig {
  */
 export async function initStorage(): Promise<void> {
   await ensureDir(join(UPLOADS_DIR, "avatars"));
+  await ensureDir(join(UPLOADS_DIR, "media"));
   console.log("[Storage] Initialized local storage at:", UPLOADS_DIR);
 }
 
@@ -61,6 +62,33 @@ export async function saveAvatar(filename: string, data: Uint8Array): Promise<st
 export async function deleteAvatar(filename: string): Promise<void> {
   try {
     const filepath = join(UPLOADS_DIR, "avatars", filename);
+    await Deno.remove(filepath);
+  } catch {
+    // Ignore if file doesn't exist
+  }
+}
+
+/**
+ * Save a media file (post attachment)
+ * @param filename - The filename to save as (e.g., "uuid.webp")
+ * @param data - The file data as Uint8Array
+ * @returns The public URL path to the file
+ */
+export async function saveMedia(filename: string, data: Uint8Array): Promise<string> {
+  const filepath = join(UPLOADS_DIR, "media", filename);
+  await Deno.writeFile(filepath, data);
+
+  // Return URL path (relative to server root)
+  return `/uploads/media/${filename}`;
+}
+
+/**
+ * Delete a media file
+ * @param filename - The filename to delete
+ */
+export async function deleteMedia(filename: string): Promise<void> {
+  try {
+    const filepath = join(UPLOADS_DIR, "media", filename);
     await Deno.remove(filepath);
   } catch {
     // Ignore if file doesn't exist
