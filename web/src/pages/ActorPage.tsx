@@ -40,6 +40,8 @@ export function ActorPage() {
   const [showFollowing, setShowFollowing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isLocalUser, setIsLocalUser] = useState(false);
+  const [followersLoaded, setFollowersLoaded] = useState(false);
+  const [followingLoaded, setFollowingLoaded] = useState(false);
 
   // Extract handle from URL: /u/@user@domain -> @user@domain
   const fullHandle = location.pathname.replace(/^\/u\//, '');
@@ -60,6 +62,10 @@ export function ActorPage() {
     setPostsCursor(null);
     setRepliesCursor(null);
     setBoostsCursor(null);
+    setFollowersLoaded(false);
+    setFollowingLoaded(false);
+    setFollowers([]);
+    setFollowing([]);
 
     try {
       // First, try to load as local user
@@ -71,19 +77,15 @@ export function ActorPage() {
         setIsOwnProfile(profileData.is_own_profile);
         setIsLocalUser(true);
 
-        // Load posts, pinned, and follow lists in parallel
-        const [postsData, pinnedData, followersData, followingData] = await Promise.all([
+        // Load posts and pinned in parallel (defer followers/following until needed)
+        const [postsData, pinnedData] = await Promise.all([
           users.getPosts(username),
           users.getPinned(username),
-          users.getFollowers(username),
-          users.getFollowing(username),
         ]);
 
         setPosts(postsData.posts);
         setPostsCursor(postsData.next_cursor);
         setPinnedPosts(pinnedData.posts);
-        setFollowers(followersData.followers);
-        setFollowing(followingData.following);
       } catch {
         // Not a local user, try searching for remote user
         const { results } = await search.query(fullHandle);
@@ -95,18 +97,19 @@ export function ActorPage() {
           setFollowing([]);
           setIsLocalUser(false);
 
-          // Fetch follow status, posts, and pinned posts in parallel
-          const [actorData, postsData, pinnedData] = await Promise.all([
+          // Fetch follow status and posts (skip pinned for remote - too slow)
+          const [actorData, postsData] = await Promise.all([
             actors.get(remoteActor.id).catch(() => ({ is_following: false, is_own_profile: false })),
             actors.getPosts(remoteActor.id).catch(() => ({ posts: [], next_cursor: null })),
-            actors.getPinned(remoteActor.id).catch(() => ({ posts: [] })),
           ]);
 
           setIsFollowing(actorData.is_following);
           setIsOwnProfile(actorData.is_own_profile);
           setPosts(postsData.posts);
           setPostsCursor(postsData.next_cursor);
-          setPinnedPosts(pinnedData.posts);
+
+          // Load pinned posts in background (slow for remote actors)
+          actors.getPinned(remoteActor.id).then(data => setPinnedPosts(data.posts)).catch(() => {});
         } else {
           setError('User not found');
         }
@@ -209,6 +212,26 @@ export function ActorPage() {
       loadBoosts();
     }
   }, [activeTab, boostsLoaded, loadBoosts]);
+
+  // Load followers when modal opens
+  useEffect(() => {
+    if (showFollowers && !followersLoaded && isLocalUser) {
+      users.getFollowers(username).then(data => {
+        setFollowers(data.followers);
+        setFollowersLoaded(true);
+      }).catch(() => {});
+    }
+  }, [showFollowers, followersLoaded, isLocalUser, username]);
+
+  // Load following when modal opens
+  useEffect(() => {
+    if (showFollowing && !followingLoaded && isLocalUser) {
+      users.getFollowing(username).then(data => {
+        setFollowing(data.following);
+        setFollowingLoaded(true);
+      }).catch(() => {});
+    }
+  }, [showFollowing, followingLoaded, isLocalUser, username]);
 
   const handleFollow = async () => {
     if (!actor || !user) return;
@@ -537,7 +560,9 @@ export function ActorPage() {
                 <button className="btn-close" onClick={() => setShowFollowers(false)}></button>
               </div>
               <div className="modal-body">
-                {followers.length === 0 ? (
+                {!followersLoaded ? (
+                  <div className="text-center py-3"><div className="spinner-border spinner-border-sm"></div></div>
+                ) : followers.length === 0 ? (
                   <p className="text-muted">No followers yet</p>
                 ) : (
                   <div className="list-group list-group-flush">
@@ -584,7 +609,9 @@ export function ActorPage() {
                 <button className="btn-close" onClick={() => setShowFollowing(false)}></button>
               </div>
               <div className="modal-body">
-                {following.length === 0 ? (
+                {!followingLoaded ? (
+                  <div className="text-center py-3"><div className="spinner-border spinner-border-sm"></div></div>
+                ) : following.length === 0 ? (
                   <p className="text-muted">Not following anyone yet</p>
                 ) : (
                   <div className="list-group list-group-flush">
