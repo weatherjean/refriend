@@ -127,3 +127,5 @@ CREATE INDEX IF NOT EXISTS idx_boosts_actor_id ON boosts(actor_id);
 CREATE INDEX IF NOT EXISTS idx_activities_actor ON activities(actor_id);
 CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type);
 CREATE INDEX IF NOT EXISTS idx_activities_direction ON activities(direction);
+CREATE INDEX IF NOT EXISTS idx_post_hashtags_hashtag ON post_hashtags(hashtag_id);
+CREATE INDEX IF NOT EXISTS idx_post_hashtags_post ON post_hashtags(post_id);

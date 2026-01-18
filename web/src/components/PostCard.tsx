@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Post, posts as postsApi } from '../api';
 import { formatTimeAgo, getUsername } from '../utils';
 import { useAuth } from '../context/AuthContext';
+import { TagBadge } from './TagBadge';
 
 interface PostCardProps {
   post: Post;
@@ -149,15 +150,9 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
             <div className="mb-2" dangerouslySetInnerHTML={{ __html: post.content }} />
 
             {post.hashtags.length > 0 && (
-              <div className="mb-2">
+              <div className="mb-2 d-flex flex-wrap gap-1">
                 {post.hashtags.map((tag) => (
-                  <Link
-                    key={tag}
-                    to={`/tags/${tag}`}
-                    className="badge bg-secondary text-decoration-none me-1"
-                  >
-                    #{tag}
-                  </Link>
+                  <TagBadge key={tag} tag={tag} />
                 ))}
               </div>
             )}
@@ -165,33 +160,43 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
             {/* Actions row */}
             <div className="d-flex align-items-center mt-2 pt-2 border-top">
               <button
-                className={`btn btn-sm ${liked ? 'btn-danger' : 'btn-outline-secondary'} me-2`}
+                className={`btn btn-sm me-2 ${liked ? '' : 'btn-outline-secondary'}`}
                 onClick={handleLike}
                 disabled={!user || likeLoading}
                 title={user ? (liked ? 'Unlike' : 'Like') : 'Login to like'}
+                style={liked ? {
+                  backgroundColor: 'hsl(350, 70%, 90%)',
+                  color: 'hsl(350, 70%, 35%)',
+                  border: 'none',
+                } : undefined}
               >
                 {likeLoading ? (
                   <span className="spinner-border spinner-border-sm"></span>
                 ) : (
                   <>
                     <i className={`bi ${liked ? 'bi-heart-fill' : 'bi-heart'} me-1`}></i>
-                    {likesCount > 0 && likesCount}
+                    {likesCount}
                   </>
                 )}
               </button>
 
               <button
-                className={`btn btn-sm ${boosted ? 'btn-success' : 'btn-outline-secondary'} me-2`}
+                className={`btn btn-sm me-2 ${boosted ? '' : 'btn-outline-secondary'}`}
                 onClick={handleBoost}
                 disabled={!user || boostLoading || isOwnPost}
                 title={isOwnPost ? "Can't boost own post" : (user ? (boosted ? 'Unboost' : 'Boost') : 'Login to boost')}
+                style={boosted ? {
+                  backgroundColor: 'hsl(140, 70%, 90%)',
+                  color: 'hsl(140, 70%, 30%)',
+                  border: 'none',
+                } : undefined}
               >
                 {boostLoading ? (
                   <span className="spinner-border spinner-border-sm"></span>
                 ) : (
                   <>
-                    <i className={`bi ${boosted ? 'bi-arrow-repeat' : 'bi-arrow-repeat'} me-1`}></i>
-                    {boostsCount > 0 && boostsCount}
+                    <i className="bi bi-arrow-repeat me-1"></i>
+                    {boostsCount}
                   </>
                 )}
               </button>
@@ -204,16 +209,21 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
                   title="View replies"
                 >
                   <i className="bi bi-chat me-1"></i>
-                  {post.replies_count > 0 && post.replies_count}
+                  {post.replies_count}
                 </Link>
               )}
 
               {isOwnPost && (
                 <button
-                  className={`btn btn-sm ${pinned ? 'btn-warning' : 'btn-outline-secondary'} me-2`}
+                  className={`btn btn-sm me-2 ${pinned ? '' : 'btn-outline-secondary'}`}
                   onClick={handlePin}
                   disabled={pinLoading}
                   title={pinned ? 'Unpin from profile' : 'Pin to profile'}
+                  style={pinned ? {
+                    backgroundColor: 'hsl(45, 70%, 85%)',
+                    color: 'hsl(45, 70%, 30%)',
+                    border: 'none',
+                  } : undefined}
                 >
                   {pinLoading ? (
                     <span className="spinner-border spinner-border-sm"></span>

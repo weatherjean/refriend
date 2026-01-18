@@ -1,7 +1,9 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
+import { tags } from '../api';
+import { TagBadge } from './TagBadge';
 
 interface LayoutProps {
   children: ReactNode;
@@ -10,6 +12,13 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const { user, actor, logout } = useAuth();
   const navigate = useNavigate();
+  const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
+
+  useEffect(() => {
+    tags.getPopular()
+      .then(({ tags }) => setPopularTags(tags))
+      .catch(() => {}); // Silently fail
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -52,6 +61,20 @@ export function Layout({ children }: LayoutProps) {
             <Link to="/new" className="btn btn-primary w-100 mb-4">
               <i className="bi bi-plus-lg me-1"></i> New Post
             </Link>
+          )}
+
+          {/* Popular Tags */}
+          {popularTags.length > 0 && (
+            <div className="card mb-4">
+              <div className="card-body">
+                <h6 className="card-title mb-3">Popular Tags</h6>
+                <div className="d-flex flex-wrap gap-2">
+                  {popularTags.map((tag) => (
+                    <TagBadge key={tag.name} tag={tag.name} />
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
 
           {/* User / Auth */}

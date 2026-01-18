@@ -987,9 +987,10 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // ============ Hashtags ============
 
-  // Simple in-memory cache for trending tags
+  // Simple in-memory cache for tags
   let trendingCache: { tags: { name: string; count: number }[]; cachedAt: number } | null = null;
-  const TRENDING_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  let popularCache: { tags: { name: string; count: number }[]; cachedAt: number } | null = null;
+  const TAGS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
   api.get("/tags/search", (c) => {
     const query = c.req.query("q") || "";
@@ -1003,20 +1004,32 @@ export function createApi(db: DB, federation: Federation<void>) {
     return c.json({ tags });
   });
 
+  // Popular tags (all-time) - for sidebar
+  api.get("/tags/popular", (c) => {
+    const db = c.get("db");
+    const now = Date.now();
+
+    if (popularCache && (now - popularCache.cachedAt) < TAGS_CACHE_TTL) {
+      return c.json({ tags: popularCache.tags });
+    }
+
+    const tags = db.getPopularTags(5);
+    popularCache = { tags, cachedAt: now };
+    return c.json({ tags });
+  });
+
+  // Trending tags (recent activity) - for explore page
   api.get("/tags/trending", (c) => {
     const db = c.get("db");
     const now = Date.now();
 
-    // Return cached result if still valid
-    if (trendingCache && (now - trendingCache.cachedAt) < TRENDING_CACHE_TTL) {
-      return c.json({ tags: trendingCache.tags, cached: true });
+    if (trendingCache && (now - trendingCache.cachedAt) < TAGS_CACHE_TTL) {
+      return c.json({ tags: trendingCache.tags });
     }
 
-    // Fetch fresh trending tags
-    const tags = db.getTrendingTags(10, 48); // top 10, last 48 hours
+    const tags = db.getTrendingTags(10, 48);
     trendingCache = { tags, cachedAt: now };
-
-    return c.json({ tags, cached: false });
+    return c.json({ tags });
   });
 
   api.get("/tags/:tag", (c) => {

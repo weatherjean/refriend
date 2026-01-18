@@ -433,6 +433,18 @@ export class DB {
     `).all(normalized, limit) as Post[];
   }
 
+  // Get most popular tags (all-time) - simple and fast, no time filter
+  getPopularTags(limit = 5): { name: string; count: number }[] {
+    return this.db.prepare(`
+      SELECT h.name, COUNT(ph.post_id) as count
+      FROM hashtags h
+      JOIN post_hashtags ph ON h.id = ph.hashtag_id
+      GROUP BY h.id
+      ORDER BY count DESC
+      LIMIT ?
+    `).all(limit) as { name: string; count: number }[];
+  }
+
   // Search hashtags by partial match (fuzzy)
   searchTags(query: string, limit = 10): { name: string; count: number }[] {
     const normalized = query.toLowerCase().replace(/^#/, "");

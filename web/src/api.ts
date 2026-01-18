@@ -173,7 +173,9 @@ export const tags = {
   get: (tag: string) =>
     fetchJson<{ tag: string; posts: Post[] }>(`/tags/${encodeURIComponent(tag)}`),
   getTrending: () =>
-    fetchJson<{ tags: { name: string; count: number }[]; cached: boolean }>('/tags/trending'),
+    fetchJson<{ tags: { name: string; count: number }[] }>('/tags/trending'),
+  getPopular: () =>
+    fetchJson<{ tags: { name: string; count: number }[] }>('/tags/popular'),
   search: (q: string) =>
     fetchJson<{ tags: { name: string; count: number }[] }>(`/tags/search?q=${encodeURIComponent(q)}`),
 };
