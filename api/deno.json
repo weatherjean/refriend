@@ -1,0 +1,20 @@
+{
+  "tasks": {
+    "dev": "deno run -A --unstable-kv --unstable-temporal --watch src/main.ts",
+    "start": "deno run -A --unstable-kv --unstable-temporal src/main.ts",
+    "seed": "deno run -A src/seeder.ts"
+  },
+  "imports": {
+    "@hongminhee/x-forwarded-fetch": "jsr:@hongminhee/x-forwarded-fetch@^0.2.0",
+    "@hono/hono": "jsr:@hono/hono@^4.7.4",
+    "@fedify/fedify": "jsr:@fedify/fedify@^1.10.0",
+    "@fedify/fedify/x/hono": "jsr:@fedify/fedify@^1.10.0/x/hono",
+    "@fedify/denokv": "jsr:@fedify/denokv@^0.3.0",
+    "@db/sqlite": "jsr:@db/sqlite@^0.12.0",
+    "stringify-entities": "npm:stringify-entities@^4.0.4"
+  },
+  "unstable": ["kv", "temporal"],
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom"]
+  }
+}
