@@ -361,6 +361,14 @@ export function createApi(db: DB, federation: Federation<void>) {
             }
           }
 
+          // Get original published timestamp
+          let createdAt: string | undefined;
+          if (note.published) {
+            // Convert Temporal.Instant to SQLite datetime format
+            const isoDate = note.published.toString();
+            createdAt = isoDate.replace("T", " ").replace("Z", "").split(".")[0];
+          }
+
           // Create the post
           post = db.createPost({
             uri: noteUri,
@@ -368,6 +376,7 @@ export function createApi(db: DB, federation: Federation<void>) {
             content,
             url: urlString,
             in_reply_to_id: null,
+            created_at: createdAt,
           });
 
           console.log(`[Featured] Stored pinned post: ${post.id}`);

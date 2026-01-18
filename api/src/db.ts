@@ -308,11 +308,18 @@ export class DB {
 
   // ============ Posts ============
 
-  createPost(post: Omit<Post, "id" | "created_at">): Post {
-    this.db.prepare(`
-      INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(post.uri, post.actor_id, post.content, post.url, post.in_reply_to_id);
+  createPost(post: Omit<Post, "id" | "created_at"> & { created_at?: string }): Post {
+    if (post.created_at) {
+      this.db.prepare(`
+        INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(post.uri, post.actor_id, post.content, post.url, post.in_reply_to_id, post.created_at);
+    } else {
+      this.db.prepare(`
+        INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(post.uri, post.actor_id, post.content, post.url, post.in_reply_to_id);
+    }
     return this.getPostByUri(post.uri)!;
   }
 
