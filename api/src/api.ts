@@ -987,6 +987,38 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // ============ Hashtags ============
 
+  // Simple in-memory cache for trending tags
+  let trendingCache: { tags: { name: string; count: number }[]; cachedAt: number } | null = null;
+  const TRENDING_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  api.get("/tags/search", (c) => {
+    const query = c.req.query("q") || "";
+    const db = c.get("db");
+
+    if (!query.trim()) {
+      return c.json({ tags: [] });
+    }
+
+    const tags = db.searchTags(query, 10);
+    return c.json({ tags });
+  });
+
+  api.get("/tags/trending", (c) => {
+    const db = c.get("db");
+    const now = Date.now();
+
+    // Return cached result if still valid
+    if (trendingCache && (now - trendingCache.cachedAt) < TRENDING_CACHE_TTL) {
+      return c.json({ tags: trendingCache.tags, cached: true });
+    }
+
+    // Fetch fresh trending tags
+    const tags = db.getTrendingTags(10, 48); // top 10, last 48 hours
+    trendingCache = { tags, cachedAt: now };
+
+    return c.json({ tags, cached: false });
+  });
+
   api.get("/tags/:tag", (c) => {
     const tag = c.req.param("tag");
     const db = c.get("db");

@@ -8,6 +8,7 @@ import { PostPage } from './pages/PostPage';
 import { ActorPage } from './pages/ActorPage';
 import { SearchPage } from './pages/SearchPage';
 import { TagPage } from './pages/TagPage';
+import { ExplorePage } from './pages/ExplorePage';
 import { useAuth } from './context/AuthContext';
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/search" element={<SearchPage />} />
+        <Route path="/explore" element={<ExplorePage />} />
         <Route path="/new" element={<NewPostPage />} />
         <Route path="/posts/:id" element={<PostPage />} />
         <Route path="/u/:handle/*" element={<ActorPage />} />

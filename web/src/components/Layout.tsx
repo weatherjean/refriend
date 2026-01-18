@@ -37,6 +37,9 @@ export function Layout({ children }: LayoutProps) {
             <Link to="/search" className="list-group-item list-group-item-action">
               <i className="bi bi-search me-2"></i> Search
             </Link>
+            <Link to="/explore" className="list-group-item list-group-item-action">
+              <i className="bi bi-hash me-2"></i> Tags
+            </Link>
             {user && actor && (
               <Link to={`/u/${actor.handle}`} className="list-group-item list-group-item-action">
                 <i className="bi bi-person me-2"></i> Profile

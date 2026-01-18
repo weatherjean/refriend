@@ -433,6 +433,45 @@ export class DB {
     `).all(normalized, limit) as Post[];
   }
 
+  // Search hashtags by partial match (fuzzy)
+  searchTags(query: string, limit = 10): { name: string; count: number }[] {
+    const normalized = query.toLowerCase().replace(/^#/, "");
+    if (!normalized) return [];
+
+    return this.db.prepare(`
+      SELECT h.name, COUNT(ph.post_id) as count
+      FROM hashtags h
+      LEFT JOIN post_hashtags ph ON h.id = ph.hashtag_id
+      WHERE h.name LIKE ?
+      GROUP BY h.id
+      ORDER BY
+        CASE WHEN h.name = ? THEN 0 ELSE 1 END,
+        CASE WHEN h.name LIKE ? THEN 0 ELSE 1 END,
+        count DESC,
+        h.name ASC
+      LIMIT ?
+    `).all(`%${normalized}%`, normalized, `${normalized}%`, limit) as { name: string; count: number }[];
+  }
+
+  // Get trending tags based on recent post activity
+  getTrendingTags(limit = 10, hoursBack = 48): { name: string; count: number }[] {
+    const cutoff = new Date(Date.now() - hoursBack * 60 * 60 * 1000)
+      .toISOString()
+      .replace("T", " ")
+      .split(".")[0];
+
+    return this.db.prepare(`
+      SELECT h.name, COUNT(*) as count
+      FROM hashtags h
+      JOIN post_hashtags ph ON h.id = ph.hashtag_id
+      JOIN posts p ON ph.post_id = p.id
+      WHERE p.created_at >= ?
+      GROUP BY h.id
+      ORDER BY count DESC, h.name ASC
+      LIMIT ?
+    `).all(cutoff, limit) as { name: string; count: number }[];
+  }
+
   // ============ Likes ============
 
   addLike(actorId: number, postId: number): void {
