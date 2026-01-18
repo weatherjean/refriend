@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { posts as postsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
 import { useAuth } from '../context/AuthContext';
@@ -9,6 +9,7 @@ export function PostPage() {
   const { user, actor } = useAuth();
   const navigate = useNavigate();
   const [post, setPost] = useState<Post | null>(null);
+  const [ancestors, setAncestors] = useState<Post[]>([]);
   const [replies, setReplies] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -24,6 +25,7 @@ export function PostPage() {
           postsApi.getReplies(parseInt(id!)),
         ]);
         setPost(postData.post);
+        setAncestors(postData.ancestors || []);
         setReplies(repliesData.replies);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load post');
@@ -79,20 +81,62 @@ export function PostPage() {
 
   const isOwner = actor && post.author && actor.id === post.author.id;
 
+  // Rainbow colors for thread lines
+  const threadColors = [
+    '#ef4444', // red
+    '#f97316', // orange
+    '#eab308', // yellow
+    '#22c55e', // green
+    '#06b6d4', // cyan
+    '#3b82f6', // blue
+    '#8b5cf6', // violet
+    '#ec4899', // pink
+  ];
+
+  // Build nested thread structure
+  const renderThread = () => {
+    if (ancestors.length === 0) {
+      return <PostCard post={post} linkToPost={false} />;
+    }
+
+    // Build from inside out - start with current post, wrap with ancestors' lines
+    let content = <PostCard post={post} linkToPost={false} />;
+
+    // Wrap from last ancestor to first (reverse order for nesting)
+    // Each ancestor's PostCard is OUTSIDE the wrapper, line wraps what comes after
+    for (let i = ancestors.length - 1; i >= 0; i--) {
+      const ancestor = ancestors[i];
+      const color = threadColors[i % threadColors.length];
+      content = (
+        <div key={ancestor.id}>
+          <PostCard post={ancestor} />
+          <div
+            style={{
+              borderLeft: `3px solid ${color}`,
+              paddingLeft: 16,
+              marginLeft: 8,
+            }}
+          >
+            {content}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="thread-container">
+        <div className="text-muted small mb-2">
+          <i className="bi bi-arrow-up me-1"></i>
+          Conversation thread
+        </div>
+        {content}
+      </div>
+    );
+  };
+
   return (
     <div>
-      {/* Show link to parent if this is a reply */}
-      {post.in_reply_to && (
-        <div className="mb-3">
-          <Link to={`/posts/${post.in_reply_to.id}`} className="btn btn-outline-secondary btn-sm">
-            <i className="bi bi-arrow-up me-1"></i>
-            View parent post
-            {post.in_reply_to.author && ` by ${post.in_reply_to.author.handle}`}
-          </Link>
-        </div>
-      )}
-
-      <PostCard post={post} linkToPost={false} />
+      {renderThread()}
 
       {isOwner && (
         <div className="mt-3">

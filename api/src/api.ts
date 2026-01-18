@@ -684,7 +684,20 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Post not found" }, 404);
     }
 
-    return c.json({ post: enrichPost(db, post, actor?.id) });
+    // Get ancestor chain (walk up in_reply_to_id)
+    const ancestors: ReturnType<typeof enrichPost>[] = [];
+    let currentPost = post;
+    const seen = new Set<number>([post.id]); // Prevent infinite loops
+
+    while (currentPost.in_reply_to_id) {
+      const parentPost = db.getPostById(currentPost.in_reply_to_id);
+      if (!parentPost || seen.has(parentPost.id)) break;
+      seen.add(parentPost.id);
+      ancestors.unshift(enrichPost(db, parentPost, actor?.id));
+      currentPost = parentPost;
+    }
+
+    return c.json({ post: enrichPost(db, post, actor?.id), ancestors });
   });
 
   api.get("/posts/:id/replies", (c) => {
