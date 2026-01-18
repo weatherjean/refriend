@@ -67,6 +67,7 @@ federation.setNodeInfoDispatcher("/nodeinfo/2.1", async () => {
         activeMonth: db.getLocalUserCount(), // Simplified: all users considered active
       },
       localPosts: db.getLocalPostCount(),
+      localComments: 0, // We don't differentiate posts from comments
     },
   };
 });

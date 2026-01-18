@@ -9,7 +9,7 @@
     "@hono/hono": "jsr:@hono/hono@^4.7.4",
     "@fedify/fedify": "jsr:@fedify/fedify@^1.10.0",
     "@fedify/fedify/x/hono": "jsr:@fedify/fedify@^1.10.0/x/hono",
-    "@fedify/denokv": "jsr:@fedify/denokv@^0.3.0",
+    "@fedify/denokv": "jsr:@fedify/denokv@^1.10.0",
     "@db/sqlite": "jsr:@db/sqlite@^0.12.0",
     "stringify-entities": "npm:stringify-entities@^4.0.4"
   },
