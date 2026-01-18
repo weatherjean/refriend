@@ -5,6 +5,7 @@ import { behindProxy } from "@hongminhee/x-forwarded-fetch";
 import { DB } from "./db.ts";
 import { federation, setDomain, setDB } from "./federation.ts";
 import { createApi } from "./api.ts";
+import { initStorage, getUploadsDir } from "./storage.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
 const DB_PATH = Deno.env.get("DB_PATH") || "./data.db";
@@ -13,6 +14,9 @@ const STATIC_DIR = Deno.env.get("STATIC_DIR") || "../web/dist";
 // Initialize database
 const db = new DB(DB_PATH);
 db.init(new URL("../schema.sql", import.meta.url).pathname);
+
+// Initialize storage
+await initStorage();
 
 // Create Hono app
 const app = new Hono();
@@ -48,6 +52,9 @@ app.route("/api", createApi(db, federation));
 
 // Health check
 app.get("/health", (c) => c.json({ ok: true }));
+
+// Serve uploaded files (avatars, etc.)
+app.use("/uploads/*", serveStatic({ root: getUploadsDir(), rewriteRequestPath: (path) => path.replace("/uploads", "") }));
 
 // Serve static files from web/dist (built frontend)
 app.use("/*", serveStatic({ root: STATIC_DIR }));

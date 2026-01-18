@@ -58,6 +58,20 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   return data;
 }
 
+// Profile
+export const profile = {
+  update: (data: { name?: string; bio?: string }) =>
+    fetchJson<{ actor: Actor }>('/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  uploadAvatar: (image: string) =>
+    fetchJson<{ actor: Actor; avatar_url: string }>('/profile/avatar', {
+      method: 'POST',
+      body: JSON.stringify({ image }),
+    }),
+};
+
 // Auth
 export const auth = {
   me: () => fetchJson<{ user: User | null; actor: Actor | null }>('/auth/me'),
@@ -72,6 +86,11 @@ export const auth = {
       body: JSON.stringify({ username, password }),
     }),
   logout: () => fetchJson<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    fetchJson<{ ok: boolean }>('/auth/password', {
+      method: 'PUT',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
 };
 
 // Users

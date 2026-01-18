@@ -18,6 +18,7 @@ import {
 import type { Federation } from "@fedify/fedify";
 import type { DB, Actor, Post, User } from "./db.ts";
 import { processActivity, persistActor } from "./activities.ts";
+import { saveAvatar } from "./storage.ts";
 
 declare const Temporal: {
   Now: { instant(): { toString(): string } };
@@ -163,6 +164,39 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ user: null, actor: null });
     }
     return c.json({ user: sanitizeUser(user), actor: sanitizeActor(actor) });
+  });
+
+  api.put("/auth/password", async (c) => {
+    const user = c.get("user");
+    if (!user) {
+      return c.json({ error: "Not authenticated" }, 401);
+    }
+
+    const { current_password, new_password } = await c.req.json<{
+      current_password: string;
+      new_password: string;
+    }>();
+
+    if (!current_password || !new_password) {
+      return c.json({ error: "Current and new password required" }, 400);
+    }
+
+    if (new_password.length < 8) {
+      return c.json({ error: "Password must be at least 8 characters" }, 400);
+    }
+
+    // Verify current password
+    const db = c.get("db");
+    const fullUser = db.getUserById(user.id);
+    if (!fullUser || !(await verifyPassword(current_password, fullUser.password_hash))) {
+      return c.json({ error: "Current password is incorrect" }, 401);
+    }
+
+    // Update password
+    const newHash = await hashPassword(new_password);
+    db.updateUserPassword(user.id, newHash);
+
+    return c.json({ ok: true });
   });
 
   // ============ Profile ============
@@ -955,6 +989,65 @@ export function createApi(db: DB, federation: Federation<void>) {
     }
 
     return c.json({ ok: true });
+  });
+
+  // ============ Profile ============
+
+  // Update profile (name, bio)
+  api.put("/profile", async (c) => {
+    const user = c.get("user");
+    const actor = c.get("actor");
+    const db = c.get("db");
+
+    if (!user || !actor) {
+      return c.json({ error: "Not authenticated" }, 401);
+    }
+
+    const body = await c.req.json();
+    const { name, bio } = body;
+
+    const updated = db.updateActorProfile(actor.id, { name, bio });
+    if (!updated) {
+      return c.json({ error: "Failed to update profile" }, 500);
+    }
+
+    return c.json({ actor: sanitizeActor(updated) });
+  });
+
+  // Upload avatar (expects base64 WebP image)
+  api.post("/profile/avatar", async (c) => {
+    const user = c.get("user");
+    const actor = c.get("actor");
+    const db = c.get("db");
+
+    if (!user || !actor) {
+      return c.json({ error: "Not authenticated" }, 401);
+    }
+
+    const body = await c.req.json();
+    const { image } = body; // base64 encoded WebP
+
+    if (!image) {
+      return c.json({ error: "No image provided" }, 400);
+    }
+
+    // Decode base64 image
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+    const imageData = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+
+    // Generate filename
+    const filename = `${actor.id}-${Date.now()}.webp`;
+
+    // Save to storage
+    const avatarUrl = await saveAvatar(filename, imageData);
+
+    // Update actor in database
+    const updated = db.updateActorProfile(actor.id, { avatar_url: avatarUrl });
+    if (!updated) {
+      return c.json({ error: "Failed to update avatar" }, 500);
+    }
+
+    return c.json({ actor: sanitizeActor(updated), avatar_url: avatarUrl });
   });
 
   // ============ Search ============

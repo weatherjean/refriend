@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { users, follows, search, actors, Actor, Post } from '../api';
 import { PostCard } from '../components/PostCard';
+import { SettingsDrawer } from '../components/SettingsDrawer';
 import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
 
@@ -29,6 +30,7 @@ export function ActorPage() {
   const [message, setMessage] = useState('');
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [isLocalUser, setIsLocalUser] = useState(false);
 
   // Extract handle from URL: /u/@user@domain -> @user@domain
@@ -257,6 +259,17 @@ export function ActorPage() {
                 </button>
               </div>
             )}
+
+            {user && isOwnProfile && (
+              <div>
+                <button
+                  className="btn btn-outline-secondary"
+                  onClick={() => setShowSettings(true)}
+                >
+                  <i className="bi bi-gear me-1"></i> Settings
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -426,7 +439,16 @@ export function ActorPage() {
                         onClick={() => setShowFollowers(false)}
                       >
                         <div className="d-flex align-items-center">
-                          <div className="avatar avatar-sm me-2">{getUsername(a.handle)[0].toUpperCase()}</div>
+                          {a.avatar_url ? (
+                            <img
+                              src={a.avatar_url}
+                              alt=""
+                              className="rounded-circle me-2"
+                              style={{ width: 32, height: 32, objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <div className="avatar avatar-sm me-2">{getUsername(a.handle)[0].toUpperCase()}</div>
+                          )}
                           <div>
                             <div className="fw-semibold">{a.name || getUsername(a.handle)}</div>
                             <small className="text-muted">{a.handle}</small>
@@ -464,7 +486,16 @@ export function ActorPage() {
                         onClick={() => setShowFollowing(false)}
                       >
                         <div className="d-flex align-items-center">
-                          <div className="avatar avatar-sm me-2">{getUsername(a.handle)[0].toUpperCase()}</div>
+                          {a.avatar_url ? (
+                            <img
+                              src={a.avatar_url}
+                              alt=""
+                              className="rounded-circle me-2"
+                              style={{ width: 32, height: 32, objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <div className="avatar avatar-sm me-2">{getUsername(a.handle)[0].toUpperCase()}</div>
+                          )}
                           <div>
                             <div className="fw-semibold">{a.name || getUsername(a.handle)}</div>
                             <small className="text-muted">{a.handle}</small>
@@ -478,6 +509,15 @@ export function ActorPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Settings Drawer */}
+      {showSettings && actor && (
+        <SettingsDrawer
+          actor={actor}
+          onClose={() => setShowSettings(false)}
+          onSave={(updated) => setActor(updated)}
+        />
       )}
     </div>
   );

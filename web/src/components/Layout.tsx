@@ -4,15 +4,17 @@ import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
 import { tags } from '../api';
 import { TagBadge } from './TagBadge';
+import { SettingsDrawer } from './SettingsDrawer';
 
 interface LayoutProps {
   children: ReactNode;
 }
 
 export function Layout({ children }: LayoutProps) {
-  const { user, actor, logout } = useAuth();
+  const { user, actor, logout, setActor } = useAuth();
   const navigate = useNavigate();
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     tags.getPopular()
@@ -82,12 +84,35 @@ export function Layout({ children }: LayoutProps) {
             <div className="card">
               <div className="card-body">
                 <div className="d-flex align-items-center mb-3">
-                  <div className="avatar avatar-sm">{username[0]?.toUpperCase()}</div>
-                  <span className="ms-2">{actor?.handle}</span>
+                  {actor?.avatar_url ? (
+                    <img
+                      src={actor.avatar_url}
+                      alt=""
+                      className="rounded-circle flex-shrink-0"
+                      style={{ width: 32, height: 32, objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div className="avatar avatar-sm flex-shrink-0">{username[0]?.toUpperCase()}</div>
+                  )}
+                  <span
+                    className="ms-2 text-truncate"
+                    style={{ minWidth: 0 }}
+                    title={actor?.handle}
+                  >
+                    {actor?.handle}
+                  </span>
                 </div>
-                <button onClick={handleLogout} className="btn btn-outline-secondary btn-sm w-100">
-                  <i className="bi bi-box-arrow-right me-1"></i> Logout
-                </button>
+                <div className="d-flex gap-2">
+                  <button
+                    onClick={() => setShowSettings(true)}
+                    className="btn btn-outline-secondary btn-sm flex-grow-1"
+                  >
+                    <i className="bi bi-gear me-1"></i> Settings
+                  </button>
+                  <button onClick={handleLogout} className="btn btn-outline-secondary btn-sm flex-grow-1">
+                    <i className="bi bi-box-arrow-right me-1"></i> Logout
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
@@ -110,6 +135,15 @@ export function Layout({ children }: LayoutProps) {
           {children}
         </div>
       </div>
+
+      {/* Settings Drawer */}
+      {showSettings && actor && (
+        <SettingsDrawer
+          actor={actor}
+          onClose={() => setShowSettings(false)}
+          onSave={(updated) => setActor(updated)}
+        />
+      )}
     </div>
   );
 }

@@ -162,6 +162,10 @@ export class DB {
     return this.db.prepare("SELECT * FROM users WHERE username = ?").get(username) as User | null;
   }
 
+  updateUserPassword(userId: number, passwordHash: string): void {
+    this.db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId);
+  }
+
   // ============ Actors ============
 
   createActor(actor: Omit<Actor, "id" | "created_at">): Actor {
@@ -197,6 +201,31 @@ export class DB {
       JOIN users u ON a.user_id = u.id
       WHERE u.username = ?
     `).get(username) as Actor | null;
+  }
+
+  // Update local actor profile (name, bio, avatar)
+  updateActorProfile(actorId: number, updates: { name?: string; bio?: string; avatar_url?: string }): Actor | null {
+    const fields: string[] = [];
+    const values: (string | null)[] = [];
+
+    if (updates.name !== undefined) {
+      fields.push("name = ?");
+      values.push(updates.name || null);
+    }
+    if (updates.bio !== undefined) {
+      fields.push("bio = ?");
+      values.push(updates.bio || null);
+    }
+    if (updates.avatar_url !== undefined) {
+      fields.push("avatar_url = ?");
+      values.push(updates.avatar_url || null);
+    }
+
+    if (fields.length === 0) return this.getActorById(actorId);
+
+    values.push(actorId as unknown as string);
+    this.db.prepare(`UPDATE actors SET ${fields.join(", ")} WHERE id = ?`).run(...values);
+    return this.getActorById(actorId);
   }
 
   // Search actors by handle or name

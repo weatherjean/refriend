@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Database files
+*.db
+
+# Uploads (local storage)
+uploads/
+
+# Lock files (optional - can keep for reproducibility)
+deno.lock
+package-lock.json
+
+# OS files
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
