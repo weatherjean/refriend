@@ -174,12 +174,20 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
                 <div className="mb-2" dangerouslySetInnerHTML={{ __html: post.content }} />
 
                 {/* Image attachments */}
-                {post.attachments && post.attachments.length > 0 && (
-                  <div className="mb-2 post-images-container position-relative">
-                    {/* Main image display */}
+                {post.attachments && post.attachments.length > 0 && (() => {
+                  const currentAttachment = post.attachments[sliderIndex];
+                  const isNotSquare = currentAttachment.height && currentAttachment.width &&
+                    currentAttachment.height !== currentAttachment.width;
+                  return (
+                  <div className="mb-2 post-images-container position-relative w-100">
+                    {/* Main image display - square crop */}
                     <div
-                      className="post-image-wrapper position-relative rounded overflow-hidden"
-                      style={{ cursor: 'pointer', minHeight: 200, backgroundColor: 'var(--bs-tertiary-bg)' }}
+                      className="post-image-wrapper position-relative rounded overflow-hidden w-100"
+                      style={{
+                        cursor: 'pointer',
+                        aspectRatio: '1 / 1',
+                        backgroundColor: 'var(--bs-tertiary-bg)',
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
@@ -196,11 +204,10 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
                         </div>
                       )}
                       <img
-                        src={post.attachments[sliderIndex].url}
-                        alt={post.attachments[sliderIndex].alt_text ?? ''}
-                        className="w-100"
+                        src={currentAttachment.url}
+                        alt={currentAttachment.alt_text ?? ''}
+                        className="w-100 h-100"
                         style={{
-                          maxHeight: 400,
                           objectFit: 'cover',
                           opacity: imageLoaded[sliderIndex] ? 1 : 0,
                           transition: 'opacity 0.3s',
@@ -208,20 +215,13 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
                         loading="lazy"
                         onLoad={() => setImageLoaded(prev => ({ ...prev, [sliderIndex]: true }))}
                       />
-                      {/* Gradient overlays */}
-                      <div className="position-absolute top-0 start-0 end-0" style={{
-                        height: 60,
-                        background: 'linear-gradient(to bottom, rgba(0,0,0,0.3), transparent)',
-                        pointerEvents: 'none',
-                      }} />
-                      <div className="position-absolute bottom-0 start-0 end-0" style={{
-                        height: 60,
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.3), transparent)',
-                        pointerEvents: 'none',
-                      }} />
-                      {/* Expand icon */}
-                      <div className="position-absolute top-0 end-0 m-2 text-white" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
-                        <i className="bi bi-arrows-fullscreen"></i>
+                      {/* Cropped badge - show if image is not square */}
+                      <div className="position-absolute top-0 end-0 m-2 d-flex gap-1">
+                        {isNotSquare && (
+                          <span className="badge bg-dark bg-opacity-75">
+                            <i className="bi bi-crop me-1"></i>cropped
+                          </span>
+                        )}
                       </div>
                       {/* Image counter for multiple images */}
                       {post.attachments.length > 1 && (
@@ -270,7 +270,8 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
                       </>
                     )}
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* Lightbox */}
                 {lightboxOpen && post.attachments && post.attachments.length > 0 && (
