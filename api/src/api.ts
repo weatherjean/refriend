@@ -39,6 +39,26 @@ type Env = {
   };
 };
 
+// Helper to format dates as ISO strings (PostgreSQL returns Date objects)
+function formatDate(date: string | Date | unknown): string {
+  // Handle Date objects (including from postgres driver)
+  if (date instanceof Date) {
+    return date.toISOString();
+  }
+  // Handle Date-like objects that have toISOString
+  if (date && typeof date === 'object' && 'toISOString' in date && typeof (date as Date).toISOString === 'function') {
+    return (date as Date).toISOString();
+  }
+  // Fallback - try to parse and convert
+  if (date) {
+    const parsed = new Date(String(date));
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+  return String(date);
+}
+
 export function createApi(db: DB, federation: Federation<void>) {
   const api = new Hono<Env>();
 
@@ -64,10 +84,10 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     const token = getCookie(c, "session");
     if (token) {
-      const session = db.getSession(token);
+      const session = await db.getSession(token);
       if (session) {
-        const user = db.getUserById(session.user_id);
-        const actor = user ? db.getActorByUserId(user.id) : null;
+        const user = await db.getUserById(session.user_id);
+        const actor = user ? await db.getActorByUserId(user.id) : null;
         c.set("user", user);
         c.set("actor", actor);
       } else {
@@ -98,16 +118,16 @@ export function createApi(db: DB, federation: Federation<void>) {
     const db = c.get("db");
     const domain = c.get("domain");
 
-    if (db.getUserByUsername(username)) {
+    if (await db.getUserByUsername(username)) {
       return c.json({ error: "Username taken" }, 400);
     }
 
     const passwordHash = await hashPassword(password);
-    const user = db.createUser(username, passwordHash);
+    const user = await db.createUser(username, passwordHash);
 
     // Create actor for the user
     const actorUri = `https://${domain}/users/${username}`;
-    const actor = db.createActor({
+    const actor = await db.createActor({
       uri: actorUri,
       handle: `@${username}@${domain}`,
       name: null,
@@ -119,7 +139,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       user_id: user.id,
     });
 
-    const token = db.createSession(user.id);
+    const token = await db.createSession(user.id);
     setCookie(c, "session", token, {
       httpOnly: true,
       secure: domain !== "localhost:8000",
@@ -136,13 +156,13 @@ export function createApi(db: DB, federation: Federation<void>) {
     const db = c.get("db");
     const domain = c.get("domain");
 
-    const user = db.getUserByUsername(username);
+    const user = await db.getUserByUsername(username);
     if (!user || !(await verifyPassword(password, user.password_hash))) {
       return c.json({ error: "Invalid credentials" }, 401);
     }
 
-    const actor = db.getActorByUserId(user.id);
-    const token = db.createSession(user.id);
+    const actor = await db.getActorByUserId(user.id);
+    const token = await db.createSession(user.id);
     setCookie(c, "session", token, {
       httpOnly: true,
       secure: domain !== "localhost:8000",
@@ -154,10 +174,10 @@ export function createApi(db: DB, federation: Federation<void>) {
     return c.json({ user: sanitizeUser(user), actor: actor ? sanitizeActor(actor) : null });
   });
 
-  api.post("/auth/logout", (c) => {
+  api.post("/auth/logout", async (c) => {
     const token = getCookie(c, "session");
     if (token) {
-      c.get("db").deleteSession(token);
+      await c.get("db").deleteSession(token);
       deleteCookie(c, "session");
     }
     return c.json({ ok: true });
@@ -193,14 +213,14 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     // Verify current password
     const db = c.get("db");
-    const fullUser = db.getUserById(user.id);
+    const fullUser = await db.getUserById(user.id);
     if (!fullUser || !(await verifyPassword(current_password, fullUser.password_hash))) {
       return c.json({ error: "Current password is incorrect" }, 401);
     }
 
     // Update password
     const newHash = await hashPassword(new_password);
-    db.updateUserPassword(user.id, newHash);
+    await db.updateUserPassword(user.id, newHash);
 
     return c.json({ ok: true });
   });
@@ -215,7 +235,7 @@ export function createApi(db: DB, federation: Federation<void>) {
     }
 
     const db = c.get("db");
-    const users = db.getTrendingUsers(3);
+    const users = await db.getTrendingUsers(3);
     const result = {
       users: users.map(u => ({
         id: u.id,
@@ -230,25 +250,25 @@ export function createApi(db: DB, federation: Federation<void>) {
     return c.json(result);
   });
 
-  api.get("/users/:username", (c) => {
+  api.get("/users/:username", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
     const currentActor = c.get("actor");
-    const actor = db.getActorByUsername(username);
+    const actor = await db.getActorByUsername(username);
 
     if (!actor) {
       return c.json({ error: "User not found" }, 404);
     }
 
     // Check if current user is following this profile
-    const isFollowing = currentActor ? db.isFollowing(currentActor.id, actor.id) : false;
+    const isFollowing = currentActor ? await db.isFollowing(currentActor.id, actor.id) : false;
     const isOwnProfile = currentActor?.id === actor.id;
 
     return c.json({
       actor: sanitizeActor(actor),
       stats: {
-        followers: db.getFollowersCount(actor.id),
-        following: db.getFollowingCount(actor.id),
+        followers: await db.getFollowersCount(actor.id),
+        following: await db.getFollowingCount(actor.id),
       },
       is_following: isFollowing,
       is_own_profile: isOwnProfile,
@@ -264,7 +284,7 @@ export function createApi(db: DB, federation: Federation<void>) {
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
-    const actor = db.getActorByUsername(username);
+    const actor = await db.getActorByUsername(username);
 
     if (!actor) {
       return c.json({ error: "User not found" }, 404);
@@ -280,8 +300,8 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     // Use optimized batch methods with pagination
     const posts = filter === "replies"
-      ? db.getRepliesByActorWithActor(actor.id, limit + 1, before)
-      : db.getPostsByActorWithActor(actor.id, limit + 1, before);
+      ? await db.getRepliesByActorWithActor(actor.id, limit + 1, before)
+      : await db.getPostsByActorWithActor(actor.id, limit + 1, before);
 
     const hasMore = posts.length > limit;
     const resultPosts = hasMore ? posts.slice(0, limit) : posts;
@@ -290,7 +310,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       : null;
 
     const result = {
-      posts: enrichPostsBatch(db, resultPosts, currentActor?.id),
+      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id),
       next_cursor: nextCursor,
     };
 
@@ -303,17 +323,17 @@ export function createApi(db: DB, federation: Federation<void>) {
   });
 
   // Get actor by ID (works for both local and remote)
-  api.get("/actors/:id", (c) => {
+  api.get("/actors/:id", async (c) => {
     const id = parseInt(c.req.param("id"));
     const db = c.get("db");
     const currentActor = c.get("actor");
-    const actor = db.getActorById(id);
+    const actor = await db.getActorById(id);
 
     if (!actor) {
       return c.json({ error: "Actor not found" }, 404);
     }
 
-    const isFollowing = currentActor ? db.isFollowing(currentActor.id, actor.id) : false;
+    const isFollowing = currentActor ? await db.isFollowing(currentActor.id, actor.id) : false;
     const isOwnProfile = currentActor?.id === actor.id;
 
     return c.json({
@@ -332,7 +352,7 @@ export function createApi(db: DB, federation: Federation<void>) {
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
-    const actor = db.getActorById(id);
+    const actor = await db.getActorById(id);
 
     if (!actor) {
       return c.json({ error: "Actor not found" }, 404);
@@ -348,8 +368,8 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     // Use optimized batch methods with pagination
     const posts = filter === "replies"
-      ? db.getRepliesByActorWithActor(actor.id, limit + 1, before)
-      : db.getPostsByActorWithActor(actor.id, limit + 1, before);
+      ? await db.getRepliesByActorWithActor(actor.id, limit + 1, before)
+      : await db.getPostsByActorWithActor(actor.id, limit + 1, before);
 
     const hasMore = posts.length > limit;
     const resultPosts = hasMore ? posts.slice(0, limit) : posts;
@@ -358,7 +378,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       : null;
 
     const result = {
-      posts: enrichPostsBatch(db, resultPosts, currentActor?.id),
+      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id),
       next_cursor: nextCursor,
     };
 
@@ -376,7 +396,7 @@ export function createApi(db: DB, federation: Federation<void>) {
     const db = c.get("db");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
-    const actor = db.getActorById(id);
+    const actor = await db.getActorById(id);
 
     if (!actor) {
       return c.json({ error: "Actor not found" }, 404);
@@ -384,9 +404,9 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     // For local actors, return from our pinned_posts table
     if (actor.user_id !== null) {
-      const posts = db.getPinnedPostsWithActor(actor.id);
+      const posts = await db.getPinnedPostsWithActor(actor.id);
       return c.json({
-        posts: enrichPostsBatch(db, posts, currentActor?.id),
+        posts: await enrichPostsBatch(db, posts, currentActor?.id),
       });
     }
 
@@ -426,7 +446,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       }
 
       // Get items from the collection using getItems() async iterator
-      const posts: ReturnType<typeof enrichPost>[] = [];
+      const posts: Awaited<ReturnType<typeof enrichPost>>[] = [];
 
       for await (const item of collection.getItems()) {
         // Item might be a URL reference or an actual Note object
@@ -456,7 +476,7 @@ export function createApi(db: DB, federation: Federation<void>) {
         if (!noteUri) continue;
 
         // Check if we already have this post
-        let post = db.getPostByUri(noteUri);
+        let post = await db.getPostByUri(noteUri);
         if (!post) {
           // Get content
           const content = typeof note.content === "string"
@@ -476,19 +496,14 @@ export function createApi(db: DB, federation: Federation<void>) {
             }
           }
 
-          // Get original published timestamp
-          let createdAt: string | undefined;
-          if (note.published) {
-            // Convert Temporal.Instant to SQLite datetime format
-            const isoDate = note.published.toString();
-            createdAt = isoDate.replace("T", " ").replace("Z", "").split(".")[0];
-          }
+          // Get original published timestamp (PostgreSQL accepts ISO format)
+          const createdAt = note.published?.toString();
 
           // Get sensitive flag
           const sensitive = note.sensitive ?? false;
 
           // Create the post
-          post = db.createPost({
+          post = await db.createPost({
             uri: noteUri,
             actor_id: actor.id,
             content,
@@ -519,7 +534,7 @@ export function createApi(db: DB, federation: Federation<void>) {
                   const width = att.width ?? null;
                   const height = att.height ?? null;
 
-                  db.createMedia(post.id, attUrlString, mediaType, altText, width, height);
+                  await db.createMedia(post.id, attUrlString, mediaType, altText, width, height);
                 }
               }
             }
@@ -530,7 +545,7 @@ export function createApi(db: DB, federation: Federation<void>) {
           console.log(`[Featured] Stored pinned post: ${post.id}`);
         }
 
-        posts.push(enrichPost(db, post, currentActor?.id));
+        posts.push(await enrichPost(db, post, currentActor?.id));
       }
 
       console.log(`[Featured] Found ${posts.length} pinned posts for ${actor.handle}`);
@@ -543,7 +558,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // ============ Posts ============
 
-  api.get("/posts", (c) => {
+  api.get("/posts", async (c) => {
     const db = c.get("db");
     const actor = c.get("actor");
     const timeline = c.req.query("timeline") || "public";
@@ -552,8 +567,8 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     // Use optimized batch methods with actor JOIN and pagination
     const posts = timeline === "home" && actor
-      ? db.getHomeFeedWithActor(actor.id, limit + 1, before)
-      : db.getPublicTimelineWithActor(limit + 1, before);
+      ? await db.getHomeFeedWithActor(actor.id, limit + 1, before)
+      : await db.getPublicTimelineWithActor(limit + 1, before);
 
     // Check if there are more posts
     const hasMore = posts.length > limit;
@@ -563,7 +578,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       : null;
 
     return c.json({
-      posts: enrichPostsBatch(db, resultPosts, actor?.id),
+      posts: await enrichPostsBatch(db, resultPosts, actor?.id),
       next_cursor: nextCursor,
     });
   });
@@ -605,7 +620,7 @@ export function createApi(db: DB, federation: Federation<void>) {
     // Check if replying to a valid post
     let replyToPost = null;
     if (in_reply_to) {
-      replyToPost = db.getPostById(in_reply_to);
+      replyToPost = await db.getPostById(in_reply_to);
       if (!replyToPost) {
         return c.json({ error: "Parent post not found" }, 404);
       }
@@ -660,7 +675,7 @@ export function createApi(db: DB, federation: Federation<void>) {
     }
 
     // Retrieve the created post
-    const post = db.getPostByUri(noteUri);
+    const post = await db.getPostByUri(noteUri);
     if (!post) {
       return c.json({ error: "Post not found after creation" }, 500);
     }
@@ -671,49 +686,49 @@ export function createApi(db: DB, federation: Federation<void>) {
     // Invalidate the author's profile cache
     await invalidateProfileCache(actor.id);
 
-    return c.json({ post: enrichPost(db, post, actor?.id) });
+    return c.json({ post: await enrichPost(db, post, actor?.id) });
   });
 
-  api.get("/posts/:id", (c) => {
+  api.get("/posts/:id", async (c) => {
     const id = parseInt(c.req.param("id"));
     const db = c.get("db");
     const actor = c.get("actor");
-    const post = db.getPostById(id);
+    const post = await db.getPostById(id);
 
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
 
     // Get ancestor chain (walk up in_reply_to_id)
-    const ancestors: ReturnType<typeof enrichPost>[] = [];
+    const ancestors: Awaited<ReturnType<typeof enrichPost>>[] = [];
     let currentPost = post;
     const seen = new Set<number>([post.id]); // Prevent infinite loops
 
     while (currentPost.in_reply_to_id) {
-      const parentPost = db.getPostById(currentPost.in_reply_to_id);
+      const parentPost = await db.getPostById(currentPost.in_reply_to_id);
       if (!parentPost || seen.has(parentPost.id)) break;
       seen.add(parentPost.id);
-      ancestors.unshift(enrichPost(db, parentPost, actor?.id));
+      ancestors.unshift(await enrichPost(db, parentPost, actor?.id));
       currentPost = parentPost;
     }
 
-    return c.json({ post: enrichPost(db, post, actor?.id), ancestors });
+    return c.json({ post: await enrichPost(db, post, actor?.id), ancestors });
   });
 
-  api.get("/posts/:id/replies", (c) => {
+  api.get("/posts/:id/replies", async (c) => {
     const id = parseInt(c.req.param("id"));
     const db = c.get("db");
     const actor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const after = c.req.query("after") ? parseInt(c.req.query("after")!) : undefined;
-    const post = db.getPostById(id);
+    const post = await db.getPostById(id);
 
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
 
     // Use optimized batch method with pagination (replies use "after" since they're ASC)
-    const replies = db.getRepliesWithActor(post.id, limit + 1, after);
+    const replies = await db.getRepliesWithActor(post.id, limit + 1, after);
 
     const hasMore = replies.length > limit;
     const resultReplies = hasMore ? replies.slice(0, limit) : replies;
@@ -722,7 +737,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       : null;
 
     return c.json({
-      replies: enrichPostsBatch(db, resultReplies, actor?.id),
+      replies: await enrichPostsBatch(db, resultReplies, actor?.id),
       next_cursor: nextCursor,
     });
   });
@@ -739,13 +754,13 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = db.getPostById(id);
+    const post = await db.getPostById(id);
     if (!post || post.actor_id !== actor.id) {
       return c.json({ error: "Not found or unauthorized" }, 404);
     }
 
     // Get media files before deleting (CASCADE will delete DB records)
-    const mediaFiles = db.getMediaByPostId(id);
+    const mediaFiles = await db.getMediaByPostId(id);
 
     const ctx = federation.createContext(c.req.raw, undefined);
 
@@ -794,7 +809,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = db.getPostById(id);
+    const post = await db.getPostById(id);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
@@ -816,7 +831,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     return c.json({
       ok: true,
-      likes_count: db.getLikesCount(post.id),
+      likes_count: await db.getLikesCount(post.id),
       liked: true,
     });
   });
@@ -833,7 +848,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = db.getPostById(id);
+    const post = await db.getPostById(id);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
@@ -862,7 +877,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     return c.json({
       ok: true,
-      likes_count: db.getLikesCount(post.id),
+      likes_count: await db.getLikesCount(post.id),
       liked: false,
     });
   });
@@ -879,7 +894,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = db.getPostById(id);
+    const post = await db.getPostById(id);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
@@ -908,7 +923,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     return c.json({
       ok: true,
-      boosts_count: db.getBoostsCount(post.id),
+      boosts_count: await db.getBoostsCount(post.id),
       boosted: true,
     });
   });
@@ -925,7 +940,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = db.getPostById(id);
+    const post = await db.getPostById(id);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
@@ -954,7 +969,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     return c.json({
       ok: true,
-      boosts_count: db.getBoostsCount(post.id),
+      boosts_count: await db.getBoostsCount(post.id),
       boosted: false,
     });
   });
@@ -970,7 +985,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = db.getPostById(id);
+    const post = await db.getPostById(id);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
@@ -981,12 +996,12 @@ export function createApi(db: DB, federation: Federation<void>) {
     }
 
     // Limit to 5 pinned posts
-    const pinnedCount = db.getPinnedPostsCount(actor.id);
-    if (pinnedCount >= 5 && !db.isPinned(actor.id, post.id)) {
+    const pinnedCount = await db.getPinnedPostsCount(actor.id);
+    if (pinnedCount >= 5 && !(await db.isPinned(actor.id, post.id))) {
       return c.json({ error: "Cannot pin more than 5 posts" }, 400);
     }
 
-    db.pinPost(actor.id, post.id);
+    await db.pinPost(actor.id, post.id);
     return c.json({ ok: true, pinned: true });
   });
 
@@ -1001,46 +1016,46 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = db.getPostById(id);
+    const post = await db.getPostById(id);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
 
-    db.unpinPost(actor.id, post.id);
+    await db.unpinPost(actor.id, post.id);
     return c.json({ ok: true, pinned: false });
   });
 
   // GET /users/:username/pinned - Get pinned posts for a user
-  api.get("/users/:username/pinned", (c) => {
+  api.get("/users/:username/pinned", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
     const currentActor = c.get("actor");
-    const actor = db.getActorByUsername(username);
+    const actor = await db.getActorByUsername(username);
 
     if (!actor) {
       return c.json({ error: "User not found" }, 404);
     }
 
-    const posts = db.getPinnedPostsWithActor(actor.id);
+    const posts = await db.getPinnedPostsWithActor(actor.id);
     return c.json({
-      posts: enrichPostsBatch(db, posts, currentActor?.id),
+      posts: await enrichPostsBatch(db, posts, currentActor?.id),
     });
   });
 
   // GET /users/:username/boosts - Get posts boosted by a user
-  api.get("/users/:username/boosts", (c) => {
+  api.get("/users/:username/boosts", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
-    const actor = db.getActorByUsername(username);
+    const actor = await db.getActorByUsername(username);
 
     if (!actor) {
       return c.json({ error: "User not found" }, 404);
     }
 
-    const posts = db.getBoostedPostsWithActor(actor.id, limit + 1, before);
+    const posts = await db.getBoostedPostsWithActor(actor.id, limit + 1, before);
 
     const hasMore = posts.length > limit;
     const resultPosts = hasMore ? posts.slice(0, limit) : posts;
@@ -1049,36 +1064,36 @@ export function createApi(db: DB, federation: Federation<void>) {
       : null;
 
     return c.json({
-      posts: enrichPostsBatch(db, resultPosts, currentActor?.id),
+      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id),
       next_cursor: nextCursor,
     });
   });
 
   // ============ Following ============
 
-  api.get("/users/:username/followers", (c) => {
+  api.get("/users/:username/followers", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
-    const actor = db.getActorByUsername(username);
+    const actor = await db.getActorByUsername(username);
 
     if (!actor) {
       return c.json({ error: "User not found" }, 404);
     }
 
-    const followers = db.getFollowers(actor.id);
+    const followers = await db.getFollowers(actor.id);
     return c.json({ followers: followers.map(sanitizeActor) });
   });
 
-  api.get("/users/:username/following", (c) => {
+  api.get("/users/:username/following", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
-    const actor = db.getActorByUsername(username);
+    const actor = await db.getActorByUsername(username);
 
     if (!actor) {
       return c.json({ error: "User not found" }, 404);
     }
 
-    const following = db.getFollowing(actor.id);
+    const following = await db.getFollowing(actor.id);
     return c.json({ following: following.map(sanitizeActor) });
   });
 
@@ -1113,7 +1128,7 @@ export function createApi(db: DB, federation: Federation<void>) {
     let targetActor;
     if (isLocalTarget) {
       // Local user: look up directly in database
-      targetActor = db.getActorByUsername(username);
+      targetActor = await db.getActorByUsername(username);
       if (!targetActor) {
         return c.json({ error: "User not found" }, 404);
       }
@@ -1165,7 +1180,7 @@ export function createApi(db: DB, federation: Federation<void>) {
     }
 
     const { actor_id } = await c.req.json<{ actor_id: number }>();
-    const targetActor = db.getActorById(actor_id);
+    const targetActor = await db.getActorById(actor_id);
 
     if (!targetActor) {
       return c.json({ error: "Actor not found" }, 404);
@@ -1212,7 +1227,7 @@ export function createApi(db: DB, federation: Federation<void>) {
     const body = await c.req.json();
     const { name, bio } = body;
 
-    const updated = db.updateActorProfile(actor.id, { name, bio });
+    const updated = await db.updateActorProfile(actor.id, { name, bio });
     if (!updated) {
       return c.json({ error: "Failed to update profile" }, 500);
     }
@@ -1248,7 +1263,7 @@ export function createApi(db: DB, federation: Federation<void>) {
     const avatarUrl = await saveAvatar(filename, imageData);
 
     // Update actor in database
-    const updated = db.updateActorProfile(actor.id, { avatar_url: avatarUrl });
+    const updated = await db.updateActorProfile(actor.id, { avatar_url: avatarUrl });
     if (!updated) {
       return c.json({ error: "Failed to update avatar" }, 500);
     }
@@ -1309,7 +1324,7 @@ export function createApi(db: DB, federation: Federation<void>) {
     }
 
     // Local search by username
-    const localResults = db.searchActors(query);
+    const localResults = await db.searchActors(query);
     return c.json({ results: localResults.map(sanitizeActor) });
   });
 
@@ -1320,7 +1335,7 @@ export function createApi(db: DB, federation: Federation<void>) {
   let popularCache: { tags: { name: string; count: number }[]; cachedAt: number } | null = null;
   const TAGS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
-  api.get("/tags/search", (c) => {
+  api.get("/tags/search", async (c) => {
     const query = c.req.query("q") || "";
     const db = c.get("db");
 
@@ -1328,12 +1343,12 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ tags: [] });
     }
 
-    const tags = db.searchTags(query, 10);
+    const tags = await db.searchTags(query, 10);
     return c.json({ tags });
   });
 
   // Popular tags (all-time) - for sidebar
-  api.get("/tags/popular", (c) => {
+  api.get("/tags/popular", async (c) => {
     const db = c.get("db");
     const now = Date.now();
 
@@ -1341,13 +1356,13 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ tags: popularCache.tags });
     }
 
-    const tags = db.getPopularTags(10);
+    const tags = await db.getPopularTags(10);
     popularCache = { tags, cachedAt: now };
     return c.json({ tags });
   });
 
   // Trending tags (recent activity) - for explore page
-  api.get("/tags/trending", (c) => {
+  api.get("/tags/trending", async (c) => {
     const db = c.get("db");
     const now = Date.now();
 
@@ -1355,7 +1370,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ tags: trendingCache.tags });
     }
 
-    const tags = db.getTrendingTags(10, 48);
+    const tags = await db.getTrendingTags(10, 48);
     trendingCache = { tags, cachedAt: now };
     return c.json({ tags });
   });
@@ -1375,7 +1390,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       }
     }
 
-    const posts = db.getPostsByHashtagWithActor(tag, limit + 1, before);
+    const posts = await db.getPostsByHashtagWithActor(tag, limit + 1, before);
 
     const hasMore = posts.length > limit;
     const resultPosts = hasMore ? posts.slice(0, limit) : posts;
@@ -1385,7 +1400,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     const result = {
       tag,
-      posts: enrichPostsBatch(db, resultPosts, actor?.id),
+      posts: await enrichPostsBatch(db, resultPosts, actor?.id),
       next_cursor: nextCursor,
     };
 
@@ -1406,7 +1421,7 @@ function sanitizeUser(user: User) {
   return {
     id: user.id,
     username: user.username,
-    created_at: user.created_at,
+    created_at: formatDate(user.created_at),
   };
 }
 
@@ -1420,33 +1435,33 @@ function sanitizeActor(actor: Actor) {
     avatar_url: actor.avatar_url,
     url: actor.url,
     is_local: actor.user_id !== null,
-    created_at: actor.created_at,
+    created_at: formatDate(actor.created_at),
   };
 }
 
 // Single post enrichment (for individual post views - includes boost count)
-function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
-  const actor = db.getActorById(post.actor_id);
-  const hashtags = db.getPostHashtags(post.id);
-  const boostsCount = db.getBoostsCount(post.id);
-  const liked = currentActorId ? db.hasLiked(currentActorId, post.id) : false;
-  const boosted = currentActorId ? db.hasBoosted(currentActorId, post.id) : false;
-  const pinned = currentActorId ? db.isPinned(currentActorId, post.id) : false;
-  const repliesCount = db.getRepliesCount(post.id);
-  const attachments = db.getMediaByPostId(post.id);
+async function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
+  const actor = await db.getActorById(post.actor_id);
+  const hashtags = await db.getPostHashtags(post.id);
+  const boostsCount = await db.getBoostsCount(post.id);
+  const liked = currentActorId ? await db.hasLiked(currentActorId, post.id) : false;
+  const boosted = currentActorId ? await db.hasBoosted(currentActorId, post.id) : false;
+  const pinned = currentActorId ? await db.isPinned(currentActorId, post.id) : false;
+  const repliesCount = await db.getRepliesCount(post.id);
+  const attachments = await db.getMediaByPostId(post.id);
 
   // Get parent post info if this is a reply
   let inReplyTo = null;
   if (post.in_reply_to_id) {
-    const parentPost = db.getPostById(post.in_reply_to_id);
+    const parentPost = await db.getPostById(post.in_reply_to_id);
     if (parentPost) {
-      const parentActor = db.getActorById(parentPost.actor_id);
+      const parentActor = await db.getActorById(parentPost.actor_id);
       inReplyTo = {
         id: parentPost.id,
         uri: parentPost.uri,
         content: parentPost.content,
         url: parentPost.url,
-        created_at: parentPost.created_at,
+        created_at: formatDate(parentPost.created_at),
         author: parentActor ? sanitizeActor(parentActor) : null,
       };
     }
@@ -1457,7 +1472,7 @@ function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
     uri: post.uri,
     content: post.content,
     url: post.url,
-    created_at: post.created_at,
+    created_at: formatDate(post.created_at),
     author: actor ? sanitizeActor(actor) : null,
     hashtags: hashtags.map((h) => h.name),
     likes_count: post.likes_count, // Use denormalized count
@@ -1480,18 +1495,18 @@ function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
 }
 
 // Batch enrichment for feeds (optimized - no boost count)
-function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: number | null) {
+async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: number | null) {
   if (posts.length === 0) return [];
 
   const postIds = posts.map(p => p.id);
 
   // Batch fetch all related data
-  const hashtagsMap = db.getHashtagsForPosts(postIds);
-  const repliesCountMap = db.getRepliesCounts(postIds);
-  const likedSet = currentActorId ? db.getLikedPostIds(currentActorId, postIds) : new Set<number>();
-  const boostedSet = currentActorId ? db.getBoostedPostIds(currentActorId, postIds) : new Set<number>();
-  const pinnedSet = currentActorId ? db.getPinnedPostIds(currentActorId, postIds) : new Set<number>();
-  const mediaMap = db.getMediaForPosts(postIds);
+  const hashtagsMap = await db.getHashtagsForPosts(postIds);
+  const repliesCountMap = await db.getRepliesCounts(postIds);
+  const likedSet = currentActorId ? await db.getLikedPostIds(currentActorId, postIds) : new Set<number>();
+  const boostedSet = currentActorId ? await db.getBoostedPostIds(currentActorId, postIds) : new Set<number>();
+  const pinnedSet = currentActorId ? await db.getPinnedPostIds(currentActorId, postIds) : new Set<number>();
+  const mediaMap = await db.getMediaForPosts(postIds);
 
   // Batch fetch parent posts for replies
   const parentIds = posts.filter(p => p.in_reply_to_id).map(p => p.in_reply_to_id!);
@@ -1499,10 +1514,10 @@ function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: numbe
   const parentActors = new Map<number, Actor>();
   if (parentIds.length > 0) {
     for (const id of parentIds) {
-      const post = db.getPostById(id);
+      const post = await db.getPostById(id);
       if (post) {
         parentPosts.set(id, post);
-        const actor = db.getActorById(post.actor_id);
+        const actor = await db.getActorById(post.actor_id);
         if (actor) parentActors.set(post.actor_id, actor);
       }
     }
@@ -1519,7 +1534,7 @@ function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: numbe
           uri: parentPost.uri,
           content: parentPost.content,
           url: parentPost.url,
-          created_at: parentPost.created_at,
+          created_at: formatDate(parentPost.created_at),
           author: parentActor ? sanitizeActor(parentActor) : null,
         };
       }
@@ -1532,7 +1547,7 @@ function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: numbe
       uri: post.uri,
       content: post.content,
       url: post.url,
-      created_at: post.created_at,
+      created_at: formatDate(post.created_at),
       author: sanitizeActor(post.author),
       hashtags: hashtagsMap.get(post.id) || [],
       likes_count: post.likes_count,

@@ -1,5 +1,6 @@
 import { DB } from "./db.ts";
 
+const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://refriend:refriend@localhost:5432/refriend";
 const DOMAIN = Deno.env.get("DOMAIN") || "localhost:8000";
 
 // Sample users with profiles
@@ -85,7 +86,7 @@ function extractHashtags(text: string): string[] {
   return [...new Set(matches.map((m) => m.slice(1).toLowerCase()))];
 }
 
-export async function seed(db: DB) {
+export async function seed(db: DB, domain: string) {
   console.log("Seeding database...");
 
   const createdActors: { id: number; username: string }[] = [];
@@ -93,9 +94,9 @@ export async function seed(db: DB) {
   // Create users and actors
   for (const userData of users) {
     // Check if user already exists
-    if (db.getUserByUsername(userData.username)) {
+    if (await db.getUserByUsername(userData.username)) {
       console.log(`User ${userData.username} already exists, skipping...`);
-      const actor = db.getActorByUsername(userData.username);
+      const actor = await db.getActorByUsername(userData.username);
       if (actor) {
         createdActors.push({ id: actor.id, username: userData.username });
       }
@@ -103,18 +104,18 @@ export async function seed(db: DB) {
     }
 
     const passwordHash = await hashPassword(userData.password);
-    const user = db.createUser(userData.username, passwordHash);
+    const user = await db.createUser(userData.username, passwordHash);
 
-    const actorUri = `https://${DOMAIN}/users/${userData.username}`;
-    const actor = db.createActor({
+    const actorUri = `https://${domain}/users/${userData.username}`;
+    const actor = await db.createActor({
       uri: actorUri,
-      handle: `@${userData.username}@${DOMAIN}`,
+      handle: `@${userData.username}@${domain}`,
       name: userData.name,
       bio: userData.bio,
       avatar_url: userData.avatar_url,
-      inbox_url: `https://${DOMAIN}/users/${userData.username}/inbox`,
-      shared_inbox_url: `https://${DOMAIN}/inbox`,
-      url: `https://${DOMAIN}/@${userData.username}`,
+      inbox_url: `https://${domain}/users/${userData.username}/inbox`,
+      shared_inbox_url: `https://${domain}/inbox`,
+      url: `https://${domain}/@${userData.username}`,
       user_id: user.id,
     });
 
@@ -129,24 +130,25 @@ export async function seed(db: DB) {
     const randomActor = createdActors[Math.floor(Math.random() * createdActors.length)];
 
     const noteId = crypto.randomUUID();
-    const noteUri = `https://${DOMAIN}/users/${randomActor.username}/posts/${noteId}`;
-    const noteUrl = `https://${DOMAIN}/@${randomActor.username}/posts/${noteId}`;
+    const noteUri = `https://${domain}/users/${randomActor.username}/posts/${noteId}`;
+    const noteUrl = `https://${domain}/@${randomActor.username}/posts/${noteId}`;
 
     const safeContent = `<p>${content}</p>`;
 
-    const post = db.createPost({
+    const post = await db.createPost({
       uri: noteUri,
       actor_id: randomActor.id,
       content: safeContent,
       url: noteUrl,
       in_reply_to_id: null,
+      sensitive: false,
     });
 
     // Extract and add hashtags
     const hashtags = extractHashtags(content);
     for (const tag of hashtags) {
-      const hashtag = db.getOrCreateHashtag(tag);
-      db.addPostHashtag(post.id, hashtag.id);
+      const hashtag = await db.getOrCreateHashtag(tag);
+      await db.addPostHashtag(post.id, hashtag.id);
     }
 
     postCount++;
@@ -172,7 +174,7 @@ export async function seed(db: DB) {
     const following = createdActors.find(a => a.username === followingName);
 
     if (follower && following) {
-      db.addFollow(follower.id, following.id);
+      await db.addFollow(follower.id, following.id);
     }
   }
   console.log(`Created ${followPairs.length} follow relationships`);
@@ -186,7 +188,8 @@ export async function seed(db: DB) {
 
 // Run if called directly
 if (import.meta.main) {
-  const db = new DB("data.db");
-  db.init("schema.sql");
-  await seed(db);
+  const db = new DB(DATABASE_URL);
+  await db.init(new URL("../schema.pg.sql", import.meta.url).pathname);
+  await seed(db, DOMAIN);
+  Deno.exit(0);
 }

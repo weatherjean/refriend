@@ -1,5 +1,6 @@
 export function formatTimeAgo(dateString: string): string {
-  const date = new Date(dateString.replace(' ', 'T') + 'Z');
+  // Handle both ISO format (from API) and old SQLite format
+  const date = new Date(dateString);
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 

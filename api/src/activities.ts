@@ -21,7 +21,7 @@ import { invalidateProfileCache } from "./cache.ts";
 // Activity processing result
 export interface ProcessResult {
   success: boolean;
-  activity?: ReturnType<DB["storeActivity"]>;
+  activity?: Awaited<ReturnType<DB["storeActivity"]>>;
   error?: string;
 }
 
@@ -33,7 +33,7 @@ export async function persistActor(db: DB, domain: string, actor: APActor): Prom
   if (actor.id.host === domain.replace(/:\d+$/, "") || actor.id.host === domain) {
     const username = actor.preferredUsername?.toString();
     if (username) {
-      const existing = db.getActorByUsername(username);
+      const existing = await db.getActorByUsername(username);
       if (existing) return existing;
     }
   }
@@ -72,7 +72,7 @@ export async function persistActor(db: DB, domain: string, actor: APActor): Prom
     }
   }
 
-  return db.upsertActor({
+  return await db.upsertActor({
     uri: actor.id.href,
     handle,
     name,
@@ -99,7 +99,7 @@ async function fetchAndStoreNote(
   noteUri: string
 ): Promise<number | null> {
   // Check if we already have it
-  const existing = db.getPostByUri(noteUri);
+  const existing = await db.getPostByUri(noteUri);
   if (existing) return existing.id;
 
   console.log(`[Reply] Fetching parent post: ${noteUri}`);
@@ -160,7 +160,7 @@ async function fetchAndStoreNote(
     const sensitive = note.sensitive ?? false;
 
     // Create the post
-    const post = db.createPost({
+    const post = await db.createPost({
       uri: note.id.href,
       actor_id: authorActor.id,
       content,
@@ -172,8 +172,8 @@ async function fetchAndStoreNote(
     // Extract hashtags
     const hashtags = extractHashtags(content);
     for (const tag of hashtags) {
-      const hashtag = db.getOrCreateHashtag(tag);
-      db.addPostHashtag(post.id, hashtag.id);
+      const hashtag = await db.getOrCreateHashtag(tag);
+      await db.addPostHashtag(post.id, hashtag.id);
     }
 
     // Extract attachments
@@ -197,7 +197,7 @@ async function fetchAndStoreNote(
             const width = att.width ?? null;
             const height = att.height ?? null;
 
-            db.createMedia(post.id, attUrlString, mediaType, altText, width, height);
+            await db.createMedia(post.id, attUrlString, mediaType, altText, width, height);
           }
         }
       }
@@ -326,7 +326,7 @@ export async function processActivity(
   }
 
   // Check for duplicate (idempotency)
-  const existing = db.getActivityByUri(activityUri);
+  const existing = await db.getActivityByUri(activityUri);
   if (existing) {
     console.log(`[${getActivityType(activity)}] Already processed: ${activityUri}`);
     return { success: true, activity: existing };
@@ -355,7 +355,7 @@ export async function processActivity(
 
     // For outbound activities, use the local username directly
     if (direction === "outbound" && localUsername) {
-      actor = db.getActorByUsername(localUsername);
+      actor = await db.getActorByUsername(localUsername);
     }
 
     // For inbound or if local lookup failed, try to resolve from activity
@@ -378,7 +378,7 @@ export async function processActivity(
     const objectInfo = await getObjectInfo(activity);
     const rawJson = await serializeActivity(activity);
 
-    const storedActivity = db.storeActivity({
+    const storedActivity = await db.storeActivity({
       uri: activityUri,
       type: getActivityType(activity),
       actor_id: actor.id,
@@ -422,7 +422,7 @@ async function processCreate(
 
   // For outbound activities, use the local username to get the actor
   if (direction === "outbound" && localUsername) {
-    authorActor = db.getActorByUsername(localUsername);
+    authorActor = await db.getActorByUsername(localUsername);
   }
 
   // For inbound or if local lookup failed, try to resolve from activity
@@ -442,7 +442,7 @@ async function processCreate(
   if (!noteUri) return;
 
   // Check if post already exists
-  const existingPost = db.getPostByUri(noteUri);
+  const existingPost = await db.getPostByUri(noteUri);
   if (existingPost) return;
 
   // Get content
@@ -480,7 +480,7 @@ async function processCreate(
   }
   if (inReplyToUri) {
     // First check if we have the parent locally
-    const parentPost = db.getPostByUri(inReplyToUri);
+    const parentPost = await db.getPostByUri(inReplyToUri);
     if (parentPost) {
       inReplyToId = parentPost.id;
     } else {
@@ -494,7 +494,7 @@ async function processCreate(
   const sensitive = object.sensitive ?? false;
 
   // Create the post
-  const post = db.createPost({
+  const post = await db.createPost({
     uri: noteUri,
     actor_id: authorActor.id,
     content,
@@ -506,8 +506,8 @@ async function processCreate(
   // Extract and add hashtags
   const hashtags = extractHashtags(content);
   for (const tag of hashtags) {
-    const hashtag = db.getOrCreateHashtag(tag);
-    db.addPostHashtag(post.id, hashtag.id);
+    const hashtag = await db.getOrCreateHashtag(tag);
+    await db.addPostHashtag(post.id, hashtag.id);
   }
 
   // Extract attachments from incoming Note
@@ -536,7 +536,7 @@ async function processCreate(
           const width = att.width ?? null;
           const height = att.height ?? null;
 
-          db.createMedia(post.id, urlString, mediaType, altText, width, height);
+          await db.createMedia(post.id, urlString, mediaType, altText, width, height);
           console.log(`[Create] Added attachment: ${urlString}`);
         }
       }
@@ -560,9 +560,9 @@ async function processCreate(
 
     // If this is a reply to a remote post, also send to the original author
     if (inReplyToId) {
-      const parentPost = db.getPostById(inReplyToId);
+      const parentPost = await db.getPostById(inReplyToId);
       if (parentPost) {
-        const parentAuthor = db.getActorById(parentPost.actor_id);
+        const parentAuthor = await db.getActorById(parentPost.actor_id);
         if (parentAuthor && !parentAuthor.user_id && parentAuthor.inbox_url) {
           // Remote author - send them the reply
           await safeSendActivity(ctx,
@@ -595,7 +595,7 @@ async function processLike(
 
   // For outbound activities, use the local username
   if (direction === "outbound" && localUsername) {
-    likerActor = db.getActorByUsername(localUsername);
+    likerActor = await db.getActorByUsername(localUsername);
   }
 
   // For inbound or if local lookup failed, try to resolve from activity
@@ -614,19 +614,19 @@ async function processLike(
   const objectUri = like.objectId?.href;
   if (!objectUri) return;
 
-  const post = db.getPostByUri(objectUri);
+  const post = await db.getPostByUri(objectUri);
   if (!post) {
     console.log(`[Like] Post not found: ${objectUri}`);
     return;
   }
 
   // Add the like
-  db.addLike(likerActor.id, post.id);
+  await db.addLike(likerActor.id, post.id);
   console.log(`[Like] ${likerActor.handle} liked post ${post.id}`);
 
   // For outbound: send to post author if remote
   if (direction === "outbound" && localUsername) {
-    const postAuthor = db.getActorById(post.actor_id);
+    const postAuthor = await db.getActorById(post.actor_id);
     if (postAuthor && !postAuthor.user_id) {
       await safeSendActivity(ctx,
         { identifier: localUsername },
@@ -653,7 +653,7 @@ async function processAnnounce(
 
   // For outbound activities, use the local username
   if (direction === "outbound" && localUsername) {
-    boosterActor = db.getActorByUsername(localUsername);
+    boosterActor = await db.getActorByUsername(localUsername);
   }
 
   // For inbound or if local lookup failed, try to resolve from activity
@@ -673,12 +673,12 @@ async function processAnnounce(
   if (!objectUri) return;
 
   // Try to find the post locally, or fetch it if remote
-  let post = db.getPostByUri(objectUri);
+  let post = await db.getPostByUri(objectUri);
   if (!post) {
     // Try to fetch the remote post
     const postId = await fetchAndStoreNote(ctx, db, domain, objectUri);
     if (postId) {
-      post = db.getPostById(postId);
+      post = await db.getPostById(postId);
     }
   }
 
@@ -688,7 +688,7 @@ async function processAnnounce(
   }
 
   // Add the boost
-  db.addBoost(boosterActor.id, post.id);
+  await db.addBoost(boosterActor.id, post.id);
   console.log(`[Announce] ${boosterActor.handle} boosted post ${post.id}`);
 
   // For outbound: send to followers and post author
@@ -702,7 +702,7 @@ async function processAnnounce(
     console.log(`[Announce] Sent to followers of ${localUsername}`);
 
     // Also send to post author if remote
-    const postAuthor = db.getActorById(post.actor_id);
+    const postAuthor = await db.getActorById(post.actor_id);
     if (postAuthor && !postAuthor.user_id && postAuthor.inbox_url) {
       await safeSendActivity(ctx,
         { identifier: localUsername },
@@ -729,7 +729,7 @@ async function processFollow(
 
   // For outbound activities, use the local username
   if (direction === "outbound" && localUsername) {
-    followerActor = db.getActorByUsername(localUsername);
+    followerActor = await db.getActorByUsername(localUsername);
   }
 
   // For inbound or if local lookup failed, try to resolve from activity
@@ -750,14 +750,14 @@ async function processFollow(
   if (!targetUri) return;
 
   // Find target actor
-  const targetActor = db.getActorByUri(targetUri);
+  const targetActor = await db.getActorByUri(targetUri);
   if (!targetActor) {
     console.log(`[Follow] Target not found: ${targetUri}`);
     return;
   }
 
   // Add the follow relationship
-  db.addFollow(followerActor.id, targetActor.id);
+  await db.addFollow(followerActor.id, targetActor.id);
   console.log(`[Follow] ${followerActor.handle} -> ${targetActor.handle}`);
 
   // For inbound: if target is local, send Accept
@@ -815,14 +815,14 @@ async function processAccept(
   const followerId = activity.actorId;
   if (!followerId) return;
 
-  const followerActor = db.getActorByUri(followerId.href);
+  const followerActor = await db.getActorByUri(followerId.href);
   if (!followerActor) return;
 
   // Persist the accepted actor and add follow
   const acceptedActor = await persistActor(db, domain, sender);
   if (!acceptedActor) return;
 
-  db.addFollow(followerActor.id, acceptedActor.id);
+  await db.addFollow(followerActor.id, acceptedActor.id);
   console.log(`[Accept] ${followerActor.handle} now following ${acceptedActor.handle}`);
 }
 
@@ -849,7 +849,7 @@ async function processUndo(
 
   // For outbound activities, use the local username
   if (direction === "outbound" && localUsername) {
-    actorRecord = db.getActorByUsername(localUsername);
+    actorRecord = await db.getActorByUsername(localUsername);
   }
 
   // For inbound or if local lookup failed, try to resolve from activity
@@ -870,10 +870,10 @@ async function processUndo(
     const targetUri = activity.objectId?.href;
     if (!targetUri) return;
 
-    const targetActor = db.getActorByUri(targetUri);
+    const targetActor = await db.getActorByUri(targetUri);
     if (!targetActor) return;
 
-    db.removeFollow(actorRecord.id, targetActor.id);
+    await db.removeFollow(actorRecord.id, targetActor.id);
     console.log(`[Undo Follow] ${actorRecord.handle} unfollowed ${targetActor.handle}`);
 
     // For outbound to remote: send Undo activity
@@ -895,15 +895,15 @@ async function processUndo(
     const objectUri = activity.objectId?.href;
     if (!objectUri) return;
 
-    const post = db.getPostByUri(objectUri);
+    const post = await db.getPostByUri(objectUri);
     if (!post) return;
 
-    db.removeLike(actorRecord.id, post.id);
+    await db.removeLike(actorRecord.id, post.id);
     console.log(`[Undo Like] ${actorRecord.handle} unliked post ${post.id}`);
 
     // For outbound to remote: send Undo activity
     if (direction === "outbound" && localUsername) {
-      const postAuthor = db.getActorById(post.actor_id);
+      const postAuthor = await db.getActorById(post.actor_id);
       if (postAuthor && !postAuthor.user_id) {
         await safeSendActivity(ctx,
           { identifier: localUsername },
@@ -923,10 +923,10 @@ async function processUndo(
     const objectUri = activity.objectId?.href;
     if (!objectUri) return;
 
-    const post = db.getPostByUri(objectUri);
+    const post = await db.getPostByUri(objectUri);
     if (!post) return;
 
-    db.removeBoost(actorRecord.id, post.id);
+    await db.removeBoost(actorRecord.id, post.id);
     console.log(`[Undo Announce] ${actorRecord.handle} unboosted post ${post.id}`);
 
     // For outbound: send to followers and post author
@@ -940,7 +940,7 @@ async function processUndo(
       console.log(`[Undo Announce] Sent to followers of ${localUsername}`);
 
       // Also notify post author if remote
-      const postAuthor = db.getActorById(post.actor_id);
+      const postAuthor = await db.getActorById(post.actor_id);
       if (postAuthor && !postAuthor.user_id && postAuthor.inbox_url) {
         await safeSendActivity(ctx,
           { identifier: localUsername },
@@ -968,7 +968,7 @@ async function processDelete(
 
   // For outbound activities, use the local username
   if (direction === "outbound" && localUsername) {
-    actorRecord = db.getActorByUsername(localUsername);
+    actorRecord = await db.getActorByUsername(localUsername);
   }
 
   // For inbound or if local lookup failed, try to resolve from activity
@@ -1000,9 +1000,9 @@ async function processDelete(
   if (!objectUri) return;
 
   // Find and delete the post
-  const post = db.getPostByUri(objectUri);
+  const post = await db.getPostByUri(objectUri);
   if (post && post.actor_id === actorRecord.id) {
-    db.deletePost(post.id);
+    await db.deletePost(post.id);
     console.log(`[Delete] Post ${post.id} by ${actorRecord.handle}`);
 
     // Invalidate the author's profile cache

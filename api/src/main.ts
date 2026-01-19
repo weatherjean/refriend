@@ -9,12 +9,12 @@ import { initStorage, getUploadsDir } from "./storage.ts";
 import { initCache } from "./cache.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
-const DB_PATH = Deno.env.get("DB_PATH") || "./data.db";
+const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://refriend:refriend@localhost:5432/refriend";
 const STATIC_DIR = Deno.env.get("STATIC_DIR") || "../web/dist";
 
 // Initialize database
-const db = new DB(DB_PATH);
-db.init(new URL("../schema.sql", import.meta.url).pathname);
+const db = new DB(DATABASE_URL);
+await db.init(new URL("../schema.pg.sql", import.meta.url).pathname);
 
 // Initialize storage
 await initStorage();
@@ -38,7 +38,7 @@ app.use("*", async (c, next) => {
 
   // If this is a tunnel domain (not localhost) and we haven't migrated yet, migrate the DB
   if (!domain.includes("localhost") && migratedDomain !== domain) {
-    db.migrateDomain(domain);
+    await db.migrateDomain(domain);
     migratedDomain = domain;
   }
 
@@ -67,7 +67,7 @@ app.use("/*", serveStatic({ root: STATIC_DIR }));
 app.get("*", serveStatic({ path: `${STATIC_DIR}/index.html` }));
 
 console.log(`Refriend v3 running on http://localhost:${PORT}`);
-console.log(`Use 'fedify tunnel ${PORT}' to expose to the internet`);
+console.log(`Use 'ngrok http ${PORT}' to expose to the internet`);
 
-// Use behindProxy to handle X-Forwarded-* headers from fedify tunnel
+// Use behindProxy to handle X-Forwarded-* headers from tunnel
 Deno.serve({ port: PORT }, behindProxy(app.fetch));

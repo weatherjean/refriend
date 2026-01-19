@@ -11,8 +11,8 @@
  * - Consider using presigned URLs for direct uploads from client
  */
 
-import { join } from "https://deno.land/std@0.208.0/path/mod.ts";
-import { ensureDir } from "https://deno.land/std@0.208.0/fs/mod.ts";
+import { join } from "@std/path";
+import { ensureDir } from "@std/fs";
 
 // Local storage directory (gitignored)
 const UPLOADS_DIR = "./uploads";

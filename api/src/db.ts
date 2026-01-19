@@ -1,4 +1,4 @@
-import { Database } from "@db/sqlite";
+import { Pool, PoolClient } from "postgres";
 
 // Types matching our schema
 export interface User {
@@ -60,7 +60,6 @@ export interface Media {
   created_at: string;
 }
 
-// Post with actor data already joined (reduces N+1 queries)
 export interface PostWithActor extends Post {
   author: Actor;
 }
@@ -96,404 +95,448 @@ export interface Activity {
 }
 
 export class DB {
-  private db: Database;
+  private pool: Pool;
 
-  constructor(path: string) {
-    this.db = new Database(path);
-    this.db.exec("PRAGMA foreign_keys = ON");
+  constructor(connectionString: string) {
+    this.pool = new Pool(connectionString, 10);
   }
 
-  init(schemaPath: string) {
-    const schema = Deno.readTextFileSync(schemaPath);
-    this.db.exec(schema);
-    this.migrate();
+  async init(schemaPath: string) {
+    const schema = await Deno.readTextFile(schemaPath);
+    const client = await this.pool.connect();
+    try {
+      await client.queryArray(schema);
+    } finally {
+      client.release();
+    }
   }
 
-  // Run migrations for existing databases
-  private migrate() {
-    const columns = this.db.prepare("PRAGMA table_info(posts)").all() as { name: string }[];
+  async close() {
+    await this.pool.end();
+  }
 
-    // Add likes_count column if it doesn't exist
-    const hasLikesCount = columns.some(c => c.name === "likes_count");
-    if (!hasLikesCount) {
-      this.db.exec("ALTER TABLE posts ADD COLUMN likes_count INTEGER NOT NULL DEFAULT 0");
-      // Backfill existing counts
-      this.db.exec(`
-        UPDATE posts SET likes_count = (
-          SELECT COUNT(*) FROM likes WHERE likes.post_id = posts.id
-        )
-      `);
+  private async query<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      return await fn(client);
+    } finally {
+      client.release();
     }
-
-    // Add sensitive column if it doesn't exist
-    const hasSensitive = columns.some(c => c.name === "sensitive");
-    if (!hasSensitive) {
-      this.db.exec("ALTER TABLE posts ADD COLUMN sensitive INTEGER NOT NULL DEFAULT 0");
-    }
-
-    // Create media table if it doesn't exist (handled by schema, but ensure index)
-    this.db.exec("CREATE INDEX IF NOT EXISTS idx_media_post ON media(post_id)");
   }
 
   // Migrate local actors to a new domain
-  migrateDomain(newDomain: string) {
-    // Get all local actors (those with user_id)
-    const localActors = this.db.prepare(
-      "SELECT id, uri, handle, url FROM actors WHERE user_id IS NOT NULL"
-    ).all() as { id: number; uri: string; handle: string; url: string | null }[];
+  async migrateDomain(newDomain: string) {
+    await this.query(async (client) => {
+      const localActors = (await client.queryObject<{ id: number; uri: string; handle: string; url: string | null }>`
+        SELECT id, uri, handle, url FROM actors WHERE user_id IS NOT NULL
+      `).rows;
 
-    for (const actor of localActors) {
-      // Extract username from current handle (@user@domain)
-      const match = actor.handle.match(/^@([^@]+)@/);
-      if (!match) continue;
-      const username = match[1];
+      for (const actor of localActors) {
+        const match = actor.handle.match(/^@([^@]+)@/);
+        if (!match) continue;
+        const username = match[1];
+        const newUri = `https://${newDomain}/users/${username}`;
+        const newHandle = `@${username}@${newDomain}`;
+        const newUrl = `https://${newDomain}/@${username}`;
+        const newInbox = `https://${newDomain}/users/${username}/inbox`;
 
-      // Build new values
-      const newUri = `https://${newDomain}/users/${username}`;
-      const newHandle = `@${username}@${newDomain}`;
-      const newUrl = `https://${newDomain}/@${username}`;
-      const newInbox = `https://${newDomain}/users/${username}/inbox`;
+        await client.queryArray`
+          UPDATE actors SET uri = ${newUri}, handle = ${newHandle}, url = ${newUrl}, inbox_url = ${newInbox}
+          WHERE id = ${actor.id}
+        `;
+      }
 
-      this.db.prepare(
-        "UPDATE actors SET uri = ?, handle = ?, url = ?, inbox_url = ? WHERE id = ?"
-      ).run(newUri, newHandle, newUrl, newInbox, actor.id);
-    }
+      const localPosts = (await client.queryObject<{ id: number; uri: string; url: string | null; username: string }>`
+        SELECT p.id, p.uri, p.url, u.username
+        FROM posts p
+        JOIN actors a ON p.actor_id = a.id
+        JOIN users u ON a.user_id = u.id
+      `).rows;
 
-    // Also update posts URIs for local posts
-    const localPosts = this.db.prepare(`
-      SELECT p.id, p.uri, p.url, u.username
-      FROM posts p
-      JOIN actors a ON p.actor_id = a.id
-      JOIN users u ON a.user_id = u.id
-    `).all() as { id: number; uri: string; url: string | null; username: string }[];
+      for (const post of localPosts) {
+        const match = post.uri.match(/\/posts\/([^/]+)$/);
+        if (!match) continue;
+        const postId = match[1];
+        const newUri = `https://${newDomain}/users/${post.username}/posts/${postId}`;
+        const newUrl = `https://${newDomain}/@${post.username}/posts/${postId}`;
 
-    for (const post of localPosts) {
-      // Extract post ID from URI
-      const match = post.uri.match(/\/posts\/([^/]+)$/);
-      if (!match) continue;
-      const postId = match[1];
+        await client.queryArray`UPDATE posts SET uri = ${newUri}, url = ${newUrl} WHERE id = ${post.id}`;
+      }
 
-      const newUri = `https://${newDomain}/users/${post.username}/posts/${postId}`;
-      const newUrl = `https://${newDomain}/@${post.username}/posts/${postId}`;
+      await client.queryArray`
+        UPDATE activities SET uri = REPLACE(uri, 'localhost:8000', ${newDomain})
+        WHERE uri LIKE '%localhost:8000%'
+      `;
 
-      this.db.prepare(
-        "UPDATE posts SET uri = ?, url = ? WHERE id = ?"
-      ).run(newUri, newUrl, post.id);
-    }
-
-    // Update activities URIs too
-    this.db.prepare(`
-      UPDATE activities SET uri = REPLACE(uri, 'localhost:8000', ?)
-      WHERE uri LIKE '%localhost:8000%'
-    `).run(newDomain);
-
-    console.log(`[DB] Migrated ${localActors.length} actors and ${localPosts.length} posts to ${newDomain}`);
+      console.log(`[DB] Migrated ${localActors.length} actors and ${localPosts.length} posts to ${newDomain}`);
+    });
   }
 
   // ============ Users ============
 
-  createUser(username: string, passwordHash: string): User {
-    this.db.prepare(
-      "INSERT INTO users (username, password_hash) VALUES (?, ?)"
-    ).run(username, passwordHash);
-    return this.getUserByUsername(username)!;
+  async createUser(username: string, passwordHash: string): Promise<User> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<User>`
+        INSERT INTO users (username, password_hash) VALUES (${username}, ${passwordHash})
+        RETURNING *
+      `;
+      return result.rows[0];
+    });
   }
 
-  getUserById(id: number): User | null {
-    return this.db.prepare("SELECT * FROM users WHERE id = ?").get(id) as User | null;
+  async getUserById(id: number): Promise<User | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<User>`SELECT * FROM users WHERE id = ${id}`;
+      return result.rows[0] || null;
+    });
   }
 
-  getUserByUsername(username: string): User | null {
-    return this.db.prepare("SELECT * FROM users WHERE username = ?").get(username) as User | null;
+  async getUserByUsername(username: string): Promise<User | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<User>`SELECT * FROM users WHERE username = ${username}`;
+      return result.rows[0] || null;
+    });
   }
 
-  updateUserPassword(userId: number, passwordHash: string): void {
-    this.db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(passwordHash, userId);
+  async updateUserPassword(userId: number, passwordHash: string): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`UPDATE users SET password_hash = ${passwordHash} WHERE id = ${userId}`;
+    });
   }
 
   // ============ Actors ============
 
-  createActor(actor: Omit<Actor, "id" | "created_at">): Actor {
-    this.db.prepare(`
-      INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      actor.uri, actor.handle, actor.name, actor.bio, actor.avatar_url,
-      actor.inbox_url, actor.shared_inbox_url, actor.url, actor.user_id
-    );
-    return this.getActorByUri(actor.uri)!;
+  async createActor(actor: Omit<Actor, "id" | "created_at">): Promise<Actor> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id)
+        VALUES (${actor.uri}, ${actor.handle}, ${actor.name}, ${actor.bio}, ${actor.avatar_url},
+                ${actor.inbox_url}, ${actor.shared_inbox_url}, ${actor.url}, ${actor.user_id})
+        RETURNING *
+      `;
+      return result.rows[0];
+    });
   }
 
-  getActorById(id: number): Actor | null {
-    return this.db.prepare("SELECT * FROM actors WHERE id = ?").get(id) as Actor | null;
+  async getActorById(id: number): Promise<Actor | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`SELECT * FROM actors WHERE id = ${id}`;
+      return result.rows[0] || null;
+    });
   }
 
-  getActorByUri(uri: string): Actor | null {
-    return this.db.prepare("SELECT * FROM actors WHERE uri = ?").get(uri) as Actor | null;
+  async getActorByUri(uri: string): Promise<Actor | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`SELECT * FROM actors WHERE uri = ${uri}`;
+      return result.rows[0] || null;
+    });
   }
 
-  getActorByHandle(handle: string): Actor | null {
-    return this.db.prepare("SELECT * FROM actors WHERE handle = ?").get(handle) as Actor | null;
+  async getActorByHandle(handle: string): Promise<Actor | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`SELECT * FROM actors WHERE handle = ${handle}`;
+      return result.rows[0] || null;
+    });
   }
 
-  getActorByUserId(userId: number): Actor | null {
-    return this.db.prepare("SELECT * FROM actors WHERE user_id = ?").get(userId) as Actor | null;
+  async getActorByUserId(userId: number): Promise<Actor | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`SELECT * FROM actors WHERE user_id = ${userId}`;
+      return result.rows[0] || null;
+    });
   }
 
-  getActorByUsername(username: string): Actor | null {
-    return this.db.prepare(`
-      SELECT a.* FROM actors a
-      JOIN users u ON a.user_id = u.id
-      WHERE u.username = ?
-    `).get(username) as Actor | null;
+  async getActorByUsername(username: string): Promise<Actor | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        SELECT a.* FROM actors a
+        JOIN users u ON a.user_id = u.id
+        WHERE u.username = ${username}
+      `;
+      return result.rows[0] || null;
+    });
   }
 
-  // Update local actor profile (name, bio, avatar)
-  updateActorProfile(actorId: number, updates: { name?: string; bio?: string; avatar_url?: string }): Actor | null {
-    const fields: string[] = [];
-    const values: (string | null)[] = [];
+  async updateActorProfile(actorId: number, updates: { name?: string; bio?: string; avatar_url?: string }): Promise<Actor | null> {
+    return this.query(async (client) => {
+      const sets: string[] = [];
+      const values: unknown[] = [];
+      let paramNum = 1;
 
-    if (updates.name !== undefined) {
-      fields.push("name = ?");
-      values.push(updates.name || null);
-    }
-    if (updates.bio !== undefined) {
-      fields.push("bio = ?");
-      values.push(updates.bio || null);
-    }
-    if (updates.avatar_url !== undefined) {
-      fields.push("avatar_url = ?");
-      values.push(updates.avatar_url || null);
-    }
+      if (updates.name !== undefined) {
+        sets.push(`name = $${paramNum++}`);
+        values.push(updates.name || null);
+      }
+      if (updates.bio !== undefined) {
+        sets.push(`bio = $${paramNum++}`);
+        values.push(updates.bio || null);
+      }
+      if (updates.avatar_url !== undefined) {
+        sets.push(`avatar_url = $${paramNum++}`);
+        values.push(updates.avatar_url || null);
+      }
 
-    if (fields.length === 0) return this.getActorById(actorId);
+      if (sets.length === 0) {
+        const result = await client.queryObject<Actor>`SELECT * FROM actors WHERE id = ${actorId}`;
+        return result.rows[0] || null;
+      }
 
-    values.push(actorId as unknown as string);
-    this.db.prepare(`UPDATE actors SET ${fields.join(", ")} WHERE id = ?`).run(...values);
-    return this.getActorById(actorId);
+      values.push(actorId);
+      const query = `UPDATE actors SET ${sets.join(", ")} WHERE id = $${paramNum} RETURNING *`;
+      const result = await client.queryObject<Actor>(query, values);
+      return result.rows[0] || null;
+    });
   }
 
-  // Search actors by handle or name
-  searchActors(query: string, limit = 20): Actor[] {
-    const pattern = `%${query}%`;
-    return this.db.prepare(`
-      SELECT * FROM actors
-      WHERE handle LIKE ? OR name LIKE ?
-      ORDER BY user_id IS NOT NULL DESC, created_at DESC
-      LIMIT ?
-    `).all(pattern, pattern, limit) as Actor[];
+  async searchActors(query: string, limit = 20): Promise<Actor[]> {
+    return this.query(async (client) => {
+      const pattern = `%${query}%`;
+      const result = await client.queryObject<Actor>`
+        SELECT * FROM actors
+        WHERE handle ILIKE ${pattern} OR name ILIKE ${pattern}
+        ORDER BY user_id IS NOT NULL DESC, created_at DESC
+        LIMIT ${limit}
+      `;
+      return result.rows;
+    });
   }
 
-  // Upsert remote actor (for federation)
-  upsertActor(actor: Omit<Actor, "id" | "created_at" | "user_id">): Actor {
-    this.db.prepare(`
-      INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
-      ON CONFLICT(uri) DO UPDATE SET
-        handle = excluded.handle,
-        name = excluded.name,
-        bio = excluded.bio,
-        avatar_url = excluded.avatar_url,
-        inbox_url = excluded.inbox_url,
-        shared_inbox_url = excluded.shared_inbox_url,
-        url = excluded.url
-    `).run(
-      actor.uri, actor.handle, actor.name, actor.bio, actor.avatar_url,
-      actor.inbox_url, actor.shared_inbox_url, actor.url
-    );
-    return this.getActorByUri(actor.uri)!;
+  async upsertActor(actor: Omit<Actor, "id" | "created_at" | "user_id">): Promise<Actor> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id)
+        VALUES (${actor.uri}, ${actor.handle}, ${actor.name}, ${actor.bio}, ${actor.avatar_url},
+                ${actor.inbox_url}, ${actor.shared_inbox_url}, ${actor.url}, NULL)
+        ON CONFLICT(uri) DO UPDATE SET
+          handle = EXCLUDED.handle,
+          name = EXCLUDED.name,
+          bio = EXCLUDED.bio,
+          avatar_url = EXCLUDED.avatar_url,
+          inbox_url = EXCLUDED.inbox_url,
+          shared_inbox_url = EXCLUDED.shared_inbox_url,
+          url = EXCLUDED.url
+        RETURNING *
+      `;
+      return result.rows[0];
+    });
   }
 
   // ============ Keys ============
 
-  getKeyPairs(userId: number): KeyPair[] {
-    return this.db.prepare("SELECT * FROM keys WHERE user_id = ?").all(userId) as KeyPair[];
+  async getKeyPairs(userId: number): Promise<KeyPair[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<KeyPair>`SELECT * FROM keys WHERE user_id = ${userId}`;
+      return result.rows;
+    });
   }
 
-  getKeyPair(userId: number, type: KeyPair["type"]): KeyPair | null {
-    return this.db.prepare(
-      "SELECT * FROM keys WHERE user_id = ? AND type = ?"
-    ).get(userId, type) as KeyPair | null;
+  async getKeyPair(userId: number, type: KeyPair["type"]): Promise<KeyPair | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<KeyPair>`
+        SELECT * FROM keys WHERE user_id = ${userId} AND type = ${type}
+      `;
+      return result.rows[0] || null;
+    });
   }
 
-  saveKeyPair(userId: number, type: KeyPair["type"], privateKey: string, publicKey: string): KeyPair {
-    this.db.prepare(`
-      INSERT INTO keys (user_id, type, private_key, public_key)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(user_id, type) DO UPDATE SET
-        private_key = excluded.private_key,
-        public_key = excluded.public_key
-    `).run(userId, type, privateKey, publicKey);
-    return this.getKeyPair(userId, type)!;
+  async saveKeyPair(userId: number, type: KeyPair["type"], privateKey: string, publicKey: string): Promise<KeyPair> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<KeyPair>`
+        INSERT INTO keys (user_id, type, private_key, public_key)
+        VALUES (${userId}, ${type}, ${privateKey}, ${publicKey})
+        ON CONFLICT(user_id, type) DO UPDATE SET
+          private_key = EXCLUDED.private_key,
+          public_key = EXCLUDED.public_key
+        RETURNING *
+      `;
+      return result.rows[0];
+    });
   }
 
   // ============ Follows ============
 
-  addFollow(followerId: number, followingId: number): void {
-    this.db.prepare(
-      "INSERT OR IGNORE INTO follows (follower_id, following_id) VALUES (?, ?)"
-    ).run(followerId, followingId);
+  async addFollow(followerId: number, followingId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        INSERT INTO follows (follower_id, following_id) VALUES (${followerId}, ${followingId})
+        ON CONFLICT DO NOTHING
+      `;
+    });
   }
 
-  removeFollow(followerId: number, followingId: number): void {
-    this.db.prepare(
-      "DELETE FROM follows WHERE follower_id = ? AND following_id = ?"
-    ).run(followerId, followingId);
+  async removeFollow(followerId: number, followingId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`DELETE FROM follows WHERE follower_id = ${followerId} AND following_id = ${followingId}`;
+    });
   }
 
-  isFollowing(followerId: number, followingId: number): boolean {
-    const row = this.db.prepare(
-      "SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?"
-    ).get(followerId, followingId);
-    return !!row;
+  async isFollowing(followerId: number, followingId: number): Promise<boolean> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        SELECT 1 FROM follows WHERE follower_id = ${followerId} AND following_id = ${followingId}
+      `;
+      return result.rows.length > 0;
+    });
   }
 
-  getFollowers(actorId: number): Actor[] {
-    return this.db.prepare(`
-      SELECT a.* FROM actors a
-      JOIN follows f ON a.id = f.follower_id
-      WHERE f.following_id = ?
-      ORDER BY f.created_at DESC
-    `).all(actorId) as Actor[];
+  async getFollowers(actorId: number): Promise<Actor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        SELECT a.* FROM actors a
+        JOIN follows f ON a.id = f.follower_id
+        WHERE f.following_id = ${actorId}
+        ORDER BY f.created_at DESC
+      `;
+      return result.rows;
+    });
   }
 
-  getFollowing(actorId: number): Actor[] {
-    return this.db.prepare(`
-      SELECT a.* FROM actors a
-      JOIN follows f ON a.id = f.following_id
-      WHERE f.follower_id = ?
-      ORDER BY f.created_at DESC
-    `).all(actorId) as Actor[];
+  async getFollowing(actorId: number): Promise<Actor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        SELECT a.* FROM actors a
+        JOIN follows f ON a.id = f.following_id
+        WHERE f.follower_id = ${actorId}
+        ORDER BY f.created_at DESC
+      `;
+      return result.rows;
+    });
   }
 
-  getFollowersCount(actorId: number): number {
-    const row = this.db.prepare(
-      "SELECT COUNT(*) as count FROM follows WHERE following_id = ?"
-    ).get(actorId) as { count: number };
-    return row.count;
+  async getFollowersCount(actorId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM follows WHERE following_id = ${actorId}
+      `;
+      return Number(result.rows[0].count);
+    });
   }
 
-  getFollowingCount(actorId: number): number {
-    const row = this.db.prepare(
-      "SELECT COUNT(*) as count FROM follows WHERE follower_id = ?"
-    ).get(actorId) as { count: number };
-    return row.count;
+  async getFollowingCount(actorId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM follows WHERE follower_id = ${actorId}
+      `;
+      return Number(result.rows[0].count);
+    });
   }
 
-  // Get users with most new followers in the last 24 hours
-  getTrendingUsers(limit: number = 3): (Actor & { new_followers: number })[] {
-    return this.db.prepare(`
-      SELECT a.*, COUNT(f.follower_id) as new_followers
-      FROM actors a
-      JOIN follows f ON f.following_id = a.id
-      WHERE f.created_at > datetime('now', '-24 hours')
-        AND a.user_id IS NOT NULL
-      GROUP BY a.id
-      ORDER BY new_followers DESC
-      LIMIT ?
-    `).all(limit) as (Actor & { new_followers: number })[];
+  async getTrendingUsers(limit = 3): Promise<(Actor & { new_followers: number })[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor & { new_followers: bigint }>`
+        SELECT a.*, COUNT(f.follower_id) as new_followers
+        FROM actors a
+        JOIN follows f ON f.following_id = a.id
+        WHERE f.created_at > NOW() - INTERVAL '24 hours'
+          AND a.user_id IS NOT NULL
+        GROUP BY a.id
+        ORDER BY new_followers DESC
+        LIMIT ${limit}
+      `;
+      return result.rows.map(r => ({ ...r, new_followers: Number(r.new_followers) }));
+    });
   }
 
   // ============ Posts ============
 
-  createPost(post: Omit<Post, "id" | "created_at" | "likes_count"> & { created_at?: string }): Post {
-    const sensitive = post.sensitive ? 1 : 0;
-    if (post.created_at) {
-      this.db.prepare(`
-        INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(post.uri, post.actor_id, post.content, post.url, post.in_reply_to_id, sensitive, post.created_at);
-    } else {
-      this.db.prepare(`
-        INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(post.uri, post.actor_id, post.content, post.url, post.in_reply_to_id, sensitive);
-    }
-    return this.getPostByUri(post.uri)!;
+  async createPost(post: Omit<Post, "id" | "created_at" | "likes_count"> & { created_at?: string }): Promise<Post> {
+    return this.query(async (client) => {
+      if (post.created_at) {
+        const result = await client.queryObject<Post>`
+          INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, created_at)
+          VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${post.created_at})
+          RETURNING *
+        `;
+        return result.rows[0];
+      } else {
+        const result = await client.queryObject<Post>`
+          INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive)
+          VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive})
+          RETURNING *
+        `;
+        return result.rows[0];
+      }
+    });
   }
 
-  updatePostUri(id: number, uri: string, url: string | null): void {
-    this.db.prepare("UPDATE posts SET uri = ?, url = ? WHERE id = ?").run(uri, url, id);
+  async updatePostUri(id: number, uri: string, url: string | null): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`UPDATE posts SET uri = ${uri}, url = ${url} WHERE id = ${id}`;
+    });
   }
 
-  updatePostSensitive(id: number, sensitive: boolean): void {
-    this.db.prepare("UPDATE posts SET sensitive = ? WHERE id = ?").run(sensitive ? 1 : 0, id);
+  async updatePostSensitive(id: number, sensitive: boolean): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`UPDATE posts SET sensitive = ${sensitive} WHERE id = ${id}`;
+    });
   }
 
-  // Helper to parse Post rows (converts sensitive from int to boolean)
-  private parsePost(row: Record<string, unknown> | undefined): Post | null {
-    if (!row) return null;
-    return {
-      ...row,
-      sensitive: !!(row.sensitive as number),
-    } as Post;
+  async getPostById(id: number): Promise<Post | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`SELECT * FROM posts WHERE id = ${id}`;
+      return result.rows[0] || null;
+    });
   }
 
-  getPostById(id: number): Post | null {
-    const row = this.db.prepare("SELECT * FROM posts WHERE id = ?").get(id) as Record<string, unknown> | undefined;
-    return this.parsePost(row);
+  async getPostByUri(uri: string): Promise<Post | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`SELECT * FROM posts WHERE uri = ${uri}`;
+      return result.rows[0] || null;
+    });
   }
 
-  getPostByUri(uri: string): Post | null {
-    const row = this.db.prepare("SELECT * FROM posts WHERE uri = ?").get(uri) as Record<string, unknown> | undefined;
-    return this.parsePost(row);
+  async getPostsByActor(actorId: number, limit = 50): Promise<Post[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        SELECT * FROM posts
+        WHERE actor_id = ${actorId} AND in_reply_to_id IS NULL
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `;
+      return result.rows;
+    });
   }
 
-  // Helper to parse array of Post rows
-  private parsePosts(rows: Record<string, unknown>[]): Post[] {
-    return rows.map(row => ({
-      ...row,
-      sensitive: !!(row.sensitive as number),
-    } as Post));
+  async getRepliesByActor(actorId: number, limit = 50): Promise<Post[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        SELECT * FROM posts
+        WHERE actor_id = ${actorId} AND in_reply_to_id IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `;
+      return result.rows;
+    });
   }
 
-  getPostsByActor(actorId: number, limit = 50): Post[] {
-    const rows = this.db.prepare(`
-      SELECT * FROM posts
-      WHERE actor_id = ? AND in_reply_to_id IS NULL
-      ORDER BY created_at DESC
-      LIMIT ?
-    `).all(actorId, limit) as Record<string, unknown>[];
-    return this.parsePosts(rows);
+  async getHomeFeed(actorId: number, limit = 50): Promise<Post[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        SELECT p.* FROM posts p
+        JOIN follows f ON p.actor_id = f.following_id
+        WHERE f.follower_id = ${actorId} AND p.in_reply_to_id IS NULL
+        ORDER BY p.created_at DESC
+        LIMIT ${limit}
+      `;
+      return result.rows;
+    });
   }
 
-  getRepliesByActor(actorId: number, limit = 50): Post[] {
-    const rows = this.db.prepare(`
-      SELECT * FROM posts
-      WHERE actor_id = ? AND in_reply_to_id IS NOT NULL
-      ORDER BY created_at DESC
-      LIMIT ?
-    `).all(actorId, limit) as Record<string, unknown>[];
-    return this.parsePosts(rows);
-  }
-
-  // Home feed: posts from followed actors
-  getHomeFeed(actorId: number, limit = 50): Post[] {
-    const rows = this.db.prepare(`
-      SELECT p.* FROM posts p
-      JOIN follows f ON p.actor_id = f.following_id
-      WHERE f.follower_id = ? AND p.in_reply_to_id IS NULL
-      ORDER BY p.created_at DESC
-      LIMIT ?
-    `).all(actorId, limit) as Record<string, unknown>[];
-    return this.parsePosts(rows);
-  }
-
-  // Public timeline: all local posts
-  getPublicTimeline(limit = 50): Post[] {
-    const rows = this.db.prepare(`
-      SELECT p.* FROM posts p
-      JOIN actors a ON p.actor_id = a.id
-      WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NULL
-      ORDER BY p.created_at DESC
-      LIMIT ?
-    `).all(limit) as Record<string, unknown>[];
-    return this.parsePosts(rows);
+  async getPublicTimeline(limit = 50): Promise<Post[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        SELECT p.* FROM posts p
+        JOIN actors a ON p.actor_id = a.id
+        WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NULL
+        ORDER BY p.created_at DESC
+        LIMIT ${limit}
+      `;
+      return result.rows;
+    });
   }
 
   // ============ Feed methods with actor JOIN (optimized) ============
 
-  // Helper to parse joined post+actor rows
   private parsePostWithActor(row: Record<string, unknown>): PostWithActor {
     return {
       id: row.id as number,
@@ -503,8 +546,8 @@ export class DB {
       url: row.url as string | null,
       in_reply_to_id: row.in_reply_to_id as number | null,
       likes_count: row.likes_count as number,
-      sensitive: !!(row.sensitive as number),
-      created_at: row.created_at as string,
+      sensitive: row.sensitive as boolean,
+      created_at: String(row.created_at),
       author: {
         id: row.author_id as number,
         uri: row.author_uri as string,
@@ -516,7 +559,7 @@ export class DB {
         shared_inbox_url: row.author_shared_inbox_url as string | null,
         url: row.author_url as string | null,
         user_id: row.author_user_id as number | null,
-        created_at: row.author_created_at as string,
+        created_at: String(row.author_created_at),
       },
     };
   }
@@ -529,631 +572,646 @@ export class DB {
     a.created_at as author_created_at
   `;
 
-  getPublicTimelineWithActor(limit = 20, before?: number): PostWithActor[] {
-    const rows = before
-      ? this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NULL AND p.id < ?
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(before, limit)
-      : this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NULL
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(limit);
-    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
+  async getPublicTimelineWithActor(limit = 20, before?: number): Promise<PostWithActor[]> {
+    return this.query(async (client) => {
+      const query = before
+        ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NULL AND p.id < $1
+           ORDER BY p.id DESC LIMIT $2`
+        : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NULL
+           ORDER BY p.id DESC LIMIT $1`;
+      const params = before ? [before, limit] : [limit];
+      const result = await client.queryObject(query, params);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+    });
   }
 
-  getHomeFeedWithActor(actorId: number, limit = 20, before?: number): PostWithActor[] {
-    const rows = before
-      ? this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          JOIN follows f ON p.actor_id = f.following_id
-          WHERE f.follower_id = ? AND p.in_reply_to_id IS NULL AND p.id < ?
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(actorId, before, limit)
-      : this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          JOIN follows f ON p.actor_id = f.following_id
-          WHERE f.follower_id = ? AND p.in_reply_to_id IS NULL
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(actorId, limit);
-    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
+  async getHomeFeedWithActor(actorId: number, limit = 20, before?: number): Promise<PostWithActor[]> {
+    return this.query(async (client) => {
+      const query = before
+        ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           JOIN follows f ON p.actor_id = f.following_id
+           WHERE f.follower_id = $1 AND p.in_reply_to_id IS NULL AND p.id < $2
+           ORDER BY p.id DESC LIMIT $3`
+        : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           JOIN follows f ON p.actor_id = f.following_id
+           WHERE f.follower_id = $1 AND p.in_reply_to_id IS NULL
+           ORDER BY p.id DESC LIMIT $2`;
+      const params = before ? [actorId, before, limit] : [actorId, limit];
+      const result = await client.queryObject(query, params);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+    });
   }
 
-  getPostsByActorWithActor(actorId: number, limit = 20, before?: number): PostWithActor[] {
-    const rows = before
-      ? this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          WHERE p.actor_id = ? AND p.in_reply_to_id IS NULL AND p.id < ?
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(actorId, before, limit)
-      : this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          WHERE p.actor_id = ? AND p.in_reply_to_id IS NULL
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(actorId, limit);
-    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
+  async getPostsByActorWithActor(actorId: number, limit = 20, before?: number): Promise<PostWithActor[]> {
+    return this.query(async (client) => {
+      const query = before
+        ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           WHERE p.actor_id = $1 AND p.in_reply_to_id IS NULL AND p.id < $2
+           ORDER BY p.id DESC LIMIT $3`
+        : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           WHERE p.actor_id = $1 AND p.in_reply_to_id IS NULL
+           ORDER BY p.id DESC LIMIT $2`;
+      const params = before ? [actorId, before, limit] : [actorId, limit];
+      const result = await client.queryObject(query, params);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+    });
   }
 
-  getRepliesByActorWithActor(actorId: number, limit = 20, before?: number): PostWithActor[] {
-    const rows = before
-      ? this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          WHERE p.actor_id = ? AND p.in_reply_to_id IS NOT NULL AND p.id < ?
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(actorId, before, limit)
-      : this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          WHERE p.actor_id = ? AND p.in_reply_to_id IS NOT NULL
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(actorId, limit);
-    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
+  async getRepliesByActorWithActor(actorId: number, limit = 20, before?: number): Promise<PostWithActor[]> {
+    return this.query(async (client) => {
+      const query = before
+        ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           WHERE p.actor_id = $1 AND p.in_reply_to_id IS NOT NULL AND p.id < $2
+           ORDER BY p.id DESC LIMIT $3`
+        : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           WHERE p.actor_id = $1 AND p.in_reply_to_id IS NOT NULL
+           ORDER BY p.id DESC LIMIT $2`;
+      const params = before ? [actorId, before, limit] : [actorId, limit];
+      const result = await client.queryObject(query, params);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+    });
   }
 
-  getRepliesWithActor(postId: number, limit = 20, after?: number): PostWithActor[] {
-    // Replies are ordered ASC (oldest first), so we use "after" cursor
-    const rows = after
-      ? this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          WHERE p.in_reply_to_id = ? AND p.id > ?
-          ORDER BY p.id ASC
-          LIMIT ?
-        `).all(postId, after, limit)
-      : this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          WHERE p.in_reply_to_id = ?
-          ORDER BY p.id ASC
-          LIMIT ?
-        `).all(postId, limit);
-    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
+  async getRepliesWithActor(postId: number, limit = 20, after?: number): Promise<PostWithActor[]> {
+    return this.query(async (client) => {
+      const query = after
+        ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           WHERE p.in_reply_to_id = $1 AND p.id > $2
+           ORDER BY p.id ASC LIMIT $3`
+        : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           WHERE p.in_reply_to_id = $1
+           ORDER BY p.id ASC LIMIT $2`;
+      const params = after ? [postId, after, limit] : [postId, limit];
+      const result = await client.queryObject(query, params);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+    });
   }
 
-  // Batch methods for reducing N+1 queries
-  getHashtagsForPosts(postIds: number[]): Map<number, string[]> {
+  async getHashtagsForPosts(postIds: number[]): Promise<Map<number, string[]>> {
     if (postIds.length === 0) return new Map();
-    const placeholders = postIds.map(() => "?").join(",");
-    const rows = this.db.prepare(`
-      SELECT ph.post_id, h.name
-      FROM post_hashtags ph
-      JOIN hashtags h ON ph.hashtag_id = h.id
-      WHERE ph.post_id IN (${placeholders})
-    `).all(...postIds) as { post_id: number; name: string }[];
-
-    const map = new Map<number, string[]>();
-    for (const row of rows) {
-      const existing = map.get(row.post_id) || [];
-      existing.push(row.name);
-      map.set(row.post_id, existing);
-    }
-    return map;
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ post_id: number; name: string }>`
+        SELECT ph.post_id, h.name
+        FROM post_hashtags ph
+        JOIN hashtags h ON ph.hashtag_id = h.id
+        WHERE ph.post_id = ANY(${postIds})
+      `;
+      const map = new Map<number, string[]>();
+      for (const row of result.rows) {
+        const existing = map.get(row.post_id) || [];
+        existing.push(row.name);
+        map.set(row.post_id, existing);
+      }
+      return map;
+    });
   }
 
-  getLikedPostIds(actorId: number, postIds: number[]): Set<number> {
+  async getLikedPostIds(actorId: number, postIds: number[]): Promise<Set<number>> {
     if (postIds.length === 0) return new Set();
-    const placeholders = postIds.map(() => "?").join(",");
-    const rows = this.db.prepare(`
-      SELECT post_id FROM likes
-      WHERE actor_id = ? AND post_id IN (${placeholders})
-    `).all(actorId, ...postIds) as { post_id: number }[];
-    return new Set(rows.map(r => r.post_id));
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ post_id: number }>`
+        SELECT post_id FROM likes WHERE actor_id = ${actorId} AND post_id = ANY(${postIds})
+      `;
+      return new Set(result.rows.map(r => r.post_id));
+    });
   }
 
-  getBoostedPostIds(actorId: number, postIds: number[]): Set<number> {
+  async getBoostedPostIds(actorId: number, postIds: number[]): Promise<Set<number>> {
     if (postIds.length === 0) return new Set();
-    const placeholders = postIds.map(() => "?").join(",");
-    const rows = this.db.prepare(`
-      SELECT post_id FROM boosts
-      WHERE actor_id = ? AND post_id IN (${placeholders})
-    `).all(actorId, ...postIds) as { post_id: number }[];
-    return new Set(rows.map(r => r.post_id));
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ post_id: number }>`
+        SELECT post_id FROM boosts WHERE actor_id = ${actorId} AND post_id = ANY(${postIds})
+      `;
+      return new Set(result.rows.map(r => r.post_id));
+    });
   }
 
-  getPinnedPostIds(actorId: number, postIds: number[]): Set<number> {
+  async getPinnedPostIds(actorId: number, postIds: number[]): Promise<Set<number>> {
     if (postIds.length === 0) return new Set();
-    const placeholders = postIds.map(() => "?").join(",");
-    const rows = this.db.prepare(`
-      SELECT post_id FROM pinned_posts
-      WHERE actor_id = ? AND post_id IN (${placeholders})
-    `).all(actorId, ...postIds) as { post_id: number }[];
-    return new Set(rows.map(r => r.post_id));
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ post_id: number }>`
+        SELECT post_id FROM pinned_posts WHERE actor_id = ${actorId} AND post_id = ANY(${postIds})
+      `;
+      return new Set(result.rows.map(r => r.post_id));
+    });
   }
 
-  getRepliesCounts(postIds: number[]): Map<number, number> {
+  async getRepliesCounts(postIds: number[]): Promise<Map<number, number>> {
     if (postIds.length === 0) return new Map();
-    const placeholders = postIds.map(() => "?").join(",");
-    const rows = this.db.prepare(`
-      SELECT in_reply_to_id as post_id, COUNT(*) as count
-      FROM posts
-      WHERE in_reply_to_id IN (${placeholders})
-      GROUP BY in_reply_to_id
-    `).all(...postIds) as { post_id: number; count: number }[];
-
-    const map = new Map<number, number>();
-    for (const row of rows) {
-      map.set(row.post_id, row.count);
-    }
-    return map;
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ post_id: number; count: bigint }>`
+        SELECT in_reply_to_id as post_id, COUNT(*) as count
+        FROM posts
+        WHERE in_reply_to_id = ANY(${postIds})
+        GROUP BY in_reply_to_id
+      `;
+      const map = new Map<number, number>();
+      for (const row of result.rows) {
+        map.set(row.post_id, Number(row.count));
+      }
+      return map;
+    });
   }
 
-  getPinnedPostsWithActor(actorId: number): PostWithActor[] {
-    const rows = this.db.prepare(`
-      SELECT ${this.postWithActorSelect}
-      FROM posts p
-      JOIN actors a ON p.actor_id = a.id
-      JOIN pinned_posts pp ON p.id = pp.post_id
-      WHERE pp.actor_id = ?
-      ORDER BY pp.pinned_at DESC
-    `).all(actorId) as Record<string, unknown>[];
-    return rows.map(row => this.parsePostWithActor(row));
+  async getPinnedPostsWithActor(actorId: number): Promise<PostWithActor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject(`
+        SELECT ${this.postWithActorSelect}
+        FROM posts p
+        JOIN actors a ON p.actor_id = a.id
+        JOIN pinned_posts pp ON p.id = pp.post_id
+        WHERE pp.actor_id = $1
+        ORDER BY pp.pinned_at DESC
+      `, [actorId]);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+    });
   }
 
-  getBoostedPostsWithActor(actorId: number, limit = 20, before?: number): PostWithActor[] {
-    const rows = before
-      ? this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          JOIN boosts b ON p.id = b.post_id
-          WHERE b.actor_id = ? AND p.id < ?
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(actorId, before, limit)
-      : this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          JOIN boosts b ON p.id = b.post_id
-          WHERE b.actor_id = ?
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(actorId, limit);
-    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
+  async getBoostedPostsWithActor(actorId: number, limit = 20, before?: number): Promise<PostWithActor[]> {
+    return this.query(async (client) => {
+      const query = before
+        ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           JOIN boosts b ON p.id = b.post_id
+           WHERE b.actor_id = $1 AND p.id < $2
+           ORDER BY p.id DESC LIMIT $3`
+        : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           JOIN boosts b ON p.id = b.post_id
+           WHERE b.actor_id = $1
+           ORDER BY p.id DESC LIMIT $2`;
+      const params = before ? [actorId, before, limit] : [actorId, limit];
+      const result = await client.queryObject(query, params);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+    });
   }
 
-  getPostsByHashtagWithActor(hashtagName: string, limit = 20, before?: number): PostWithActor[] {
+  async getPostsByHashtagWithActor(hashtagName: string, limit = 20, before?: number): Promise<PostWithActor[]> {
     const normalized = hashtagName.toLowerCase().replace(/^#/, "");
-    const rows = before
-      ? this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          JOIN post_hashtags ph ON p.id = ph.post_id
-          JOIN hashtags h ON ph.hashtag_id = h.id
-          WHERE h.name = ? AND p.id < ?
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(normalized, before, limit)
-      : this.db.prepare(`
-          SELECT ${this.postWithActorSelect}
-          FROM posts p
-          JOIN actors a ON p.actor_id = a.id
-          JOIN post_hashtags ph ON p.id = ph.post_id
-          JOIN hashtags h ON ph.hashtag_id = h.id
-          WHERE h.name = ?
-          ORDER BY p.id DESC
-          LIMIT ?
-        `).all(normalized, limit);
-    return (rows as Record<string, unknown>[]).map(row => this.parsePostWithActor(row));
+    return this.query(async (client) => {
+      const query = before
+        ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           JOIN post_hashtags ph ON p.id = ph.post_id
+           JOIN hashtags h ON ph.hashtag_id = h.id
+           WHERE h.name = $1 AND p.id < $2
+           ORDER BY p.id DESC LIMIT $3`
+        : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           JOIN post_hashtags ph ON p.id = ph.post_id
+           JOIN hashtags h ON ph.hashtag_id = h.id
+           WHERE h.name = $1
+           ORDER BY p.id DESC LIMIT $2`;
+      const params = before ? [normalized, before, limit] : [normalized, limit];
+      const result = await client.queryObject(query, params);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+    });
   }
 
-  deletePost(id: number): void {
-    this.db.prepare("DELETE FROM posts WHERE id = ?").run(id);
+  async deletePost(id: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`DELETE FROM posts WHERE id = ${id}`;
+    });
   }
 
   // ============ Media ============
 
-  createMedia(postId: number, url: string, mediaType: string, altText: string | null, width: number | null, height: number | null): Media {
-    this.db.prepare(`
-      INSERT INTO media (post_id, url, media_type, alt_text, width, height)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(postId, url, mediaType, altText, width, height);
-    return this.db.prepare("SELECT * FROM media WHERE post_id = ? ORDER BY id DESC LIMIT 1").get(postId) as Media;
+  async createMedia(postId: number, url: string, mediaType: string, altText: string | null, width: number | null, height: number | null): Promise<Media> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Media>`
+        INSERT INTO media (post_id, url, media_type, alt_text, width, height)
+        VALUES (${postId}, ${url}, ${mediaType}, ${altText}, ${width}, ${height})
+        RETURNING *
+      `;
+      return result.rows[0];
+    });
   }
 
-  getMediaByPostId(postId: number): Media[] {
-    return this.db.prepare("SELECT * FROM media WHERE post_id = ? ORDER BY id ASC").all(postId) as Media[];
+  async getMediaByPostId(postId: number): Promise<Media[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Media>`
+        SELECT * FROM media WHERE post_id = ${postId} ORDER BY id ASC
+      `;
+      return result.rows;
+    });
   }
 
-  getMediaForPosts(postIds: number[]): Map<number, Media[]> {
+  async getMediaForPosts(postIds: number[]): Promise<Map<number, Media[]>> {
     if (postIds.length === 0) return new Map();
-    const placeholders = postIds.map(() => "?").join(",");
-    const rows = this.db.prepare(`
-      SELECT * FROM media WHERE post_id IN (${placeholders}) ORDER BY id ASC
-    `).all(...postIds) as Media[];
-
-    const map = new Map<number, Media[]>();
-    for (const row of rows) {
-      const existing = map.get(row.post_id) || [];
-      existing.push(row);
-      map.set(row.post_id, existing);
-    }
-    return map;
+    return this.query(async (client) => {
+      const result = await client.queryObject<Media>`
+        SELECT * FROM media WHERE post_id = ANY(${postIds}) ORDER BY id ASC
+      `;
+      const map = new Map<number, Media[]>();
+      for (const row of result.rows) {
+        const existing = map.get(row.post_id) || [];
+        existing.push(row);
+        map.set(row.post_id, existing);
+      }
+      return map;
+    });
   }
 
-  getReplies(postId: number, limit = 50): Post[] {
-    const rows = this.db.prepare(`
-      SELECT * FROM posts
-      WHERE in_reply_to_id = ?
-      ORDER BY created_at ASC
-      LIMIT ?
-    `).all(postId, limit) as Record<string, unknown>[];
-    return this.parsePosts(rows);
+  async getReplies(postId: number, limit = 50): Promise<Post[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        SELECT * FROM posts WHERE in_reply_to_id = ${postId}
+        ORDER BY created_at ASC LIMIT ${limit}
+      `;
+      return result.rows;
+    });
   }
 
-  getRepliesCount(postId: number): number {
-    const row = this.db.prepare(
-      "SELECT COUNT(*) as count FROM posts WHERE in_reply_to_id = ?"
-    ).get(postId) as { count: number };
-    return row.count;
+  async getRepliesCount(postId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM posts WHERE in_reply_to_id = ${postId}
+      `;
+      return Number(result.rows[0].count);
+    });
   }
 
   // ============ Hashtags ============
 
-  getOrCreateHashtag(name: string): Hashtag {
+  async getOrCreateHashtag(name: string): Promise<Hashtag> {
     const normalized = name.toLowerCase().replace(/^#/, "");
-    this.db.prepare(
-      "INSERT OR IGNORE INTO hashtags (name) VALUES (?)"
-    ).run(normalized);
-    return this.db.prepare(
-      "SELECT * FROM hashtags WHERE name = ?"
-    ).get(normalized) as Hashtag;
+    return this.query(async (client) => {
+      await client.queryArray`INSERT INTO hashtags (name) VALUES (${normalized}) ON CONFLICT DO NOTHING`;
+      const result = await client.queryObject<Hashtag>`SELECT * FROM hashtags WHERE name = ${normalized}`;
+      return result.rows[0];
+    });
   }
 
-  addPostHashtag(postId: number, hashtagId: number): void {
-    this.db.prepare(
-      "INSERT OR IGNORE INTO post_hashtags (post_id, hashtag_id) VALUES (?, ?)"
-    ).run(postId, hashtagId);
+  async addPostHashtag(postId: number, hashtagId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        INSERT INTO post_hashtags (post_id, hashtag_id) VALUES (${postId}, ${hashtagId})
+        ON CONFLICT DO NOTHING
+      `;
+    });
   }
 
-  getPostHashtags(postId: number): Hashtag[] {
-    return this.db.prepare(`
-      SELECT h.* FROM hashtags h
-      JOIN post_hashtags ph ON h.id = ph.hashtag_id
-      WHERE ph.post_id = ?
-    `).all(postId) as Hashtag[];
+  async getPostHashtags(postId: number): Promise<Hashtag[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Hashtag>`
+        SELECT h.* FROM hashtags h
+        JOIN post_hashtags ph ON h.id = ph.hashtag_id
+        WHERE ph.post_id = ${postId}
+      `;
+      return result.rows;
+    });
   }
 
-  getPostsByHashtag(hashtagName: string, limit = 50): Post[] {
+  async getPostsByHashtag(hashtagName: string, limit = 50): Promise<Post[]> {
     const normalized = hashtagName.toLowerCase().replace(/^#/, "");
-    const rows = this.db.prepare(`
-      SELECT p.* FROM posts p
-      JOIN post_hashtags ph ON p.id = ph.post_id
-      JOIN hashtags h ON ph.hashtag_id = h.id
-      WHERE h.name = ?
-      ORDER BY p.created_at DESC
-      LIMIT ?
-    `).all(normalized, limit) as Record<string, unknown>[];
-    return this.parsePosts(rows);
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        SELECT p.* FROM posts p
+        JOIN post_hashtags ph ON p.id = ph.post_id
+        JOIN hashtags h ON ph.hashtag_id = h.id
+        WHERE h.name = ${normalized}
+        ORDER BY p.created_at DESC
+        LIMIT ${limit}
+      `;
+      return result.rows;
+    });
   }
 
-  // Get most popular tags (all-time) - simple and fast, no time filter
-  getPopularTags(limit = 5): { name: string; count: number }[] {
-    return this.db.prepare(`
-      SELECT h.name, COUNT(ph.post_id) as count
-      FROM hashtags h
-      JOIN post_hashtags ph ON h.id = ph.hashtag_id
-      GROUP BY h.id
-      ORDER BY count DESC
-      LIMIT ?
-    `).all(limit) as { name: string; count: number }[];
+  async getPopularTags(limit = 5): Promise<{ name: string; count: number }[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ name: string; count: bigint }>`
+        SELECT h.name, COUNT(ph.post_id) as count
+        FROM hashtags h
+        JOIN post_hashtags ph ON h.id = ph.hashtag_id
+        GROUP BY h.id
+        ORDER BY count DESC
+        LIMIT ${limit}
+      `;
+      return result.rows.map(r => ({ name: r.name, count: Number(r.count) }));
+    });
   }
 
-  // Search hashtags by partial match (fuzzy)
-  searchTags(query: string, limit = 10): { name: string; count: number }[] {
+  async searchTags(query: string, limit = 10): Promise<{ name: string; count: number }[]> {
     const normalized = query.toLowerCase().replace(/^#/, "");
     if (!normalized) return [];
-
-    return this.db.prepare(`
-      SELECT h.name, COUNT(ph.post_id) as count
-      FROM hashtags h
-      LEFT JOIN post_hashtags ph ON h.id = ph.hashtag_id
-      WHERE h.name LIKE ?
-      GROUP BY h.id
-      ORDER BY
-        CASE WHEN h.name = ? THEN 0 ELSE 1 END,
-        CASE WHEN h.name LIKE ? THEN 0 ELSE 1 END,
-        count DESC,
-        h.name ASC
-      LIMIT ?
-    `).all(`%${normalized}%`, normalized, `${normalized}%`, limit) as { name: string; count: number }[];
+    return this.query(async (client) => {
+      const pattern = `%${normalized}%`;
+      const startPattern = `${normalized}%`;
+      const result = await client.queryObject<{ name: string; count: bigint }>`
+        SELECT h.name, COUNT(ph.post_id) as count
+        FROM hashtags h
+        LEFT JOIN post_hashtags ph ON h.id = ph.hashtag_id
+        WHERE h.name ILIKE ${pattern}
+        GROUP BY h.id
+        ORDER BY
+          CASE WHEN h.name = ${normalized} THEN 0 ELSE 1 END,
+          CASE WHEN h.name ILIKE ${startPattern} THEN 0 ELSE 1 END,
+          count DESC,
+          h.name ASC
+        LIMIT ${limit}
+      `;
+      return result.rows.map(r => ({ name: r.name, count: Number(r.count) }));
+    });
   }
 
-  // Get trending tags based on recent post activity
-  getTrendingTags(limit = 10, hoursBack = 48): { name: string; count: number }[] {
-    const cutoff = new Date(Date.now() - hoursBack * 60 * 60 * 1000)
-      .toISOString()
-      .replace("T", " ")
-      .split(".")[0];
-
-    return this.db.prepare(`
-      SELECT h.name, COUNT(*) as count
-      FROM hashtags h
-      JOIN post_hashtags ph ON h.id = ph.hashtag_id
-      JOIN posts p ON ph.post_id = p.id
-      WHERE p.created_at >= ?
-      GROUP BY h.id
-      ORDER BY count DESC, h.name ASC
-      LIMIT ?
-    `).all(cutoff, limit) as { name: string; count: number }[];
+  async getTrendingTags(limit = 10, hoursBack = 48): Promise<{ name: string; count: number }[]> {
+    return this.query(async (client) => {
+      // Calculate cutoff date in JavaScript since INTERVAL doesn't work with parameters
+      const cutoffDate = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
+      const result = await client.queryObject<{ name: string; count: bigint }>`
+        SELECT h.name, COUNT(*) as count
+        FROM hashtags h
+        JOIN post_hashtags ph ON h.id = ph.hashtag_id
+        JOIN posts p ON ph.post_id = p.id
+        WHERE p.created_at >= ${cutoffDate}
+        GROUP BY h.id
+        ORDER BY count DESC, h.name ASC
+        LIMIT ${limit}
+      `;
+      return result.rows.map(r => ({ name: r.name, count: Number(r.count) }));
+    });
   }
 
   // ============ Likes ============
 
-  addLike(actorId: number, postId: number): void {
-    // Use transaction to atomically insert like and update count
-    this.db.exec("BEGIN");
-    try {
-      const result = this.db.prepare(
-        "INSERT OR IGNORE INTO likes (actor_id, post_id) VALUES (?, ?)"
-      ).run(actorId, postId);
-      // Only increment if a row was actually inserted
-      if (result > 0) {
-        this.db.prepare(
-          "UPDATE posts SET likes_count = likes_count + 1 WHERE id = ?"
-        ).run(postId);
+  async addLike(actorId: number, postId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`BEGIN`;
+      try {
+        const result = await client.queryObject<{ id: number }>`
+          INSERT INTO likes (actor_id, post_id) VALUES (${actorId}, ${postId})
+          ON CONFLICT DO NOTHING
+          RETURNING id
+        `;
+        if (result.rows.length > 0) {
+          await client.queryArray`UPDATE posts SET likes_count = likes_count + 1 WHERE id = ${postId}`;
+        }
+        await client.queryArray`COMMIT`;
+      } catch (e) {
+        await client.queryArray`ROLLBACK`;
+        throw e;
       }
-      this.db.exec("COMMIT");
-    } catch (e) {
-      this.db.exec("ROLLBACK");
-      throw e;
-    }
+    });
   }
 
-  removeLike(actorId: number, postId: number): void {
-    // Use transaction to atomically delete like and update count
-    this.db.exec("BEGIN");
-    try {
-      const result = this.db.prepare(
-        "DELETE FROM likes WHERE actor_id = ? AND post_id = ?"
-      ).run(actorId, postId);
-      // Only decrement if a row was actually deleted
-      if (result > 0) {
-        this.db.prepare(
-          "UPDATE posts SET likes_count = MAX(0, likes_count - 1) WHERE id = ?"
-        ).run(postId);
+  async removeLike(actorId: number, postId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`BEGIN`;
+      try {
+        const result = await client.queryObject<{ id: number }>`
+          DELETE FROM likes WHERE actor_id = ${actorId} AND post_id = ${postId} RETURNING id
+        `;
+        if (result.rows.length > 0) {
+          await client.queryArray`UPDATE posts SET likes_count = GREATEST(0, likes_count - 1) WHERE id = ${postId}`;
+        }
+        await client.queryArray`COMMIT`;
+      } catch (e) {
+        await client.queryArray`ROLLBACK`;
+        throw e;
       }
-      this.db.exec("COMMIT");
-    } catch (e) {
-      this.db.exec("ROLLBACK");
-      throw e;
-    }
+    });
   }
 
-  hasLiked(actorId: number, postId: number): boolean {
-    const row = this.db.prepare(
-      "SELECT 1 FROM likes WHERE actor_id = ? AND post_id = ?"
-    ).get(actorId, postId);
-    return !!row;
+  async hasLiked(actorId: number, postId: number): Promise<boolean> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        SELECT 1 FROM likes WHERE actor_id = ${actorId} AND post_id = ${postId}
+      `;
+      return result.rows.length > 0;
+    });
   }
 
-  getLikesCount(postId: number): number {
-    const row = this.db.prepare(
-      "SELECT COUNT(*) as count FROM likes WHERE post_id = ?"
-    ).get(postId) as { count: number };
-    return row.count;
+  async getLikesCount(postId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM likes WHERE post_id = ${postId}
+      `;
+      return Number(result.rows[0].count);
+    });
   }
 
-  getPostLikers(postId: number): Actor[] {
-    return this.db.prepare(`
-      SELECT a.* FROM actors a
-      JOIN likes l ON a.id = l.actor_id
-      WHERE l.post_id = ?
-      ORDER BY l.created_at DESC
-    `).all(postId) as Actor[];
+  async getPostLikers(postId: number): Promise<Actor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        SELECT a.* FROM actors a
+        JOIN likes l ON a.id = l.actor_id
+        WHERE l.post_id = ${postId}
+        ORDER BY l.created_at DESC
+      `;
+      return result.rows;
+    });
   }
 
-  getLikedPosts(actorId: number, limit = 50): Post[] {
-    const rows = this.db.prepare(`
-      SELECT p.* FROM posts p
-      JOIN likes l ON p.id = l.post_id
-      WHERE l.actor_id = ?
-      ORDER BY l.created_at DESC
-      LIMIT ?
-    `).all(actorId, limit) as Record<string, unknown>[];
-    return this.parsePosts(rows);
+  async getLikedPosts(actorId: number, limit = 50): Promise<Post[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        SELECT p.* FROM posts p
+        JOIN likes l ON p.id = l.post_id
+        WHERE l.actor_id = ${actorId}
+        ORDER BY l.created_at DESC
+        LIMIT ${limit}
+      `;
+      return result.rows;
+    });
   }
 
-  getLikedPostsCount(actorId: number): number {
-    const row = this.db.prepare(
-      "SELECT COUNT(*) as count FROM likes WHERE actor_id = ?"
-    ).get(actorId) as { count: number };
-    return row.count;
+  async getLikedPostsCount(actorId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM likes WHERE actor_id = ${actorId}
+      `;
+      return Number(result.rows[0].count);
+    });
   }
 
   // ============ Boosts ============
 
-  addBoost(actorId: number, postId: number): void {
-    this.db.prepare(
-      "INSERT OR IGNORE INTO boosts (actor_id, post_id) VALUES (?, ?)"
-    ).run(actorId, postId);
+  async addBoost(actorId: number, postId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        INSERT INTO boosts (actor_id, post_id) VALUES (${actorId}, ${postId})
+        ON CONFLICT DO NOTHING
+      `;
+    });
   }
 
-  removeBoost(actorId: number, postId: number): void {
-    this.db.prepare(
-      "DELETE FROM boosts WHERE actor_id = ? AND post_id = ?"
-    ).run(actorId, postId);
+  async removeBoost(actorId: number, postId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`DELETE FROM boosts WHERE actor_id = ${actorId} AND post_id = ${postId}`;
+    });
   }
 
-  hasBoosted(actorId: number, postId: number): boolean {
-    const row = this.db.prepare(
-      "SELECT 1 FROM boosts WHERE actor_id = ? AND post_id = ?"
-    ).get(actorId, postId);
-    return !!row;
+  async hasBoosted(actorId: number, postId: number): Promise<boolean> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        SELECT 1 FROM boosts WHERE actor_id = ${actorId} AND post_id = ${postId}
+      `;
+      return result.rows.length > 0;
+    });
   }
 
-  getBoostsCount(postId: number): number {
-    const row = this.db.prepare(
-      "SELECT COUNT(*) as count FROM boosts WHERE post_id = ?"
-    ).get(postId) as { count: number };
-    return row.count;
+  async getBoostsCount(postId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM boosts WHERE post_id = ${postId}
+      `;
+      return Number(result.rows[0].count);
+    });
   }
 
-  getPostBoosters(postId: number): Actor[] {
-    return this.db.prepare(`
-      SELECT a.* FROM actors a
-      JOIN boosts b ON a.id = b.actor_id
-      WHERE b.post_id = ?
-      ORDER BY b.created_at DESC
-    `).all(postId) as Actor[];
+  async getPostBoosters(postId: number): Promise<Actor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        SELECT a.* FROM actors a
+        JOIN boosts b ON a.id = b.actor_id
+        WHERE b.post_id = ${postId}
+        ORDER BY b.created_at DESC
+      `;
+      return result.rows;
+    });
   }
 
-  getBoostedPosts(actorId: number, limit = 50): Post[] {
-    const rows = this.db.prepare(`
-      SELECT p.* FROM posts p
-      JOIN boosts b ON p.id = b.post_id
-      WHERE b.actor_id = ?
-      ORDER BY b.created_at DESC
-      LIMIT ?
-    `).all(actorId, limit) as Record<string, unknown>[];
-    return this.parsePosts(rows);
+  async getBoostedPosts(actorId: number, limit = 50): Promise<Post[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        SELECT p.* FROM posts p
+        JOIN boosts b ON p.id = b.post_id
+        WHERE b.actor_id = ${actorId}
+        ORDER BY b.created_at DESC
+        LIMIT ${limit}
+      `;
+      return result.rows;
+    });
   }
 
   // ============ Pinned Posts ============
 
-  pinPost(actorId: number, postId: number): void {
-    this.db.prepare(
-      "INSERT OR IGNORE INTO pinned_posts (actor_id, post_id) VALUES (?, ?)"
-    ).run(actorId, postId);
+  async pinPost(actorId: number, postId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        INSERT INTO pinned_posts (actor_id, post_id) VALUES (${actorId}, ${postId})
+        ON CONFLICT DO NOTHING
+      `;
+    });
   }
 
-  unpinPost(actorId: number, postId: number): void {
-    this.db.prepare(
-      "DELETE FROM pinned_posts WHERE actor_id = ? AND post_id = ?"
-    ).run(actorId, postId);
+  async unpinPost(actorId: number, postId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`DELETE FROM pinned_posts WHERE actor_id = ${actorId} AND post_id = ${postId}`;
+    });
   }
 
-  isPinned(actorId: number, postId: number): boolean {
-    const row = this.db.prepare(
-      "SELECT 1 FROM pinned_posts WHERE actor_id = ? AND post_id = ?"
-    ).get(actorId, postId);
-    return !!row;
+  async isPinned(actorId: number, postId: number): Promise<boolean> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        SELECT 1 FROM pinned_posts WHERE actor_id = ${actorId} AND post_id = ${postId}
+      `;
+      return result.rows.length > 0;
+    });
   }
 
-  getPinnedPosts(actorId: number): Post[] {
-    const rows = this.db.prepare(`
-      SELECT p.* FROM posts p
-      JOIN pinned_posts pp ON p.id = pp.post_id
-      WHERE pp.actor_id = ?
-      ORDER BY pp.pinned_at DESC
-    `).all(actorId) as Record<string, unknown>[];
-    return this.parsePosts(rows);
+  async getPinnedPosts(actorId: number): Promise<Post[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        SELECT p.* FROM posts p
+        JOIN pinned_posts pp ON p.id = pp.post_id
+        WHERE pp.actor_id = ${actorId}
+        ORDER BY pp.pinned_at DESC
+      `;
+      return result.rows;
+    });
   }
 
-  getPinnedPostsCount(actorId: number): number {
-    const row = this.db.prepare(
-      "SELECT COUNT(*) as count FROM pinned_posts WHERE actor_id = ?"
-    ).get(actorId) as { count: number };
-    return row.count;
+  async getPinnedPostsCount(actorId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM pinned_posts WHERE actor_id = ${actorId}
+      `;
+      return Number(result.rows[0].count);
+    });
   }
 
   // ============ Sessions ============
 
-  createSession(userId: number): string {
-    const token = crypto.randomUUID();
-    this.db.prepare(
-      "INSERT INTO sessions (token, user_id) VALUES (?, ?)"
-    ).run(token, userId);
-    return token;
+  async createSession(userId: number): Promise<string> {
+    return this.query(async (client) => {
+      const token = crypto.randomUUID();
+      await client.queryArray`INSERT INTO sessions (token, user_id) VALUES (${token}, ${userId})`;
+      return token;
+    });
   }
 
-  getSession(token: string): Session | null {
-    return this.db.prepare(
-      "SELECT * FROM sessions WHERE token = ?"
-    ).get(token) as Session | null;
+  async getSession(token: string): Promise<Session | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Session>`SELECT * FROM sessions WHERE token = ${token}`;
+      return result.rows[0] || null;
+    });
   }
 
-  deleteSession(token: string): void {
-    this.db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+  async deleteSession(token: string): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`DELETE FROM sessions WHERE token = ${token}`;
+    });
   }
 
   // ============ Activities ============
 
-  storeActivity(activity: Omit<Activity, "id" | "created_at">): Activity {
-    this.db.prepare(`
-      INSERT INTO activities (uri, type, actor_id, object_uri, object_type, raw_json, direction)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(uri) DO UPDATE SET
-        raw_json = excluded.raw_json
-    `).run(
-      activity.uri,
-      activity.type,
-      activity.actor_id,
-      activity.object_uri,
-      activity.object_type,
-      activity.raw_json,
-      activity.direction
-    );
-    return this.getActivityByUri(activity.uri)!;
+  async storeActivity(activity: Omit<Activity, "id" | "created_at">): Promise<Activity> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Activity>`
+        INSERT INTO activities (uri, type, actor_id, object_uri, object_type, raw_json, direction)
+        VALUES (${activity.uri}, ${activity.type}, ${activity.actor_id}, ${activity.object_uri},
+                ${activity.object_type}, ${activity.raw_json}, ${activity.direction})
+        ON CONFLICT(uri) DO UPDATE SET raw_json = EXCLUDED.raw_json
+        RETURNING *
+      `;
+      return result.rows[0];
+    });
   }
 
-  getActivityByUri(uri: string): Activity | null {
-    return this.db.prepare(
-      "SELECT * FROM activities WHERE uri = ?"
-    ).get(uri) as Activity | null;
+  async getActivityByUri(uri: string): Promise<Activity | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Activity>`SELECT * FROM activities WHERE uri = ${uri}`;
+      return result.rows[0] || null;
+    });
   }
 
-  getActivitiesByActor(actorId: number, limit = 50): Activity[] {
-    return this.db.prepare(`
-      SELECT * FROM activities
-      WHERE actor_id = ?
-      ORDER BY created_at DESC
-      LIMIT ?
-    `).all(actorId, limit) as Activity[];
+  async getActivitiesByActor(actorId: number, limit = 50): Promise<Activity[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Activity>`
+        SELECT * FROM activities WHERE actor_id = ${actorId}
+        ORDER BY created_at DESC LIMIT ${limit}
+      `;
+      return result.rows;
+    });
   }
 
-  getOutboxActivities(actorId: number, limit = 50): Activity[] {
-    return this.db.prepare(`
-      SELECT * FROM activities
-      WHERE actor_id = ? AND direction = 'outbound'
-      ORDER BY created_at DESC
-      LIMIT ?
-    `).all(actorId, limit) as Activity[];
+  async getOutboxActivities(actorId: number, limit = 50): Promise<Activity[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Activity>`
+        SELECT * FROM activities
+        WHERE actor_id = ${actorId} AND direction = 'outbound'
+        ORDER BY created_at DESC LIMIT ${limit}
+      `;
+      return result.rows;
+    });
   }
 
   // ============ Stats (for NodeInfo) ============
 
-  getLocalUserCount(): number {
-    const row = this.db.prepare(
-      "SELECT COUNT(*) as count FROM users"
-    ).get() as { count: number };
-    return row.count;
+  async getLocalUserCount(): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`SELECT COUNT(*) as count FROM users`;
+      return Number(result.rows[0].count);
+    });
   }
 
-  getLocalPostCount(): number {
-    const row = this.db.prepare(`
-      SELECT COUNT(*) as count FROM posts p
-      JOIN actors a ON p.actor_id = a.id
-      WHERE a.user_id IS NOT NULL
-    `).get() as { count: number };
-    return row.count;
+  async getLocalPostCount(): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM posts p
+        JOIN actors a ON p.actor_id = a.id
+        WHERE a.user_id IS NOT NULL
+      `;
+      return Number(result.rows[0].count);
+    });
   }
 }

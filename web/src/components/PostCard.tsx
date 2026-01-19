@@ -366,14 +366,9 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
               {linkToPost && (
                 <Link
                   to={postLink}
-                  className="btn btn-sm me-2"
+                  className={`btn btn-sm me-2 ${post.replies_count > 0 ? 'btn-outline-primary' : 'btn-outline-secondary'}`}
                   onClick={(e) => e.stopPropagation()}
                   title="View replies"
-                  style={{
-                    backgroundColor: 'hsl(210, 50%, 95%)',
-                    color: 'hsl(210, 50%, 40%)',
-                    border: 'none',
-                  }}
                 >
                   <i className="bi bi-chat me-1"></i>
                   {post.replies_count}
