@@ -6,6 +6,7 @@ import {
   Create,
   Delete,
   Document,
+  Image,
   createFederation,
   Endpoints,
   Follow,
@@ -96,7 +97,12 @@ federation
       preferredUsername: identifier,
       name: actor.name ?? undefined,
       summary: actor.bio ?? undefined,
-      icon: actor.avatar_url ? new URL(actor.avatar_url) : undefined,
+      icon: actor.avatar_url ? new Image({
+        url: new URL(actor.avatar_url),
+        mediaType: actor.avatar_url.includes('.webp') ? "image/webp" :
+                   actor.avatar_url.includes('.svg') || actor.avatar_url.includes('dicebear') ? "image/svg+xml" :
+                   actor.avatar_url.includes('.png') ? "image/png" : "image/jpeg"
+      }) : undefined,
       url: new URL(`https://${DOMAIN}/@${identifier}`),
       inbox: ctx.getInboxUri(identifier),
       endpoints: new Endpoints({

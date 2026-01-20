@@ -10,6 +10,7 @@ export interface User {
 
 export interface Actor {
   id: number;
+  public_id: string;
   uri: string;
   handle: string;
   name: string | null;
@@ -39,6 +40,7 @@ export interface Follow {
 
 export interface Post {
   id: number;
+  public_id: string;
   uri: string;
   actor_id: number;
   content: string;
@@ -73,6 +75,7 @@ export interface Session {
   token: string;
   user_id: number;
   created_at: string;
+  expires_at: string;
 }
 
 export interface Like {
@@ -206,7 +209,7 @@ export class DB {
 
   // ============ Actors ============
 
-  async createActor(actor: Omit<Actor, "id" | "created_at">): Promise<Actor> {
+  async createActor(actor: Omit<Actor, "id" | "public_id" | "created_at">): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id)
@@ -221,6 +224,27 @@ export class DB {
   async getActorById(id: number): Promise<Actor | null> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`SELECT * FROM actors WHERE id = ${id}`;
+      return result.rows[0] || null;
+    });
+  }
+
+  async getActorsByIds(ids: number[]): Promise<Map<number, Actor>> {
+    if (ids.length === 0) return new Map();
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        SELECT * FROM actors WHERE id = ANY(${ids})
+      `;
+      const map = new Map<number, Actor>();
+      for (const actor of result.rows) {
+        map.set(actor.id, actor);
+      }
+      return map;
+    });
+  }
+
+  async getActorByPublicId(publicId: string): Promise<Actor | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`SELECT * FROM actors WHERE public_id::text = ${publicId}`;
       return result.rows[0] || null;
     });
   }
@@ -301,7 +325,7 @@ export class DB {
     });
   }
 
-  async upsertActor(actor: Omit<Actor, "id" | "created_at" | "user_id">): Promise<Actor> {
+  async upsertActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "user_id">): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id)
@@ -439,7 +463,7 @@ export class DB {
 
   // ============ Posts ============
 
-  async createPost(post: Omit<Post, "id" | "created_at" | "likes_count"> & { created_at?: string }): Promise<Post> {
+  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count"> & { created_at?: string }): Promise<Post> {
     return this.query(async (client) => {
       if (post.created_at) {
         const result = await client.queryObject<Post>`
@@ -474,6 +498,27 @@ export class DB {
   async getPostById(id: number): Promise<Post | null> {
     return this.query(async (client) => {
       const result = await client.queryObject<Post>`SELECT * FROM posts WHERE id = ${id}`;
+      return result.rows[0] || null;
+    });
+  }
+
+  async getPostsByIds(ids: number[]): Promise<Map<number, Post>> {
+    if (ids.length === 0) return new Map();
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        SELECT * FROM posts WHERE id = ANY(${ids})
+      `;
+      const map = new Map<number, Post>();
+      for (const post of result.rows) {
+        map.set(post.id, post);
+      }
+      return map;
+    });
+  }
+
+  async getPostByPublicId(publicId: string): Promise<Post | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`SELECT * FROM posts WHERE public_id::text = ${publicId}`;
       return result.rows[0] || null;
     });
   }
@@ -540,6 +585,7 @@ export class DB {
   private parsePostWithActor(row: Record<string, unknown>): PostWithActor {
     return {
       id: row.id as number,
+      public_id: row.public_id as string,
       uri: row.uri as string,
       actor_id: row.actor_id as number,
       content: row.content as string,
@@ -550,6 +596,7 @@ export class DB {
       created_at: String(row.created_at),
       author: {
         id: row.author_id as number,
+        public_id: row.author_public_id as string,
         uri: row.author_uri as string,
         handle: row.author_handle as string,
         name: row.author_name as string | null,
@@ -565,8 +612,8 @@ export class DB {
   }
 
   private readonly postWithActorSelect = `
-    p.id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.sensitive, p.created_at,
-    a.id as author_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
+    p.id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.sensitive, p.created_at,
+    a.id as author_id, a.public_id as author_public_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
     a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
     a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,
     a.created_at as author_created_at
@@ -1141,7 +1188,9 @@ export class DB {
 
   async getSession(token: string): Promise<Session | null> {
     return this.query(async (client) => {
-      const result = await client.queryObject<Session>`SELECT * FROM sessions WHERE token = ${token}`;
+      const result = await client.queryObject<Session>`
+        SELECT * FROM sessions WHERE token = ${token} AND expires_at > NOW()
+      `;
       return result.rows[0] || null;
     });
   }
@@ -1149,6 +1198,15 @@ export class DB {
   async deleteSession(token: string): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`DELETE FROM sessions WHERE token = ${token}`;
+    });
+  }
+
+  async cleanupExpiredSessions(): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        DELETE FROM sessions WHERE expires_at <= NOW()
+      `;
+      return result.rowCount ?? 0;
     });
   }
 

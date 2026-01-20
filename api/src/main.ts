@@ -61,10 +61,8 @@ app.get("/health", (c) => c.json({ ok: true }));
 app.use("/uploads/*", serveStatic({ root: getUploadsDir(), rewriteRequestPath: (path) => path.replace("/uploads", "") }));
 
 // Serve static files from web/dist (built frontend)
+// Hash router handles client-side routing, so we just serve static files
 app.use("/*", serveStatic({ root: STATIC_DIR }));
-
-// SPA fallback - serve index.html for all unmatched routes
-app.get("*", serveStatic({ path: `${STATIC_DIR}/index.html` }));
 
 console.log(`Refriend v3 running on http://localhost:${PORT}`);
 console.log(`Use 'ngrok http ${PORT}' to expose to the internet`);

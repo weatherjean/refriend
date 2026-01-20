@@ -68,51 +68,60 @@ export function ActorPage() {
     setFollowing([]);
 
     try {
-      // First, try to load as local user
-      try {
-        const profileData = await users.get(username);
-        setActor(profileData.actor);
-        setStats(profileData.stats);
-        setIsFollowing(profileData.is_following);
-        setIsOwnProfile(profileData.is_own_profile);
-        setIsLocalUser(true);
+      // Check if this is a remote handle (contains @domain after username)
+      const isRemoteHandle = fullHandle.includes('@') && fullHandle.split('@').filter(Boolean).length > 1;
 
-        // Load posts and pinned in parallel (defer followers/following until needed)
-        const [postsData, pinnedData] = await Promise.all([
-          users.getPosts(username),
-          users.getPinned(username),
-        ]);
+      // Try to load as local user (skip for obvious remote handles)
+      if (!isRemoteHandle) {
+        try {
+          const profileData = await users.get(username);
+          setActor(profileData.actor);
+          setStats(profileData.stats);
+          setIsFollowing(profileData.is_following);
+          setIsOwnProfile(profileData.is_own_profile);
+          setIsLocalUser(true);
 
-        setPosts(postsData.posts);
-        setPostsCursor(postsData.next_cursor);
-        setPinnedPosts(pinnedData.posts);
-      } catch {
-        // Not a local user, try searching for remote user
-        const { results } = await search.query(fullHandle);
-        if (results.length > 0) {
-          const remoteActor = results[0];
-          setActor(remoteActor);
-          setStats({ followers: 0, following: 0 });
-          setFollowers([]);
-          setFollowing([]);
-          setIsLocalUser(false);
-
-          // Fetch follow status and posts (skip pinned for remote - too slow)
-          const [actorData, postsData] = await Promise.all([
-            actors.get(remoteActor.id).catch(() => ({ is_following: false, is_own_profile: false })),
-            actors.getPosts(remoteActor.id).catch(() => ({ posts: [], next_cursor: null })),
+          // Load posts and pinned in parallel (defer followers/following until needed)
+          const [postsData, pinnedData] = await Promise.all([
+            users.getPosts(username),
+            users.getPinned(username),
           ]);
 
-          setIsFollowing(actorData.is_following);
-          setIsOwnProfile(actorData.is_own_profile);
           setPosts(postsData.posts);
           setPostsCursor(postsData.next_cursor);
-
-          // Load pinned posts in background (slow for remote actors)
-          actors.getPinned(remoteActor.id).then(data => setPinnedPosts(data.posts)).catch(() => {});
-        } else {
-          setError('User not found');
+          setPinnedPosts(pinnedData.posts);
+          setLoading(false);
+          return;
+        } catch {
+          // Not a local user, fall through to remote search
         }
+      }
+
+      // Search for remote user
+      const { results } = await search.query(fullHandle);
+      if (results.length > 0) {
+        const remoteActor = results[0];
+        setActor(remoteActor);
+        setStats({ followers: 0, following: 0 });
+        setFollowers([]);
+        setFollowing([]);
+        setIsLocalUser(false);
+
+        // Fetch follow status and posts (skip pinned for remote - too slow)
+        const [actorData, postsData] = await Promise.all([
+          actors.get(remoteActor.id).catch(() => ({ is_following: false, is_own_profile: false })),
+          actors.getPosts(remoteActor.id).catch(() => ({ posts: [], next_cursor: null })),
+        ]);
+
+        setIsFollowing(actorData.is_following);
+        setIsOwnProfile(actorData.is_own_profile);
+        setPosts(postsData.posts);
+        setPostsCursor(postsData.next_cursor);
+
+        // Load pinned posts in background (slow for remote actors)
+        actors.getPinned(remoteActor.id).then(data => setPinnedPosts(data.posts)).catch(() => {});
+      } else {
+        setError('User not found');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load profile');
@@ -137,17 +146,18 @@ export function ActorPage() {
   }, [actor, repliesLoaded, isLocalUser, username]);
 
   const loadBoosts = useCallback(async () => {
-    if (!actor || boostsLoaded || !isLocalUser) return;
+    if (!actor || boostsLoaded) return;
 
     try {
-      const postsData = await users.getBoosts(username);
+      const postsData = await actors.getBoosts(actor.id);
       setBoosts(postsData.posts);
       setBoostsCursor(postsData.next_cursor);
       setBoostsLoaded(true);
     } catch (err) {
       console.error('Failed to load boosts:', err);
+      setBoostsLoaded(true); // Prevent infinite spinner on error
     }
-  }, [actor, boostsLoaded, isLocalUser, username]);
+  }, [actor, boostsLoaded]);
 
   const loadMorePosts = useCallback(async () => {
     if (!actor || !postsCursor || loadingMorePosts) return;
@@ -182,10 +192,10 @@ export function ActorPage() {
   }, [actor, repliesCursor, loadingMoreReplies, isLocalUser, username]);
 
   const loadMoreBoosts = useCallback(async () => {
-    if (!actor || !boostsCursor || loadingMoreBoosts || !isLocalUser) return;
+    if (!actor || !boostsCursor || loadingMoreBoosts) return;
     setLoadingMoreBoosts(true);
     try {
-      const postsData = await users.getBoosts(username, { before: boostsCursor });
+      const postsData = await actors.getBoosts(actor.id, { before: boostsCursor });
       setBoosts(prev => [...prev, ...postsData.posts]);
       setBoostsCursor(postsData.next_cursor);
     } catch (err) {
@@ -193,7 +203,7 @@ export function ActorPage() {
     } finally {
       setLoadingMoreBoosts(false);
     }
-  }, [actor, boostsCursor, loadingMoreBoosts, isLocalUser, username]);
+  }, [actor, boostsCursor, loadingMoreBoosts]);
 
   useEffect(() => {
     loadProfile();

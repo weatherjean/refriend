@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Actors: Both local users and remote ActivityPub actors
 CREATE TABLE IF NOT EXISTS actors (
   id SERIAL PRIMARY KEY,
+  public_id UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
   uri TEXT NOT NULL UNIQUE,
   handle TEXT NOT NULL UNIQUE,
   name TEXT,
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS follows (
 -- Posts: Notes/statuses
 CREATE TABLE IF NOT EXISTS posts (
   id SERIAL PRIMARY KEY,
+  public_id UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
   uri TEXT NOT NULL UNIQUE,
   actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
@@ -110,7 +112,8 @@ CREATE TABLE IF NOT EXISTS pinned_posts (
 CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
 );
 
 -- Activities
@@ -138,20 +141,30 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 
 -- Indexes
+CREATE INDEX IF NOT EXISTS idx_actors_public_id ON actors(public_id);
 CREATE INDEX IF NOT EXISTS idx_actors_user_id ON actors(user_id);
 CREATE INDEX IF NOT EXISTS idx_actors_handle ON actors(handle);
+CREATE INDEX IF NOT EXISTS idx_posts_public_id ON posts(public_id);
 CREATE INDEX IF NOT EXISTS idx_posts_actor_id ON posts(actor_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_in_reply_to ON posts(in_reply_to_id) WHERE in_reply_to_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_actor_replies ON posts(actor_id, created_at DESC) WHERE in_reply_to_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_actor_posts ON posts(actor_id, created_at DESC) WHERE in_reply_to_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
 CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
+CREATE INDEX IF NOT EXISTS idx_follows_following_created ON follows(following_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);
 CREATE INDEX IF NOT EXISTS idx_likes_actor_id ON likes(actor_id);
 CREATE INDEX IF NOT EXISTS idx_boosts_post_id ON boosts(post_id);
 CREATE INDEX IF NOT EXISTS idx_boosts_actor_id ON boosts(actor_id);
+CREATE INDEX IF NOT EXISTS idx_boosts_actor_created ON boosts(actor_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_activities_actor ON activities(actor_id);
 CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type);
 CREATE INDEX IF NOT EXISTS idx_activities_direction ON activities(direction);
+CREATE INDEX IF NOT EXISTS idx_activities_uri ON activities(uri);
 CREATE INDEX IF NOT EXISTS idx_post_hashtags_hashtag ON post_hashtags(hashtag_id);
 CREATE INDEX IF NOT EXISTS idx_post_hashtags_post ON post_hashtags(post_id);
 CREATE INDEX IF NOT EXISTS idx_media_post ON media(post_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_pending ON jobs(run_at) WHERE status = 'pending';

@@ -10,8 +10,8 @@ export function SearchPage() {
   const [results, setResults] = useState<Actor[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [followingInProgress, setFollowingInProgress] = useState<Set<number>>(new Set());
-  const [followingSet, setFollowingSet] = useState<Set<number>>(new Set());
+  const [followingInProgress, setFollowingInProgress] = useState<Set<string>>(new Set());
+  const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState('');
 
   // Load who the current user is following

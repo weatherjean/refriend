@@ -21,8 +21,8 @@ export function PostPage() {
     const load = async () => {
       try {
         const [postData, repliesData] = await Promise.all([
-          postsApi.get(parseInt(id!)),
-          postsApi.getReplies(parseInt(id!)),
+          postsApi.get(id!),
+          postsApi.getReplies(id!),
         ]);
         setPost(postData.post);
         setAncestors(postData.ancestors || []);

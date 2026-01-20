@@ -63,14 +63,16 @@ export function createApi(db: DB, federation: Federation<void>) {
   const api = new Hono<Env>();
 
   // CORS for frontend
+  const allowedOrigins = Deno.env.get("ALLOWED_ORIGINS")?.split(",") ?? [];
   api.use("/*", cors({
     origin: (origin) => {
-      // Allow any localhost port for development
-      if (origin?.startsWith("http://localhost:")) return origin;
-      // Allow tunnel domains
-      if (origin?.includes(".localhost.run")) return origin;
-      if (origin?.includes(".serveo.net")) return origin;
-      return origin; // Allow all for now during development
+      if (!origin) return null;
+      // Allow ngrok tunnels
+      if (origin.includes(".ngrok")) return origin;
+      // Allow configured origins (for production)
+      if (allowedOrigins.includes(origin)) return origin;
+      // Reject unknown origins
+      return null;
     },
     credentials: true,
   }));
@@ -324,10 +326,10 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // Get actor by ID (works for both local and remote)
   api.get("/actors/:id", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const db = c.get("db");
     const currentActor = c.get("actor");
-    const actor = await db.getActorById(id);
+    const actor = await db.getActorByPublicId(publicId);
 
     if (!actor) {
       return c.json({ error: "Actor not found" }, 404);
@@ -346,13 +348,13 @@ export function createApi(db: DB, federation: Federation<void>) {
   // Get posts by actor ID (works for both local and remote)
   // ?filter=replies to get only replies
   api.get("/actors/:id/posts", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const filter = c.req.query("filter");
     const db = c.get("db");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
-    const actor = await db.getActorById(id);
+    const actor = await db.getActorByPublicId(publicId);
 
     if (!actor) {
       return c.json({ error: "Actor not found" }, 404);
@@ -392,11 +394,11 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // Get pinned posts for an actor (works for both local and remote)
   api.get("/actors/:id/pinned", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const db = c.get("db");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
-    const actor = await db.getActorById(id);
+    const actor = await db.getActorByPublicId(publicId);
 
     if (!actor) {
       return c.json({ error: "Actor not found" }, 404);
@@ -556,6 +558,38 @@ export function createApi(db: DB, federation: Federation<void>) {
     }
   });
 
+  // Get boosted posts for an actor (local only - remote boosts not exposed via AP)
+  api.get("/actors/:id/boosts", async (c) => {
+    const publicId = c.req.param("id");
+    const db = c.get("db");
+    const currentActor = c.get("actor");
+    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const actor = await db.getActorByPublicId(publicId);
+
+    if (!actor) {
+      return c.json({ error: "Actor not found" }, 404);
+    }
+
+    // Only local actors have boost data
+    if (actor.user_id === null) {
+      return c.json({ posts: [], next_cursor: null });
+    }
+
+    const posts = await db.getBoostedPostsWithActor(actor.id, limit + 1, before);
+
+    const hasMore = posts.length > limit;
+    const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+    const nextCursor = hasMore && resultPosts.length > 0
+      ? resultPosts[resultPosts.length - 1].id
+      : null;
+
+    return c.json({
+      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id),
+      next_cursor: nextCursor,
+    });
+  });
+
   // ============ Posts ============
 
   api.get("/posts", async (c) => {
@@ -610,6 +644,11 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     if (!content?.trim()) {
       return c.json({ error: "Content required" }, 400);
+    }
+
+    // Content length limit (500 chars like Mastodon)
+    if (content.length > 500) {
+      return c.json({ error: "Content too long (max 500 characters)" }, 400);
     }
 
     // Validate attachments (max 4)
@@ -690,10 +729,10 @@ export function createApi(db: DB, federation: Federation<void>) {
   });
 
   api.get("/posts/:id", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const db = c.get("db");
     const actor = c.get("actor");
-    const post = await db.getPostById(id);
+    const post = await db.getPostByPublicId(publicId);
 
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
@@ -716,16 +755,15 @@ export function createApi(db: DB, federation: Federation<void>) {
   });
 
   api.get("/posts/:id/replies", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const db = c.get("db");
     const actor = c.get("actor");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const after = c.req.query("after") ? parseInt(c.req.query("after")!) : undefined;
-    const post = await db.getPostById(id);
-
+    const post = await db.getPostByPublicId(publicId);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
+    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const after = c.req.query("after") ? parseInt(c.req.query("after")!) : undefined;
 
     // Use optimized batch method with pagination (replies use "after" since they're ASC)
     const replies = await db.getRepliesWithActor(post.id, limit + 1, after);
@@ -744,7 +782,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // DELETE /posts/:id - Delete post via ActivityPub Delete activity
   api.delete("/posts/:id", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const user = c.get("user");
     const actor = c.get("actor");
     const db = c.get("db");
@@ -754,13 +792,13 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = await db.getPostById(id);
+    const post = await db.getPostByPublicId(publicId);
     if (!post || post.actor_id !== actor.id) {
       return c.json({ error: "Not found or unauthorized" }, 404);
     }
 
     // Get media files before deleting (CASCADE will delete DB records)
-    const mediaFiles = await db.getMediaByPostId(id);
+    const mediaFiles = await db.getMediaByPostId(post.id);
 
     const ctx = federation.createContext(c.req.raw, undefined);
 
@@ -799,7 +837,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // POST /posts/:id/like - Like a post via ActivityPub Like activity
   api.post("/posts/:id/like", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const user = c.get("user");
     const actor = c.get("actor");
     const db = c.get("db");
@@ -809,7 +847,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = await db.getPostById(id);
+    const post = await db.getPostByPublicId(publicId);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
@@ -838,7 +876,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // DELETE /posts/:id/like - Unlike a post via ActivityPub Undo(Like) activity
   api.delete("/posts/:id/like", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const user = c.get("user");
     const actor = c.get("actor");
     const db = c.get("db");
@@ -848,7 +886,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = await db.getPostById(id);
+    const post = await db.getPostByPublicId(publicId);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
@@ -884,7 +922,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // POST /posts/:id/boost - Boost a post via ActivityPub Announce activity
   api.post("/posts/:id/boost", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const user = c.get("user");
     const actor = c.get("actor");
     const db = c.get("db");
@@ -894,7 +932,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = await db.getPostById(id);
+    const post = await db.getPostByPublicId(publicId);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
@@ -930,7 +968,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // DELETE /posts/:id/boost - Unboost a post via ActivityPub Undo(Announce) activity
   api.delete("/posts/:id/boost", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const user = c.get("user");
     const actor = c.get("actor");
     const db = c.get("db");
@@ -940,7 +978,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = await db.getPostById(id);
+    const post = await db.getPostByPublicId(publicId);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
@@ -976,7 +1014,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // POST /posts/:id/pin - Pin a post to profile
   api.post("/posts/:id/pin", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const user = c.get("user");
     const actor = c.get("actor");
     const db = c.get("db");
@@ -985,7 +1023,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = await db.getPostById(id);
+    const post = await db.getPostByPublicId(publicId);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
@@ -1007,7 +1045,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   // DELETE /posts/:id/pin - Unpin a post from profile
   api.delete("/posts/:id/pin", async (c) => {
-    const id = parseInt(c.req.param("id"));
+    const publicId = c.req.param("id");
     const user = c.get("user");
     const actor = c.get("actor");
     const db = c.get("db");
@@ -1016,7 +1054,7 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const post = await db.getPostById(id);
+    const post = await db.getPostByPublicId(publicId);
     if (!post) {
       return c.json({ error: "Post not found" }, 404);
     }
@@ -1179,8 +1217,8 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const { actor_id } = await c.req.json<{ actor_id: number }>();
-    const targetActor = await db.getActorById(actor_id);
+    const { actor_id } = await c.req.json<{ actor_id: string }>();
+    const targetActor = await db.getActorByPublicId(actor_id);
 
     if (!targetActor) {
       return c.json({ error: "Actor not found" }, 404);
@@ -1227,6 +1265,14 @@ export function createApi(db: DB, federation: Federation<void>) {
     const body = await c.req.json();
     const { name, bio } = body;
 
+    // Validate lengths
+    if (name && name.length > 100) {
+      return c.json({ error: "Name too long (max 100 characters)" }, 400);
+    }
+    if (bio && bio.length > 500) {
+      return c.json({ error: "Bio too long (max 500 characters)" }, 400);
+    }
+
     const updated = await db.updateActorProfile(actor.id, { name, bio });
     if (!updated) {
       return c.json({ error: "Failed to update profile" }, 500);
@@ -1255,6 +1301,11 @@ export function createApi(db: DB, federation: Federation<void>) {
     // Decode base64 image
     const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
     const imageData = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+
+    // Validate image size (max 2MB)
+    if (imageData.length > 2 * 1024 * 1024) {
+      return c.json({ error: "Image too large (max 2MB)" }, 400);
+    }
 
     // Generate filename
     const filename = `${actor.id}-${Date.now()}.webp`;
@@ -1290,6 +1341,11 @@ export function createApi(db: DB, federation: Federation<void>) {
     // Decode base64 image
     const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
     const imageData = Uint8Array.from(atob(base64Data), (ch) => ch.charCodeAt(0));
+
+    // Validate image size (max 5MB for media attachments)
+    if (imageData.length > 5 * 1024 * 1024) {
+      return c.json({ error: "Image too large (max 5MB)" }, 400);
+    }
 
     // Generate unique filename
     const filename = `${crypto.randomUUID()}.webp`;
@@ -1427,7 +1483,7 @@ function sanitizeUser(user: User) {
 
 function sanitizeActor(actor: Actor) {
   return {
-    id: actor.id,
+    id: actor.public_id,
     uri: actor.uri,
     handle: actor.handle,
     name: actor.name,
@@ -1457,7 +1513,7 @@ async function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
     if (parentPost) {
       const parentActor = await db.getActorById(parentPost.actor_id);
       inReplyTo = {
-        id: parentPost.id,
+        id: parentPost.public_id,
         uri: parentPost.uri,
         content: parentPost.content,
         url: parentPost.url,
@@ -1468,7 +1524,7 @@ async function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
   }
 
   return {
-    id: post.id,
+    id: post.public_id,
     uri: post.uri,
     content: post.content,
     url: post.url,
@@ -1484,7 +1540,7 @@ async function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
     in_reply_to: inReplyTo,
     sensitive: post.sensitive,
     attachments: attachments.map(a => ({
-      id: a.id,
+      id: a.id,  // Media IDs stay internal for now
       url: a.url,
       media_type: a.media_type,
       alt_text: a.alt_text,
@@ -1509,19 +1565,10 @@ async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?:
   const mediaMap = await db.getMediaForPosts(postIds);
 
   // Batch fetch parent posts for replies
-  const parentIds = posts.filter(p => p.in_reply_to_id).map(p => p.in_reply_to_id!);
-  const parentPosts = new Map<number, Post>();
-  const parentActors = new Map<number, Actor>();
-  if (parentIds.length > 0) {
-    for (const id of parentIds) {
-      const post = await db.getPostById(id);
-      if (post) {
-        parentPosts.set(id, post);
-        const actor = await db.getActorById(post.actor_id);
-        if (actor) parentActors.set(post.actor_id, actor);
-      }
-    }
-  }
+  const parentIds = [...new Set(posts.filter(p => p.in_reply_to_id).map(p => p.in_reply_to_id!))];
+  const parentPosts = await db.getPostsByIds(parentIds);
+  const parentActorIds = [...new Set([...parentPosts.values()].map(p => p.actor_id))];
+  const parentActors = await db.getActorsByIds(parentActorIds);
 
   return posts.map(post => {
     let inReplyTo = null;
@@ -1530,7 +1577,7 @@ async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?:
       if (parentPost) {
         const parentActor = parentActors.get(parentPost.actor_id);
         inReplyTo = {
-          id: parentPost.id,
+          id: parentPost.public_id,
           uri: parentPost.uri,
           content: parentPost.content,
           url: parentPost.url,
@@ -1543,7 +1590,7 @@ async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?:
     const attachments = mediaMap.get(post.id) || [];
 
     return {
-      id: post.id,
+      id: post.public_id,
       uri: post.uri,
       content: post.content,
       url: post.url,

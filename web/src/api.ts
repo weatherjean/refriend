@@ -7,7 +7,7 @@ export interface User {
 }
 
 export interface Actor {
-  id: number;
+  id: string;  // UUID
   uri: string;
   handle: string;
   name: string | null;
@@ -28,7 +28,7 @@ export interface Attachment {
 }
 
 export interface Post {
-  id: number;
+  id: string;  // UUID
   uri: string;
   content: string;
   url: string | null;
@@ -44,7 +44,7 @@ export interface Post {
   sensitive: boolean;
   attachments: Attachment[];
   in_reply_to: {
-    id: number;
+    id: string;  // UUID
     uri: string;
     content: string;
     url: string | null;
@@ -132,7 +132,7 @@ export interface PaginatedPosts {
 }
 
 export interface TrendingUser {
-  id: number;
+  id: string;  // UUID
   handle: string;
   name: string | null;
   avatar_url: string | null;
@@ -180,23 +180,30 @@ export const users = {
 
 // Actors (works for both local and remote)
 export const actors = {
-  get: (actorId: number) =>
+  get: (actorId: string) =>
     fetchJson<{ actor: Actor; is_following: boolean; is_own_profile: boolean }>(`/actors/${actorId}`),
-  getPosts: (actorId: number, params?: PaginationParams) => {
+  getPosts: (actorId: string, params?: PaginationParams) => {
     const query = new URLSearchParams();
     if (params?.limit) query.set('limit', params.limit.toString());
     if (params?.before) query.set('before', params.before.toString());
     const queryStr = query.toString();
     return fetchJson<PaginatedPosts>(`/actors/${actorId}/posts${queryStr ? '?' + queryStr : ''}`);
   },
-  getReplies: (actorId: number, params?: PaginationParams) => {
+  getReplies: (actorId: string, params?: PaginationParams) => {
     const query = new URLSearchParams({ filter: 'replies' });
     if (params?.limit) query.set('limit', params.limit.toString());
     if (params?.before) query.set('before', params.before.toString());
     return fetchJson<PaginatedPosts>(`/actors/${actorId}/posts?${query}`);
   },
-  getPinned: (actorId: number) =>
+  getPinned: (actorId: string) =>
     fetchJson<{ posts: Post[] }>(`/actors/${actorId}/pinned`),
+  getBoosts: (actorId: string, params?: PaginationParams) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const queryStr = query.toString();
+    return fetchJson<PaginatedPosts>(`/actors/${actorId}/boosts${queryStr ? '?' + queryStr : ''}`);
+  },
 };
 
 // Posts
@@ -207,36 +214,36 @@ export const posts = {
     if (params?.before) query.set('before', params.before.toString());
     return fetchJson<PaginatedPosts>(`/posts?${query}`);
   },
-  get: (id: number) => fetchJson<{ post: Post; ancestors: Post[] }>(`/posts/${id}`),
-  getReplies: (id: number) => fetchJson<{ replies: Post[] }>(`/posts/${id}/replies`),
-  create: (content: string, inReplyTo?: number, attachments?: AttachmentInput[], sensitive?: boolean) =>
+  get: (id: string) => fetchJson<{ post: Post; ancestors: Post[] }>(`/posts/${id}`),
+  getReplies: (id: string) => fetchJson<{ replies: Post[] }>(`/posts/${id}/replies`),
+  create: (content: string, inReplyTo?: string, attachments?: AttachmentInput[], sensitive?: boolean) =>
     fetchJson<{ post: Post }>('/posts', {
       method: 'POST',
       body: JSON.stringify({ content, in_reply_to: inReplyTo, attachments, sensitive }),
     }),
-  delete: (id: number) =>
+  delete: (id: string) =>
     fetchJson<{ ok: boolean }>(`/posts/${id}`, { method: 'DELETE' }),
-  like: (id: number) =>
+  like: (id: string) =>
     fetchJson<{ ok: boolean; likes_count: number; liked: boolean }>(`/posts/${id}/like`, {
       method: 'POST',
     }),
-  unlike: (id: number) =>
+  unlike: (id: string) =>
     fetchJson<{ ok: boolean; likes_count: number; liked: boolean }>(`/posts/${id}/like`, {
       method: 'DELETE',
     }),
-  boost: (id: number) =>
+  boost: (id: string) =>
     fetchJson<{ ok: boolean; boosts_count: number; boosted: boolean }>(`/posts/${id}/boost`, {
       method: 'POST',
     }),
-  unboost: (id: number) =>
+  unboost: (id: string) =>
     fetchJson<{ ok: boolean; boosts_count: number; boosted: boolean }>(`/posts/${id}/boost`, {
       method: 'DELETE',
     }),
-  pin: (id: number) =>
+  pin: (id: string) =>
     fetchJson<{ ok: boolean; pinned: boolean }>(`/posts/${id}/pin`, {
       method: 'POST',
     }),
-  unpin: (id: number) =>
+  unpin: (id: string) =>
     fetchJson<{ ok: boolean; pinned: boolean }>(`/posts/${id}/pin`, {
       method: 'DELETE',
     }),
@@ -249,7 +256,7 @@ export const follows = {
       method: 'POST',
       body: JSON.stringify({ handle }),
     }),
-  unfollow: (actorId: number) =>
+  unfollow: (actorId: string) =>
     fetchJson<{ ok: boolean }>('/unfollow', {
       method: 'POST',
       body: JSON.stringify({ actor_id: actorId }),
