@@ -26,27 +26,20 @@ export function NotificationsPage() {
     }
   };
 
-  const getNotificationIcon = (type: Notification['type']) => {
+  const getNotificationText = (type: Notification['type']) => {
     switch (type) {
-      case 'like': return <i className="bi bi-heart-fill text-danger"></i>;
-      case 'boost': return <i className="bi bi-arrow-repeat text-success"></i>;
-      case 'follow': return <i className="bi bi-person-plus-fill text-primary"></i>;
-      case 'reply': return <i className="bi bi-chat-fill text-info"></i>;
-      case 'mention': return <i className="bi bi-at text-warning"></i>;
-      default: return <i className="bi bi-bell"></i>;
+      case 'like': return 'liked your post';
+      case 'boost': return 'boosted your post';
+      case 'follow': return 'followed you';
+      case 'reply': return 'replied to your post';
+      case 'mention': return 'mentioned you';
+      default: return 'interacted with you';
     }
   };
 
-  const getNotificationText = (n: Notification) => {
-    const actorName = n.actor.name || n.actor.handle;
-    switch (n.type) {
-      case 'like': return <><strong>{actorName}</strong> liked your post</>;
-      case 'boost': return <><strong>{actorName}</strong> boosted your post</>;
-      case 'follow': return <><strong>{actorName}</strong> followed you</>;
-      case 'reply': return <><strong>{actorName}</strong> replied to your post</>;
-      case 'mention': return <><strong>{actorName}</strong> mentioned you</>;
-      default: return <><strong>{actorName}</strong> interacted with you</>;
-    }
+  const getNotificationLink = (n: Notification) => {
+    if (n.post) return `/posts/${n.post.id}`;
+    return `/actor/${n.actor.id}`;  // For follows, link to the actor
   };
 
   if (loading) {
@@ -70,53 +63,48 @@ export function NotificationsPage() {
           <p>No notifications yet</p>
         </div>
       ) : (
-        <div className="d-flex flex-column gap-3">
+        <div className="d-flex flex-column gap-2">
           {notifications.map((n) => (
-            <div key={n.id} className="card">
-              <div className="card-body">
-                <div className="d-flex align-items-start gap-3">
-                  <div className="fs-4">
-                    {getNotificationIcon(n.type)}
-                  </div>
+            <Link
+              key={n.id}
+              to={getNotificationLink(n)}
+              className="card text-decoration-none text-reset"
+            >
+              <div className="card-body py-3">
+                <div className="d-flex align-items-center gap-3">
+                  {n.actor.avatar_url ? (
+                    <img
+                      src={n.actor.avatar_url}
+                      alt=""
+                      className="rounded-circle flex-shrink-0"
+                      style={{ width: 40, height: 40, objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div
+                      className="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white flex-shrink-0"
+                      style={{ width: 40, height: 40 }}
+                    >
+                      {(n.actor.name || n.actor.handle)[0]?.toUpperCase()}
+                    </div>
+                  )}
                   <div className="flex-grow-1" style={{ minWidth: 0 }}>
-                    <div className="d-flex align-items-center gap-2 mb-1 flex-wrap">
-                      <Link to={`/actor/${n.actor.id}`} className="text-decoration-none d-flex align-items-center gap-2">
-                        {n.actor.avatar_url ? (
-                          <img
-                            src={n.actor.avatar_url}
-                            alt=""
-                            className="rounded-circle"
-                            style={{ width: 32, height: 32, objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <div
-                            className="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white"
-                            style={{ width: 32, height: 32, fontSize: 12 }}
-                          >
-                            {(n.actor.name || n.actor.handle)[0]?.toUpperCase()}
-                          </div>
-                        )}
-                      </Link>
-                      <span>
-                        {getNotificationText(n)}
-                      </span>
-                      <span className="text-muted small ms-auto">
-                        {formatTimeAgo(n.created_at)}
-                      </span>
+                    <div>
+                      <strong>{n.actor.name || n.actor.handle}</strong>
+                      {' '}{getNotificationText(n.type)}
                     </div>
                     {n.post && (
-                      <Link
-                        to={`/posts/${n.post.id}`}
-                        className="text-decoration-none text-muted small d-block text-truncate mt-2"
-                        style={{ maxWidth: '100%' }}
-                      >
-                        <span dangerouslySetInnerHTML={{ __html: n.post.content }} />
-                      </Link>
+                      <div
+                        className="text-muted small text-truncate mt-1"
+                        dangerouslySetInnerHTML={{ __html: n.post.content }}
+                      />
                     )}
                   </div>
+                  <span className="text-muted small flex-shrink-0">
+                    {formatTimeAgo(n.created_at)}
+                  </span>
                 </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}
