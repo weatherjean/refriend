@@ -17,6 +17,7 @@ import {
 } from "@fedify/fedify";
 import type { DB, Actor } from "./db.ts";
 import { invalidateProfileCache } from "./cache.ts";
+import { updatePostScore, updateParentPostScore } from "./scoring.ts";
 
 // Activity processing result
 export interface ProcessResult {
@@ -548,6 +549,9 @@ async function processCreate(
 
   console.log(`[Create] Post from ${authorActor.handle}: ${post.id}`);
 
+  // If this is a reply, update the parent post's hot score
+  await updateParentPostScore(db, inReplyToId);
+
   // For outbound: send to followers and (if reply) to original author
   if (direction === "outbound" && localUsername) {
     // Send to followers
@@ -620,8 +624,9 @@ async function processLike(
     return;
   }
 
-  // Add the like
+  // Add the like and update hot score
   await db.addLike(likerActor.id, post.id);
+  await updatePostScore(db, post.id);
   console.log(`[Like] ${likerActor.handle} liked post ${post.id}`);
 
   // For outbound: send to post author if remote
@@ -687,8 +692,9 @@ async function processAnnounce(
     return;
   }
 
-  // Add the boost
+  // Add the boost and update hot score
   await db.addBoost(boosterActor.id, post.id);
+  await updatePostScore(db, post.id);
   console.log(`[Announce] ${boosterActor.handle} boosted post ${post.id}`);
 
   // For outbound: send to followers and post author
@@ -899,6 +905,7 @@ async function processUndo(
     if (!post) return;
 
     await db.removeLike(actorRecord.id, post.id);
+    await updatePostScore(db, post.id);
     console.log(`[Undo Like] ${actorRecord.handle} unliked post ${post.id}`);
 
     // For outbound to remote: send Undo activity
@@ -927,6 +934,7 @@ async function processUndo(
     if (!post) return;
 
     await db.removeBoost(actorRecord.id, post.id);
+    await updatePostScore(db, post.id);
     console.log(`[Undo Announce] ${actorRecord.handle} unboosted post ${post.id}`);
 
     // For outbound: send to followers and post author

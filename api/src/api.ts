@@ -617,6 +617,19 @@ export function createApi(db: DB, federation: Federation<void>) {
     });
   });
 
+  // GET /posts/hot - Get posts sorted by hot score
+  api.get("/posts/hot", async (c) => {
+    const db = c.get("db");
+    const actor = c.get("actor");
+    const limit = Math.min(parseInt(c.req.query("limit") || "10"), 20);
+
+    const posts = await db.getHotPosts(limit);
+
+    return c.json({
+      posts: await enrichPostsBatch(db, posts, actor?.id),
+    });
+  });
+
   // POST /posts - Create post via ActivityPub Create activity
   api.post("/posts", async (c) => {
     const user = c.get("user");

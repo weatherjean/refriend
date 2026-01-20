@@ -634,6 +634,17 @@ export class DB {
     });
   }
 
+  async getHotPosts(limit = 10): Promise<PostWithActor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject(`
+        SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+        WHERE p.in_reply_to_id IS NULL AND p.hot_score > 0
+        ORDER BY p.hot_score DESC LIMIT $1
+      `, [limit]);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+    });
+  }
+
   async getHomeFeedWithActor(actorId: number, limit = 20, before?: number): Promise<PostWithActor[]> {
     return this.query(async (client) => {
       const query = before

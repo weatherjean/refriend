@@ -214,6 +214,7 @@ export const posts = {
     if (params?.before) query.set('before', params.before.toString());
     return fetchJson<PaginatedPosts>(`/posts?${query}`);
   },
+  getHot: (limit = 10) => fetchJson<{ posts: Post[] }>(`/posts/hot?limit=${limit}`),
   get: (id: string) => fetchJson<{ post: Post; ancestors: Post[] }>(`/posts/${id}`),
   getReplies: (id: string) => fetchJson<{ replies: Post[] }>(`/posts/${id}/replies`),
   create: (content: string, inReplyTo?: string, attachments?: AttachmentInput[], sensitive?: boolean) =>

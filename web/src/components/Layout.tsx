@@ -49,6 +49,9 @@ export function Layout({ children }: LayoutProps) {
             <Link to="/" className="list-group-item list-group-item-action">
               <i className="bi bi-house me-2"></i> Home
             </Link>
+            <Link to="/hot" className="list-group-item list-group-item-action">
+              <i className="bi bi-fire me-2 text-danger"></i> Hot
+            </Link>
             <Link to="/search" className="list-group-item list-group-item-action">
               <i className="bi bi-search me-2"></i> Search
             </Link>

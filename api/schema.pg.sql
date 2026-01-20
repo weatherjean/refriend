@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS posts (
   url TEXT,
   in_reply_to_id INTEGER REFERENCES posts(id) ON DELETE SET NULL,
   likes_count INTEGER NOT NULL DEFAULT 0,
+  hot_score DOUBLE PRECISION NOT NULL DEFAULT 0,
   sensitive BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -147,6 +148,7 @@ CREATE INDEX IF NOT EXISTS idx_actors_handle ON actors(handle);
 CREATE INDEX IF NOT EXISTS idx_posts_public_id ON posts(public_id);
 CREATE INDEX IF NOT EXISTS idx_posts_actor_id ON posts(actor_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_hot_score ON posts(hot_score DESC);
 CREATE INDEX IF NOT EXISTS idx_posts_in_reply_to ON posts(in_reply_to_id) WHERE in_reply_to_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_actor_replies ON posts(actor_id, created_at DESC) WHERE in_reply_to_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_actor_posts ON posts(actor_id, created_at DESC) WHERE in_reply_to_id IS NULL;
