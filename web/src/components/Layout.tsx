@@ -2,7 +2,7 @@ import { ReactNode, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
-import { tags, users, TrendingUser } from '../api';
+import { tags, users, notifications as notificationsApi, TrendingUser } from '../api';
 import { TagBadge } from './TagBadge';
 import { SettingsDrawer } from './SettingsDrawer';
 
@@ -16,6 +16,7 @@ export function Layout({ children }: LayoutProps) {
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
   const [trendingUsers, setTrendingUsers] = useState<TrendingUser[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     tags.getPopular()
@@ -25,6 +26,24 @@ export function Layout({ children }: LayoutProps) {
       .then(({ users }) => setTrendingUsers(users))
       .catch(() => {});
   }, []);
+
+  // Fetch unread notification count
+  useEffect(() => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+
+    const fetchCount = () => {
+      notificationsApi.getUnreadCount()
+        .then(({ count }) => setUnreadCount(count))
+        .catch(() => {});
+    };
+
+    fetchCount();
+    const interval = setInterval(fetchCount, 30000); // Poll every 30s
+    return () => clearInterval(interval);
+  }, [user]);
 
   const handleLogout = async () => {
     await logout();
@@ -59,9 +78,17 @@ export function Layout({ children }: LayoutProps) {
               <i className="bi bi-hash me-2"></i> Tags
             </Link>
             {user && actor && (
-              <Link to={`/u/${actor.handle}`} className="list-group-item list-group-item-action">
-                <i className="bi bi-person me-2"></i> Profile
-              </Link>
+              <>
+                <Link to="/notifications" className="list-group-item list-group-item-action d-flex align-items-center">
+                  <i className="bi bi-bell me-2"></i> Notifications
+                  {unreadCount > 0 && (
+                    <span className="badge bg-danger rounded-pill ms-auto">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                  )}
+                </Link>
+                <Link to={`/u/${username}`} className="list-group-item list-group-item-action">
+                  <i className="bi bi-person me-2"></i> Profile
+                </Link>
+              </>
             )}
           </div>
 

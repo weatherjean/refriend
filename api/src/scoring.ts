@@ -54,11 +54,12 @@ export async function updatePostScore(db: DB, postId: number): Promise<void> {
     if (result.rows.length === 0) return;
 
     const row = result.rows[0];
+    // Ensure numeric types (PostgreSQL may return strings for some numeric types)
     const hotScore = calculateHotScore(
-      row.likes_count,
-      row.boosts_count,
-      row.replies_count,
-      row.age_hours
+      Number(row.likes_count),
+      Number(row.boosts_count),
+      Number(row.replies_count),
+      Number(row.age_hours)
     );
 
     await client.queryArray`

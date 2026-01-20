@@ -132,6 +132,17 @@ CREATE TABLE IF NOT EXISTS activities (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Notifications
+CREATE TABLE IF NOT EXISTS notifications (
+  id SERIAL PRIMARY KEY,
+  type TEXT NOT NULL CHECK (type IN ('like', 'boost', 'follow', 'reply', 'mention')),
+  actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  target_actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+  read BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Jobs queue
 CREATE TABLE IF NOT EXISTS jobs (
   id SERIAL PRIMARY KEY,
@@ -172,3 +183,5 @@ CREATE INDEX IF NOT EXISTS idx_media_post ON media(post_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_pending ON jobs(run_at) WHERE status = 'pending';
+CREATE INDEX IF NOT EXISTS idx_notifications_target ON notifications(target_actor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(target_actor_id, read) WHERE read = FALSE;

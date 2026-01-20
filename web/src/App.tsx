@@ -10,6 +10,8 @@ import { SearchPage } from './pages/SearchPage';
 import { TagPage } from './pages/TagPage';
 import { ExplorePage } from './pages/ExplorePage';
 import { HotPage } from './pages/HotPage';
+import { NotificationsPage } from './pages/NotificationsPage';
+import { ActorByIdPage } from './pages/ActorByIdPage';
 import { useAuth } from './context/AuthContext';
 
 function App() {
@@ -32,9 +34,11 @@ function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/explore" element={<ExplorePage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/new" element={<NewPostPage />} />
         <Route path="/posts/:id" element={<PostPage />} />
         <Route path="/u/:handle/*" element={<ActorPage />} />
+        <Route path="/actor/:id" element={<ActorByIdPage />} />
         <Route path="/tags/:tag" element={<TagPage />} />
       </Routes>
     </Layout>

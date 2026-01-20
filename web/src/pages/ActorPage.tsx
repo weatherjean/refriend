@@ -68,11 +68,13 @@ export function ActorPage() {
     setFollowing([]);
 
     try {
-      // Check if this is a remote handle (contains @domain after username)
-      const isRemoteHandle = fullHandle.includes('@') && fullHandle.split('@').filter(Boolean).length > 1;
+      // Check if the domain matches our current host (local user even with full handle)
+      const handleParts = fullHandle.replace(/^@/, '').split('@');
+      const handleDomain = handleParts.length > 1 ? handleParts[1] : null;
+      const isLikelyLocal = !handleDomain || handleDomain === window.location.host;
 
-      // Try to load as local user (skip for obvious remote handles)
-      if (!isRemoteHandle) {
+      // Always try local user endpoint first (it's fast and will 404 if not found)
+      if (isLikelyLocal) {
         try {
           const profileData = await users.get(username);
           setActor(profileData.actor);

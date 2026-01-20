@@ -29,6 +29,11 @@ import {
   getCachedTrendingUsers,
   setCachedTrendingUsers,
 } from "./cache.ts";
+import {
+  getNotifications,
+  getUnreadCount,
+  markAsRead,
+} from "./notifications.ts";
 
 type Env = {
   Variables: {
@@ -650,7 +655,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
     const { content, in_reply_to, attachments, sensitive } = await c.req.json<{
       content: string;
-      in_reply_to?: number;
+      in_reply_to?: string;  // UUID/public_id
       attachments?: AttachmentInput[];
       sensitive?: boolean;
     }>();
@@ -669,10 +674,10 @@ export function createApi(db: DB, federation: Federation<void>) {
       return c.json({ error: "Maximum 4 attachments allowed" }, 400);
     }
 
-    // Check if replying to a valid post
+    // Check if replying to a valid post (in_reply_to is a UUID/public_id)
     let replyToPost = null;
     if (in_reply_to) {
-      replyToPost = await db.getPostById(in_reply_to);
+      replyToPost = await db.getPostByPublicId(in_reply_to);
       if (!replyToPost) {
         return c.json({ error: "Parent post not found" }, 404);
       }
@@ -1479,6 +1484,69 @@ export function createApi(db: DB, federation: Federation<void>) {
     }
 
     return c.json(result);
+  });
+
+  // ============ Notifications ============
+
+  // GET /notifications - Get user's notifications
+  api.get("/notifications", async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const db = c.get("db");
+    const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100);
+    const offset = parseInt(c.req.query("offset") || "0");
+
+    const notifications = await getNotifications(db, actor.id, limit, offset);
+
+    return c.json({
+      notifications: notifications.map((n) => ({
+        id: n.id,
+        type: n.type,
+        read: n.read,
+        created_at: formatDate(n.created_at),
+        actor: {
+          id: n.actor.public_id,
+          handle: n.actor.handle,
+          name: n.actor.name,
+          avatar_url: n.actor.avatar_url,
+        },
+        post: n.post ? {
+          id: n.post.public_id,
+          content: n.post.content.slice(0, 100), // Preview only
+        } : null,
+      })),
+    });
+  });
+
+  // GET /notifications/unread/count - Get unread notification count
+  api.get("/notifications/unread/count", async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const db = c.get("db");
+    const count = await getUnreadCount(db, actor.id);
+
+    return c.json({ count });
+  });
+
+  // POST /notifications/read - Mark notifications as read
+  api.post("/notifications/read", async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const db = c.get("db");
+    const body = await c.req.json<{ ids?: number[] }>();
+
+    await markAsRead(db, actor.id, body.ids);
+
+    return c.json({ ok: true });
   });
 
   return api;

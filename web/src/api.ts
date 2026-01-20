@@ -286,3 +286,33 @@ export const tags = {
   search: (q: string) =>
     fetchJson<{ tags: { name: string; count: number }[] }>(`/tags/search?q=${encodeURIComponent(q)}`),
 };
+
+// Notifications
+export interface Notification {
+  id: number;
+  type: 'like' | 'boost' | 'follow' | 'reply' | 'mention';
+  read: boolean;
+  created_at: string;
+  actor: {
+    id: string;
+    handle: string;
+    name: string | null;
+    avatar_url: string | null;
+  };
+  post: {
+    id: string;
+    content: string;
+  } | null;
+}
+
+export const notifications = {
+  getAll: (limit = 50, offset = 0) =>
+    fetchJson<{ notifications: Notification[] }>(`/notifications?limit=${limit}&offset=${offset}`),
+  getUnreadCount: () =>
+    fetchJson<{ count: number }>('/notifications/unread/count'),
+  markAsRead: (ids?: number[]) =>
+    fetchJson<{ ok: boolean }>('/notifications/read', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+};

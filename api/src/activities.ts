@@ -18,6 +18,7 @@ import {
 import type { DB, Actor } from "./db.ts";
 import { invalidateProfileCache } from "./cache.ts";
 import { updatePostScore, updateParentPostScore } from "./scoring.ts";
+import { createNotification, removeNotification } from "./notifications.ts";
 
 // Activity processing result
 export interface ProcessResult {
@@ -549,8 +550,14 @@ async function processCreate(
 
   console.log(`[Create] Post from ${authorActor.handle}: ${post.id}`);
 
-  // If this is a reply, update the parent post's hot score
-  await updateParentPostScore(db, inReplyToId);
+  // If this is a reply, update the parent post's hot score and notify
+  if (inReplyToId) {
+    await updateParentPostScore(db, inReplyToId);
+    const parentPost = await db.getPostById(inReplyToId);
+    if (parentPost) {
+      await createNotification(db, 'reply', authorActor.id, parentPost.actor_id, post.id);
+    }
+  }
 
   // For outbound: send to followers and (if reply) to original author
   if (direction === "outbound" && localUsername) {
@@ -627,6 +634,7 @@ async function processLike(
   // Add the like and update hot score
   await db.addLike(likerActor.id, post.id);
   await updatePostScore(db, post.id);
+  await createNotification(db, 'like', likerActor.id, post.actor_id, post.id);
   console.log(`[Like] ${likerActor.handle} liked post ${post.id}`);
 
   // For outbound: send to post author if remote
@@ -695,6 +703,7 @@ async function processAnnounce(
   // Add the boost and update hot score
   await db.addBoost(boosterActor.id, post.id);
   await updatePostScore(db, post.id);
+  await createNotification(db, 'boost', boosterActor.id, post.actor_id, post.id);
   console.log(`[Announce] ${boosterActor.handle} boosted post ${post.id}`);
 
   // For outbound: send to followers and post author
@@ -764,6 +773,7 @@ async function processFollow(
 
   // Add the follow relationship
   await db.addFollow(followerActor.id, targetActor.id);
+  await createNotification(db, 'follow', followerActor.id, targetActor.id);
   console.log(`[Follow] ${followerActor.handle} -> ${targetActor.handle}`);
 
   // For inbound: if target is local, send Accept
@@ -880,6 +890,7 @@ async function processUndo(
     if (!targetActor) return;
 
     await db.removeFollow(actorRecord.id, targetActor.id);
+    await removeNotification(db, 'follow', actorRecord.id, targetActor.id);
     console.log(`[Undo Follow] ${actorRecord.handle} unfollowed ${targetActor.handle}`);
 
     // For outbound to remote: send Undo activity
@@ -906,6 +917,7 @@ async function processUndo(
 
     await db.removeLike(actorRecord.id, post.id);
     await updatePostScore(db, post.id);
+    await removeNotification(db, 'like', actorRecord.id, post.actor_id, post.id);
     console.log(`[Undo Like] ${actorRecord.handle} unliked post ${post.id}`);
 
     // For outbound to remote: send Undo activity
@@ -935,6 +947,7 @@ async function processUndo(
 
     await db.removeBoost(actorRecord.id, post.id);
     await updatePostScore(db, post.id);
+    await removeNotification(db, 'boost', actorRecord.id, post.actor_id, post.id);
     console.log(`[Undo Announce] ${actorRecord.handle} unboosted post ${post.id}`);
 
     // For outbound: send to followers and post author
