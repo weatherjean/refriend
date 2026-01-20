@@ -463,22 +463,33 @@ export class DB {
 
   // ============ Posts ============
 
-  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count"> & { created_at?: string }): Promise<Post> {
+  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score"> & { created_at?: string }): Promise<Post> {
     return this.query(async (client) => {
-      if (post.created_at) {
-        const result = await client.queryObject<Post>`
-          INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, created_at)
-          VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${post.created_at})
-          RETURNING *
-        `;
+      await client.queryArray`BEGIN`;
+      try {
+        let result;
+        if (post.created_at) {
+          result = await client.queryObject<Post>`
+            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, created_at)
+            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${post.created_at})
+            RETURNING *
+          `;
+        } else {
+          result = await client.queryObject<Post>`
+            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive)
+            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive})
+            RETURNING *
+          `;
+        }
+        // Increment parent's replies_count if this is a reply
+        if (post.in_reply_to_id) {
+          await client.queryArray`UPDATE posts SET replies_count = replies_count + 1 WHERE id = ${post.in_reply_to_id}`;
+        }
+        await client.queryArray`COMMIT`;
         return result.rows[0];
-      } else {
-        const result = await client.queryObject<Post>`
-          INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive)
-          VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive})
-          RETURNING *
-        `;
-        return result.rows[0];
+      } catch (e) {
+        await client.queryArray`ROLLBACK`;
+        throw e;
       }
     });
   }
@@ -826,7 +837,26 @@ export class DB {
 
   async deletePost(id: number): Promise<void> {
     await this.query(async (client) => {
-      await client.queryArray`DELETE FROM posts WHERE id = ${id}`;
+      await client.queryArray`BEGIN`;
+      try {
+        // Get the post to check if it's a reply
+        const result = await client.queryObject<{ in_reply_to_id: number | null }>`
+          SELECT in_reply_to_id FROM posts WHERE id = ${id}
+        `;
+        const post = result.rows[0];
+
+        // Delete the post
+        await client.queryArray`DELETE FROM posts WHERE id = ${id}`;
+
+        // Decrement parent's replies_count if this was a reply
+        if (post?.in_reply_to_id) {
+          await client.queryArray`UPDATE posts SET replies_count = GREATEST(0, replies_count - 1) WHERE id = ${post.in_reply_to_id}`;
+        }
+        await client.queryArray`COMMIT`;
+      } catch (e) {
+        await client.queryArray`ROLLBACK`;
+        throw e;
+      }
     });
   }
 
@@ -1084,16 +1114,39 @@ export class DB {
 
   async addBoost(actorId: number, postId: number): Promise<void> {
     await this.query(async (client) => {
-      await client.queryArray`
-        INSERT INTO boosts (actor_id, post_id) VALUES (${actorId}, ${postId})
-        ON CONFLICT DO NOTHING
-      `;
+      await client.queryArray`BEGIN`;
+      try {
+        const result = await client.queryObject<{ id: number }>`
+          INSERT INTO boosts (actor_id, post_id) VALUES (${actorId}, ${postId})
+          ON CONFLICT DO NOTHING
+          RETURNING id
+        `;
+        if (result.rows.length > 0) {
+          await client.queryArray`UPDATE posts SET boosts_count = boosts_count + 1 WHERE id = ${postId}`;
+        }
+        await client.queryArray`COMMIT`;
+      } catch (e) {
+        await client.queryArray`ROLLBACK`;
+        throw e;
+      }
     });
   }
 
   async removeBoost(actorId: number, postId: number): Promise<void> {
     await this.query(async (client) => {
-      await client.queryArray`DELETE FROM boosts WHERE actor_id = ${actorId} AND post_id = ${postId}`;
+      await client.queryArray`BEGIN`;
+      try {
+        const result = await client.queryObject<{ id: number }>`
+          DELETE FROM boosts WHERE actor_id = ${actorId} AND post_id = ${postId} RETURNING id
+        `;
+        if (result.rows.length > 0) {
+          await client.queryArray`UPDATE posts SET boosts_count = GREATEST(0, boosts_count - 1) WHERE id = ${postId}`;
+        }
+        await client.queryArray`COMMIT`;
+      } catch (e) {
+        await client.queryArray`ROLLBACK`;
+        throw e;
+      }
     });
   }
 

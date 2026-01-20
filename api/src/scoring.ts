@@ -32,23 +32,23 @@ function calculateHotScore(
 
 /**
  * Update a post's hot score based on current engagement metrics
+ * Uses denormalized columns for O(1) reads instead of COUNT subqueries
  */
 export async function updatePostScore(db: DB, postId: number): Promise<void> {
   await db.query(async (client) => {
-    // Get post age, likes, boosts count, and replies count in one query
     const result = await client.queryObject<{
       likes_count: number;
-      boosts_count: bigint;
-      replies_count: bigint;
+      boosts_count: number;
+      replies_count: number;
       age_hours: number;
     }>`
       SELECT
-        p.likes_count,
-        (SELECT COUNT(*) FROM boosts WHERE post_id = p.id) as boosts_count,
-        (SELECT COUNT(*) FROM posts WHERE in_reply_to_id = p.id) as replies_count,
-        EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 3600 as age_hours
-      FROM posts p
-      WHERE p.id = ${postId}
+        likes_count,
+        boosts_count,
+        replies_count,
+        EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600 as age_hours
+      FROM posts
+      WHERE id = ${postId}
     `;
 
     if (result.rows.length === 0) return;
@@ -56,8 +56,8 @@ export async function updatePostScore(db: DB, postId: number): Promise<void> {
     const row = result.rows[0];
     const hotScore = calculateHotScore(
       row.likes_count,
-      Number(row.boosts_count),
-      Number(row.replies_count),
+      row.boosts_count,
+      row.replies_count,
       row.age_hours
     );
 
