@@ -12,6 +12,9 @@ import { ExplorePage } from './pages/ExplorePage';
 import { HotPage } from './pages/HotPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { ActorByIdPage } from './pages/ActorByIdPage';
+import { CommunitiesPage } from './pages/CommunitiesPage';
+import { CommunityPage } from './pages/CommunityPage';
+import { CreateCommunityPage } from './pages/CreateCommunityPage';
 import { useAuth } from './context/AuthContext';
 
 function App() {
@@ -40,6 +43,9 @@ function App() {
         <Route path="/u/:handle/*" element={<ActorPage />} />
         <Route path="/actor/:id" element={<ActorByIdPage />} />
         <Route path="/tags/:tag" element={<TagPage />} />
+        <Route path="/communities" element={<CommunitiesPage />} />
+        <Route path="/communities/new" element={<CreateCommunityPage />} />
+        <Route path="/c/:name" element={<CommunityPage />} />
       </Routes>
     </Layout>
   );

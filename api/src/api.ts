@@ -18,6 +18,7 @@ import {
 } from "@fedify/fedify";
 import type { Federation } from "@fedify/fedify";
 import type { DB, Actor, Post, PostWithActor, User } from "./db.ts";
+import type { CommunityDB } from "./communities/db.ts";
 import { processActivity, persistActor } from "./activities.ts";
 import { saveAvatar, saveMedia, deleteMedia } from "./storage.ts";
 import {
@@ -35,10 +36,12 @@ import {
   markAsRead,
   deleteNotifications,
 } from "./notifications.ts";
+import { createCommunityRoutes } from "./communities/routes.ts";
 
 type Env = {
   Variables: {
     db: DB;
+    communityDb: CommunityDB;
     domain: string;
     user: User | null;
     actor: Actor | null;
@@ -65,7 +68,7 @@ function formatDate(date: string | Date | unknown): string {
   return String(date);
 }
 
-export function createApi(db: DB, federation: Federation<void>) {
+export function createApi(db: DB, federation: Federation<void>, communityDb: CommunityDB) {
   const api = new Hono<Env>();
 
   // CORS for frontend
@@ -86,6 +89,7 @@ export function createApi(db: DB, federation: Federation<void>) {
   // Inject db and check session (domain comes from main.ts middleware)
   api.use("/*", async (c, next) => {
     c.set("db", db);
+    c.set("communityDb", communityDb);
     // Domain is set by the middleware in main.ts, use it or fall back
     const domain = c.get("domain") || new URL(c.req.url).host;
     c.set("domain", domain);
@@ -600,6 +604,7 @@ export function createApi(db: DB, federation: Federation<void>) {
 
   api.get("/posts", async (c) => {
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const actor = c.get("actor");
     const timeline = c.req.query("timeline") || "public";
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
@@ -617,8 +622,39 @@ export function createApi(db: DB, federation: Federation<void>) {
       ? resultPosts[resultPosts.length - 1].id
       : null;
 
+    // Enrich posts with standard data
+    const enrichedPosts = await enrichPostsBatch(db, resultPosts, actor?.id);
+
+    // For home timeline, add community info to posts
+    if (timeline === "home" && communityDb) {
+      const postIds = resultPosts.map(p => p.id);
+      const communitiesMap = await communityDb.getCommunitiesForPosts(postIds);
+
+      // Add community info to posts that belong to communities
+      const postsWithCommunities = enrichedPosts.map((post, index) => {
+        const community = communitiesMap.get(resultPosts[index].id);
+        if (community) {
+          return {
+            ...post,
+            community: {
+              id: community.public_id,
+              name: community.name,
+              handle: community.handle,
+              avatar_url: community.avatar_url,
+            },
+          };
+        }
+        return post;
+      });
+
+      return c.json({
+        posts: postsWithCommunities,
+        next_cursor: nextCursor,
+      });
+    }
+
     return c.json({
-      posts: await enrichPostsBatch(db, resultPosts, actor?.id),
+      posts: enrichedPosts,
       next_cursor: nextCursor,
     });
   });
@@ -681,6 +717,16 @@ export function createApi(db: DB, federation: Federation<void>) {
       replyToPost = await db.getPostByPublicId(in_reply_to);
       if (!replyToPost) {
         return c.json({ error: "Parent post not found" }, 404);
+      }
+
+      // Check if the parent post belongs to a community and if user is banned
+      const communityDb = c.get("communityDb");
+      const community = await communityDb.getCommunityForPost(replyToPost.id);
+      if (community) {
+        const isBanned = await communityDb.isBanned(community.id, actor.id);
+        if (isBanned) {
+          return c.json({ error: "You are banned from this community" }, 403);
+        }
       }
     }
 
@@ -1565,6 +1611,10 @@ export function createApi(db: DB, federation: Federation<void>) {
     return c.json({ ok: true });
   });
 
+  // ============ Communities ============
+  const communityRoutes = createCommunityRoutes(db, federation);
+  api.route("/communities", communityRoutes);
+
   return api;
 }
 
@@ -1578,7 +1628,7 @@ function sanitizeUser(user: User) {
   };
 }
 
-function sanitizeActor(actor: Actor) {
+export function sanitizeActor(actor: Actor) {
   return {
     id: actor.public_id,
     uri: actor.uri,
@@ -1648,7 +1698,7 @@ async function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
 }
 
 // Batch enrichment for feeds (optimized - no boost count)
-async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: number | null) {
+export async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: number | null) {
   if (posts.length === 0) return [];
 
   const postIds = posts.map(p => p.id);

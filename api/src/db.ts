@@ -20,6 +20,7 @@ export interface Actor {
   shared_inbox_url: string | null;
   url: string | null;
   user_id: number | null;
+  actor_type: "Person" | "Group";
   created_at: string;
 }
 
@@ -102,6 +103,11 @@ export class DB {
 
   constructor(connectionString: string) {
     this.pool = new Pool(connectionString, 10);
+  }
+
+  // Expose pool for community DB
+  getPool(): Pool {
+    return this.pool;
   }
 
   async init(schemaPath: string) {
@@ -212,9 +218,9 @@ export class DB {
   async createActor(actor: Omit<Actor, "id" | "public_id" | "created_at">): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
-        INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id)
+        INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type)
         VALUES (${actor.uri}, ${actor.handle}, ${actor.name}, ${actor.bio}, ${actor.avatar_url},
-                ${actor.inbox_url}, ${actor.shared_inbox_url}, ${actor.url}, ${actor.user_id})
+                ${actor.inbox_url}, ${actor.shared_inbox_url}, ${actor.url}, ${actor.user_id}, ${actor.actor_type})
         RETURNING *
       `;
       return result.rows[0];
@@ -272,12 +278,22 @@ export class DB {
 
   async getActorByUsername(username: string): Promise<Actor | null> {
     return this.query(async (client) => {
-      const result = await client.queryObject<Actor>`
+      // First try to find a user by username
+      const userResult = await client.queryObject<Actor>`
         SELECT a.* FROM actors a
         JOIN users u ON a.user_id = u.id
         WHERE u.username = ${username}
       `;
-      return result.rows[0] || null;
+      if (userResult.rows[0]) {
+        return userResult.rows[0];
+      }
+
+      // Then try to find a community (Group) by name
+      const communityResult = await client.queryObject<Actor>`
+        SELECT * FROM actors
+        WHERE actor_type = 'Group' AND name = ${username}
+      `;
+      return communityResult.rows[0] || null;
     });
   }
 
@@ -328,9 +344,9 @@ export class DB {
   async upsertActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "user_id">): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
-        INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id)
+        INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type)
         VALUES (${actor.uri}, ${actor.handle}, ${actor.name}, ${actor.bio}, ${actor.avatar_url},
-                ${actor.inbox_url}, ${actor.shared_inbox_url}, ${actor.url}, NULL)
+                ${actor.inbox_url}, ${actor.shared_inbox_url}, ${actor.url}, NULL, ${actor.actor_type})
         ON CONFLICT(uri) DO UPDATE SET
           handle = EXCLUDED.handle,
           name = EXCLUDED.name,
@@ -338,7 +354,8 @@ export class DB {
           avatar_url = EXCLUDED.avatar_url,
           inbox_url = EXCLUDED.inbox_url,
           shared_inbox_url = EXCLUDED.shared_inbox_url,
-          url = EXCLUDED.url
+          url = EXCLUDED.url,
+          actor_type = EXCLUDED.actor_type
         RETURNING *
       `;
       return result.rows[0];
@@ -369,6 +386,37 @@ export class DB {
         INSERT INTO keys (user_id, type, private_key, public_key)
         VALUES (${userId}, ${type}, ${privateKey}, ${publicKey})
         ON CONFLICT(user_id, type) DO UPDATE SET
+          private_key = EXCLUDED.private_key,
+          public_key = EXCLUDED.public_key
+        RETURNING *
+      `;
+      return result.rows[0];
+    });
+  }
+
+  // Keys by actor_id (for communities/Groups)
+  async getKeyPairsByActorId(actorId: number): Promise<KeyPair[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<KeyPair>`SELECT * FROM keys WHERE actor_id = ${actorId}`;
+      return result.rows;
+    });
+  }
+
+  async getKeyPairByActorId(actorId: number, type: KeyPair["type"]): Promise<KeyPair | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<KeyPair>`
+        SELECT * FROM keys WHERE actor_id = ${actorId} AND type = ${type}
+      `;
+      return result.rows[0] || null;
+    });
+  }
+
+  async saveKeyPairByActorId(actorId: number, type: KeyPair["type"], privateKey: string, publicKey: string): Promise<KeyPair> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<KeyPair>`
+        INSERT INTO keys (actor_id, type, private_key, public_key)
+        VALUES (${actorId}, ${type}, ${privateKey}, ${publicKey})
+        ON CONFLICT(actor_id, type) DO UPDATE SET
           private_key = EXCLUDED.private_key,
           public_key = EXCLUDED.public_key
         RETURNING *
@@ -617,6 +665,7 @@ export class DB {
         shared_inbox_url: row.author_shared_inbox_url as string | null,
         url: row.author_url as string | null,
         user_id: row.author_user_id as number | null,
+        actor_type: (row.author_actor_type as "Person" | "Group") || "Person",
         created_at: String(row.author_created_at),
       },
     };
@@ -627,7 +676,7 @@ export class DB {
     a.id as author_id, a.public_id as author_public_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
     a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
     a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,
-    a.created_at as author_created_at
+    a.actor_type as author_actor_type, a.created_at as author_created_at
   `;
 
   async getPublicTimelineWithActor(limit = 20, before?: number): Promise<PostWithActor[]> {
@@ -658,17 +707,33 @@ export class DB {
 
   async getHomeFeedWithActor(actorId: number, limit = 20, before?: number): Promise<PostWithActor[]> {
     return this.query(async (client) => {
-      const query = before
-        ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
-           JOIN follows f ON p.actor_id = f.following_id
-           WHERE f.follower_id = $1 AND p.in_reply_to_id IS NULL AND p.id < $2
-           ORDER BY p.id DESC LIMIT $3`
-        : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
-           JOIN follows f ON p.actor_id = f.following_id
-           WHERE f.follower_id = $1 AND p.in_reply_to_id IS NULL
-           ORDER BY p.id DESC LIMIT $2`;
+      // Combine posts from followed users AND approved posts from joined communities
+      const baseQuery = `
+        SELECT DISTINCT ON (p.id) ${this.postWithActorSelect} FROM (
+          -- Posts from followed users (Person actors)
+          SELECT p.id FROM posts p
+          JOIN follows f ON p.actor_id = f.following_id
+          JOIN actors following_actor ON f.following_id = following_actor.id
+          WHERE f.follower_id = $1 AND p.in_reply_to_id IS NULL
+            AND following_actor.actor_type = 'Person'
+            ${before ? 'AND p.id < $2' : ''}
+
+          UNION
+
+          -- Approved posts from joined communities (Group actors)
+          SELECT p.id FROM posts p
+          JOIN community_posts cp ON p.id = cp.post_id
+          JOIN follows f ON cp.community_id = f.following_id
+          WHERE f.follower_id = $1 AND cp.status = 'approved' AND p.in_reply_to_id IS NULL
+            ${before ? 'AND p.id < $2' : ''}
+        ) AS post_ids
+        JOIN posts p ON p.id = post_ids.id
+        JOIN actors a ON p.actor_id = a.id
+        ORDER BY p.id DESC
+        LIMIT ${before ? '$3' : '$2'}
+      `;
       const params = before ? [actorId, before, limit] : [actorId, limit];
-      const result = await client.queryObject(query, params);
+      const result = await client.queryObject(baseQuery, params);
       return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
     });
   }

@@ -77,6 +77,9 @@ export function Layout({ children }: LayoutProps) {
             <Link to="/explore" className="list-group-item list-group-item-action">
               <i className="bi bi-hash me-2"></i> Tags
             </Link>
+            <Link to="/communities" className="list-group-item list-group-item-action">
+              <i className="bi bi-people me-2"></i> Communities
+            </Link>
             {user && actor && (
               <>
                 <Link to="/notifications" className="list-group-item list-group-item-action d-flex align-items-center">

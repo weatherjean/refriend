@@ -1,0 +1,733 @@
+import { Pool, PoolClient } from "postgres";
+import type { Actor, Post, PostWithActor } from "../db.ts";
+
+// Community-specific types
+export interface CommunitySettings {
+  actor_id: number;
+  require_approval: boolean;
+  created_by: number | null;
+}
+
+export interface CommunityAdmin {
+  id: number;
+  community_id: number;
+  actor_id: number;
+  role: "owner" | "admin";
+  created_at: string;
+}
+
+export interface CommunityBan {
+  id: number;
+  community_id: number;
+  actor_id: number;
+  reason: string | null;
+  banned_by: number | null;
+  created_at: string;
+}
+
+export interface CommunityPost {
+  id: number;
+  community_id: number;
+  post_id: number;
+  status: "pending" | "approved" | "rejected";
+  submitted_at: string;
+  reviewed_at: string | null;
+  reviewed_by: number | null;
+}
+
+export interface Community extends Actor {
+  settings?: CommunitySettings;
+  member_count?: number;
+}
+
+export interface CommunityAdminWithActor extends CommunityAdmin {
+  actor: Actor;
+}
+
+export interface CommunityBanWithActor extends CommunityBan {
+  actor: Actor;
+  banned_by_actor?: Actor;
+}
+
+export class CommunityDB {
+  constructor(private pool: Pool) {}
+
+  private async query<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      return await fn(client);
+    } finally {
+      client.release();
+    }
+  }
+
+  // ============ Community CRUD ============
+
+  async createCommunity(
+    name: string,
+    domain: string,
+    creatorActorId: number,
+    options: { bio?: string; requireApproval?: boolean } = {}
+  ): Promise<Community> {
+    return this.query(async (client) => {
+      await client.queryArray`BEGIN`;
+      try {
+        // Create the actor with type 'Group'
+        // Use standard @name@domain format (same as users)
+        const handle = `@${name}@${domain}`;
+        const uri = `https://${domain}/users/${name}`;
+        const inboxUrl = `https://${domain}/users/${name}/inbox`;
+        const url = `https://${domain}/c/${name}`;
+
+        const actorResult = await client.queryObject<Actor>`
+          INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type)
+          VALUES (${uri}, ${handle}, ${name}, ${options.bio || null}, NULL, ${inboxUrl}, ${inboxUrl}, ${url}, NULL, 'Group')
+          RETURNING *
+        `;
+        const actor = actorResult.rows[0];
+
+        // Create community settings
+        await client.queryArray`
+          INSERT INTO community_settings (actor_id, require_approval, created_by)
+          VALUES (${actor.id}, ${options.requireApproval || false}, ${creatorActorId})
+        `;
+
+        // Add creator as owner
+        await client.queryArray`
+          INSERT INTO community_admins (community_id, actor_id, role)
+          VALUES (${actor.id}, ${creatorActorId}, 'owner')
+        `;
+
+        // Creator automatically follows the community
+        await client.queryArray`
+          INSERT INTO follows (follower_id, following_id)
+          VALUES (${creatorActorId}, ${actor.id})
+          ON CONFLICT DO NOTHING
+        `;
+
+        await client.queryArray`COMMIT`;
+        return actor as Community;
+      } catch (e) {
+        await client.queryArray`ROLLBACK`;
+        throw e;
+      }
+    });
+  }
+
+  async getCommunityByName(name: string): Promise<Community | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Community>`
+        SELECT a.*, cs.require_approval, cs.created_by,
+               (SELECT COUNT(*) FROM follows WHERE following_id = a.id) as member_count
+        FROM actors a
+        LEFT JOIN community_settings cs ON a.id = cs.actor_id
+        WHERE a.actor_type = 'Group'
+          AND (a.handle ILIKE ${'@' + name + '@%'} OR a.name = ${name})
+        LIMIT 1
+      `;
+      if (!result.rows[0]) return null;
+      const row = result.rows[0] as Record<string, unknown>;
+      return {
+        ...result.rows[0],
+        member_count: Number(row.member_count || 0),
+        settings: row.require_approval !== undefined ? {
+          actor_id: result.rows[0].id,
+          require_approval: row.require_approval as boolean,
+          created_by: row.created_by as number | null,
+        } : undefined,
+      };
+    });
+  }
+
+  async getCommunityByActorId(actorId: number): Promise<Community | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Community>`
+        SELECT a.*, cs.require_approval, cs.created_by,
+               (SELECT COUNT(*) FROM follows WHERE following_id = a.id) as member_count
+        FROM actors a
+        LEFT JOIN community_settings cs ON a.id = cs.actor_id
+        WHERE a.id = ${actorId} AND a.actor_type = 'Group'
+      `;
+      if (!result.rows[0]) return null;
+      const row = result.rows[0] as Record<string, unknown>;
+      return {
+        ...result.rows[0],
+        member_count: Number(row.member_count || 0),
+        settings: row.require_approval !== undefined ? {
+          actor_id: result.rows[0].id,
+          require_approval: row.require_approval as boolean,
+          created_by: row.created_by as number | null,
+        } : undefined,
+      };
+    });
+  }
+
+  async updateCommunity(
+    communityId: number,
+    updates: { name?: string; bio?: string; avatar_url?: string; require_approval?: boolean }
+  ): Promise<Community | null> {
+    return this.query(async (client) => {
+      await client.queryArray`BEGIN`;
+      try {
+        // Update actor fields
+        if (updates.name !== undefined || updates.bio !== undefined || updates.avatar_url !== undefined) {
+          const sets: string[] = [];
+          const values: unknown[] = [];
+          let paramNum = 1;
+
+          if (updates.name !== undefined) {
+            sets.push(`name = $${paramNum++}`);
+            values.push(updates.name);
+          }
+          if (updates.bio !== undefined) {
+            sets.push(`bio = $${paramNum++}`);
+            values.push(updates.bio);
+          }
+          if (updates.avatar_url !== undefined) {
+            sets.push(`avatar_url = $${paramNum++}`);
+            values.push(updates.avatar_url);
+          }
+
+          if (sets.length > 0) {
+            values.push(communityId);
+            await client.queryObject(
+              `UPDATE actors SET ${sets.join(", ")} WHERE id = $${paramNum}`,
+              values
+            );
+          }
+        }
+
+        // Update settings
+        if (updates.require_approval !== undefined) {
+          await client.queryArray`
+            UPDATE community_settings SET require_approval = ${updates.require_approval}
+            WHERE actor_id = ${communityId}
+          `;
+        }
+
+        await client.queryArray`COMMIT`;
+        return this.getCommunityByActorId(communityId);
+      } catch (e) {
+        await client.queryArray`ROLLBACK`;
+        throw e;
+      }
+    });
+  }
+
+  async deleteCommunity(communityId: number): Promise<void> {
+    await this.query(async (client) => {
+      // Cascading deletes will handle community_settings, community_admins, etc.
+      await client.queryArray`DELETE FROM actors WHERE id = ${communityId} AND actor_type = 'Group'`;
+    });
+  }
+
+  async listCommunities(limit = 20, before?: number): Promise<Community[]> {
+    return this.query(async (client) => {
+      const query = before
+        ? `SELECT a.*, cs.require_approval, cs.created_by,
+                  (SELECT COUNT(*) FROM follows WHERE following_id = a.id) as member_count
+           FROM actors a
+           LEFT JOIN community_settings cs ON a.id = cs.actor_id
+           WHERE a.actor_type = 'Group' AND a.id < $1
+           ORDER BY a.id DESC LIMIT $2`
+        : `SELECT a.*, cs.require_approval, cs.created_by,
+                  (SELECT COUNT(*) FROM follows WHERE following_id = a.id) as member_count
+           FROM actors a
+           LEFT JOIN community_settings cs ON a.id = cs.actor_id
+           WHERE a.actor_type = 'Group'
+           ORDER BY a.id DESC LIMIT $1`;
+      const params = before ? [before, limit] : [limit];
+      const result = await client.queryObject(query, params);
+      return result.rows.map((row: Record<string, unknown>) => ({
+        ...(row as Actor),
+        member_count: Number(row.member_count || 0),
+        settings: row.require_approval !== undefined ? {
+          actor_id: row.id as number,
+          require_approval: row.require_approval as boolean,
+          created_by: row.created_by as number | null,
+        } : undefined,
+      })) as Community[];
+    });
+  }
+
+  // ============ Admin Management ============
+
+  async getCommunityAdmins(communityId: number): Promise<CommunityAdminWithActor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<CommunityAdmin & {
+        actor_public_id: string;
+        actor_uri: string;
+        actor_handle: string;
+        actor_name: string | null;
+        actor_bio: string | null;
+        actor_avatar_url: string | null;
+        actor_url: string | null;
+        actor_user_id: number | null;
+        actor_created_at: string;
+      }>`
+        SELECT ca.*,
+          a.public_id as actor_public_id,
+          a.uri as actor_uri,
+          a.handle as actor_handle,
+          a.name as actor_name,
+          a.bio as actor_bio,
+          a.avatar_url as actor_avatar_url,
+          a.url as actor_url,
+          a.user_id as actor_user_id,
+          a.created_at as actor_created_at
+        FROM community_admins ca
+        JOIN actors a ON ca.actor_id = a.id
+        WHERE ca.community_id = ${communityId}
+        ORDER BY ca.role = 'owner' DESC, ca.created_at ASC
+      `;
+      return result.rows.map(row => ({
+        id: row.id,
+        community_id: row.community_id,
+        actor_id: row.actor_id,
+        role: row.role,
+        created_at: row.created_at,
+        actor: {
+          id: row.actor_id,
+          public_id: row.actor_public_id,
+          uri: row.actor_uri,
+          handle: row.actor_handle,
+          name: row.actor_name,
+          bio: row.actor_bio,
+          avatar_url: row.actor_avatar_url,
+          url: row.actor_url,
+          user_id: row.actor_user_id,
+          created_at: row.actor_created_at,
+        } as Actor,
+      }));
+    });
+  }
+
+  async addCommunityAdmin(communityId: number, actorId: number, role: "owner" | "admin"): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        INSERT INTO community_admins (community_id, actor_id, role)
+        VALUES (${communityId}, ${actorId}, ${role})
+        ON CONFLICT (community_id, actor_id) DO UPDATE SET role = ${role}
+      `;
+    });
+  }
+
+  async removeCommunityAdmin(communityId: number, actorId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        DELETE FROM community_admins
+        WHERE community_id = ${communityId} AND actor_id = ${actorId} AND role != 'owner'
+      `;
+    });
+  }
+
+  async isAdmin(communityId: number, actorId: number): Promise<boolean> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        SELECT 1 FROM community_admins WHERE community_id = ${communityId} AND actor_id = ${actorId}
+      `;
+      return result.rows.length > 0;
+    });
+  }
+
+  async isOwner(communityId: number, actorId: number): Promise<boolean> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        SELECT 1 FROM community_admins
+        WHERE community_id = ${communityId} AND actor_id = ${actorId} AND role = 'owner'
+      `;
+      return result.rows.length > 0;
+    });
+  }
+
+  async getAdminRole(communityId: number, actorId: number): Promise<"owner" | "admin" | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ role: "owner" | "admin" }>`
+        SELECT role FROM community_admins WHERE community_id = ${communityId} AND actor_id = ${actorId}
+      `;
+      return result.rows[0]?.role || null;
+    });
+  }
+
+  async getOwnerCount(communityId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM community_admins
+        WHERE community_id = ${communityId} AND role = 'owner'
+      `;
+      return Number(result.rows[0].count);
+    });
+  }
+
+  // ============ Ban Management ============
+
+  async getCommunityBans(communityId: number, limit = 10, before?: number): Promise<CommunityBanWithActor[]> {
+    return this.query(async (client) => {
+      const query = before
+        ? `SELECT cb.*, a.public_id as actor_public_id, a.uri as actor_uri, a.handle as actor_handle, a.name as actor_name, a.avatar_url as actor_avatar_url
+           FROM community_bans cb
+           JOIN actors a ON cb.actor_id = a.id
+           WHERE cb.community_id = $1 AND cb.id < $2
+           ORDER BY cb.id DESC LIMIT $3`
+        : `SELECT cb.*, a.public_id as actor_public_id, a.uri as actor_uri, a.handle as actor_handle, a.name as actor_name, a.avatar_url as actor_avatar_url
+           FROM community_bans cb
+           JOIN actors a ON cb.actor_id = a.id
+           WHERE cb.community_id = $1
+           ORDER BY cb.id DESC LIMIT $2`;
+      const params = before ? [communityId, before, limit] : [communityId, limit];
+      const result = await client.queryObject<CommunityBan & { actor_public_id: string; actor_uri: string; actor_handle: string; actor_name: string | null; actor_avatar_url: string | null }>(query, params);
+      return result.rows.map(row => ({
+        id: row.id,
+        community_id: row.community_id,
+        actor_id: row.actor_id,
+        reason: row.reason,
+        banned_by: row.banned_by,
+        created_at: row.created_at,
+        actor: {
+          id: row.actor_id,
+          public_id: row.actor_public_id,
+          uri: row.actor_uri,
+          handle: row.actor_handle,
+          name: row.actor_name,
+          avatar_url: row.actor_avatar_url,
+        } as Actor,
+      }));
+    });
+  }
+
+  async banActor(communityId: number, actorId: number, reason: string | null, bannedBy: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        INSERT INTO community_bans (community_id, actor_id, reason, banned_by)
+        VALUES (${communityId}, ${actorId}, ${reason}, ${bannedBy})
+        ON CONFLICT (community_id, actor_id) DO UPDATE SET reason = ${reason}, banned_by = ${bannedBy}
+      `;
+      // Also remove them from followers (members)
+      await client.queryArray`
+        DELETE FROM follows WHERE follower_id = ${actorId} AND following_id = ${communityId}
+      `;
+    });
+  }
+
+  async unbanActor(communityId: number, actorId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        DELETE FROM community_bans WHERE community_id = ${communityId} AND actor_id = ${actorId}
+      `;
+    });
+  }
+
+  async isBanned(communityId: number, actorId: number): Promise<boolean> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        SELECT 1 FROM community_bans WHERE community_id = ${communityId} AND actor_id = ${actorId}
+      `;
+      return result.rows.length > 0;
+    });
+  }
+
+  async getBanCount(communityId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM community_bans WHERE community_id = ${communityId}
+      `;
+      return Number(result.rows[0].count);
+    });
+  }
+
+  // ============ Membership (via follows) ============
+
+  async isMember(communityId: number, actorId: number): Promise<boolean> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        SELECT 1 FROM follows WHERE follower_id = ${actorId} AND following_id = ${communityId}
+      `;
+      return result.rows.length > 0;
+    });
+  }
+
+  async getJoinedCommunities(actorId: number, limit = 50): Promise<Community[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject`
+        SELECT a.id, a.public_id, a.uri, a.handle, a.name, a.bio, a.avatar_url,
+               a.inbox_url, a.shared_inbox_url, a.url, a.user_id, a.actor_type, a.created_at,
+               cs.require_approval, cs.created_by,
+               (SELECT COUNT(*) FROM follows WHERE following_id = a.id) as member_count
+        FROM actors a
+        JOIN follows f ON a.id = f.following_id
+        LEFT JOIN community_settings cs ON a.id = cs.actor_id
+        WHERE f.follower_id = ${actorId} AND a.actor_type = 'Group'
+        ORDER BY a.name ASC
+        LIMIT ${limit}
+      `;
+      return result.rows.map((row: Record<string, unknown>) => ({
+        id: row.id as number,
+        public_id: row.public_id as string,
+        uri: row.uri as string,
+        handle: row.handle as string,
+        name: row.name as string | null,
+        bio: row.bio as string | null,
+        avatar_url: row.avatar_url as string | null,
+        inbox_url: row.inbox_url as string,
+        shared_inbox_url: row.shared_inbox_url as string | null,
+        url: row.url as string | null,
+        user_id: row.user_id as number | null,
+        actor_type: row.actor_type as string,
+        created_at: row.created_at as string,
+        member_count: Number(row.member_count || 0),
+        settings: row.require_approval !== undefined ? {
+          actor_id: row.id as number,
+          require_approval: row.require_approval as boolean,
+          created_by: row.created_by as number | null,
+        } : undefined,
+      })) as Community[];
+    });
+  }
+
+  async getMembers(communityId: number, limit = 50, before?: number): Promise<Actor[]> {
+    return this.query(async (client) => {
+      const query = before
+        ? `SELECT a.* FROM actors a
+           JOIN follows f ON a.id = f.follower_id
+           WHERE f.following_id = $1 AND a.id < $2
+           ORDER BY f.created_at DESC LIMIT $3`
+        : `SELECT a.* FROM actors a
+           JOIN follows f ON a.id = f.follower_id
+           WHERE f.following_id = $1
+           ORDER BY f.created_at DESC LIMIT $2`;
+      const params = before ? [communityId, before, limit] : [communityId, limit];
+      const result = await client.queryObject<Actor>(query, params);
+      return result.rows;
+    });
+  }
+
+  async getMemberCount(communityId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM follows WHERE following_id = ${communityId}
+      `;
+      return Number(result.rows[0].count);
+    });
+  }
+
+  // ============ Community Posts ============
+
+  async submitCommunityPost(communityId: number, postId: number, autoApprove: boolean): Promise<CommunityPost> {
+    return this.query(async (client) => {
+      const status = autoApprove ? "approved" : "pending";
+      const result = await client.queryObject<CommunityPost>`
+        INSERT INTO community_posts (community_id, post_id, status)
+        VALUES (${communityId}, ${postId}, ${status})
+        ON CONFLICT (community_id, post_id) DO UPDATE SET status = ${status}
+        RETURNING *
+      `;
+      return result.rows[0];
+    });
+  }
+
+  async getCommunityPostStatus(communityId: number, postId: number): Promise<CommunityPost | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<CommunityPost>`
+        SELECT * FROM community_posts WHERE community_id = ${communityId} AND post_id = ${postId}
+      `;
+      return result.rows[0] || null;
+    });
+  }
+
+  async approvePost(communityId: number, postId: number, reviewerId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        UPDATE community_posts
+        SET status = 'approved', reviewed_at = NOW(), reviewed_by = ${reviewerId}
+        WHERE community_id = ${communityId} AND post_id = ${postId}
+      `;
+    });
+  }
+
+  async rejectPost(communityId: number, postId: number, reviewerId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        UPDATE community_posts
+        SET status = 'rejected', reviewed_at = NOW(), reviewed_by = ${reviewerId}
+        WHERE community_id = ${communityId} AND post_id = ${postId}
+      `;
+    });
+  }
+
+  async removePost(communityId: number, postId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        DELETE FROM community_posts WHERE community_id = ${communityId} AND post_id = ${postId}
+      `;
+    });
+  }
+
+  async getCommunityPosts(
+    communityId: number,
+    status: "pending" | "approved" | "rejected" | "all" = "approved",
+    limit = 20,
+    before?: number
+  ): Promise<(CommunityPost & { post: Post })[]> {
+    return this.query(async (client) => {
+      let query: string;
+      let params: unknown[];
+
+      const selectColumns = `
+        cp.id as cp_id, cp.community_id, cp.post_id, cp.status, cp.submitted_at, cp.reviewed_at, cp.reviewed_by,
+        p.id as p_id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.sensitive, p.created_at
+      `;
+
+      if (status === "all") {
+        query = before
+          ? `SELECT ${selectColumns} FROM community_posts cp
+             JOIN posts p ON cp.post_id = p.id
+             WHERE cp.community_id = $1 AND p.id < $2
+             ORDER BY p.id DESC LIMIT $3`
+          : `SELECT ${selectColumns} FROM community_posts cp
+             JOIN posts p ON cp.post_id = p.id
+             WHERE cp.community_id = $1
+             ORDER BY p.id DESC LIMIT $2`;
+        params = before ? [communityId, before, limit] : [communityId, limit];
+      } else {
+        query = before
+          ? `SELECT ${selectColumns} FROM community_posts cp
+             JOIN posts p ON cp.post_id = p.id
+             WHERE cp.community_id = $1 AND cp.status = $2 AND p.id < $3
+             ORDER BY p.id DESC LIMIT $4`
+          : `SELECT ${selectColumns} FROM community_posts cp
+             JOIN posts p ON cp.post_id = p.id
+             WHERE cp.community_id = $1 AND cp.status = $2
+             ORDER BY p.id DESC LIMIT $3`;
+        params = before ? [communityId, status, before, limit] : [communityId, status, limit];
+      }
+
+      const result = await client.queryObject(query, params);
+      return result.rows.map((row: Record<string, unknown>) => ({
+        id: row.cp_id as number,
+        community_id: row.community_id as number,
+        post_id: row.post_id as number,
+        status: row.status as "pending" | "approved" | "rejected",
+        submitted_at: String(row.submitted_at),
+        reviewed_at: row.reviewed_at ? String(row.reviewed_at) : null,
+        reviewed_by: row.reviewed_by as number | null,
+        post: {
+          id: row.p_id as number,
+          public_id: row.public_id as string,
+          uri: row.uri as string,
+          actor_id: row.actor_id as number,
+          content: row.content as string,
+          url: row.url as string | null,
+          in_reply_to_id: row.in_reply_to_id as number | null,
+          likes_count: row.likes_count as number,
+          sensitive: row.sensitive as boolean,
+          created_at: String(row.created_at),
+        } as Post,
+      }));
+    });
+  }
+
+  async getPendingPostsCount(communityId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM community_posts
+        WHERE community_id = ${communityId} AND status = 'pending'
+      `;
+      return Number(result.rows[0].count);
+    });
+  }
+
+  // Get community for a post (direct or via parent chain)
+  async getCommunityForPost(postId: number): Promise<Community | null> {
+    return this.query(async (client) => {
+      // First check direct community post
+      const directResult = await client.queryObject<{ community_id: number }>`
+        SELECT community_id FROM community_posts WHERE post_id = ${postId} AND status = 'approved'
+      `;
+      if (directResult.rows[0]) {
+        return this.getCommunityByActorId(directResult.rows[0].community_id);
+      }
+
+      // Check parent chain (recursive via CTE)
+      const parentResult = await client.queryObject<{ community_id: number }>`
+        WITH RECURSIVE post_chain AS (
+          SELECT id, in_reply_to_id FROM posts WHERE id = ${postId}
+          UNION ALL
+          SELECT p.id, p.in_reply_to_id FROM posts p
+          JOIN post_chain pc ON p.id = pc.in_reply_to_id
+        )
+        SELECT cp.community_id FROM community_posts cp
+        JOIN post_chain pc ON cp.post_id = pc.id
+        WHERE cp.status = 'approved'
+        LIMIT 1
+      `;
+      if (parentResult.rows[0]) {
+        return this.getCommunityByActorId(parentResult.rows[0].community_id);
+      }
+
+      return null;
+    });
+  }
+
+  // Get community by URI (for federation)
+  async getCommunityByUri(uri: string): Promise<Community | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        SELECT * FROM actors WHERE uri = ${uri} AND actor_type = 'Group'
+      `;
+      if (!result.rows[0]) return null;
+      return this.getCommunityByActorId(result.rows[0].id);
+    });
+  }
+
+  // Search communities
+  async searchCommunities(query: string, limit = 20): Promise<Community[]> {
+    return this.query(async (client) => {
+      const pattern = `%${query}%`;
+      const result = await client.queryObject<Community>`
+        SELECT a.*, cs.require_approval, cs.created_by,
+               (SELECT COUNT(*) FROM follows WHERE following_id = a.id) as member_count
+        FROM actors a
+        LEFT JOIN community_settings cs ON a.id = cs.actor_id
+        WHERE a.actor_type = 'Group'
+          AND (a.handle ILIKE ${pattern} OR a.name ILIKE ${pattern} OR a.bio ILIKE ${pattern})
+        ORDER BY (SELECT COUNT(*) FROM follows WHERE following_id = a.id) DESC
+        LIMIT ${limit}
+      `;
+      return result.rows.map((row: Record<string, unknown>) => ({
+        ...(row as Actor),
+        member_count: Number(row.member_count || 0),
+        settings: row.require_approval !== undefined ? {
+          actor_id: row.id as number,
+          require_approval: row.require_approval as boolean,
+          created_by: row.created_by as number | null,
+        } : undefined,
+      })) as Community[];
+    });
+  }
+
+  // Get communities for multiple posts (batch) - returns minimal community info for post banners
+  async getCommunitiesForPosts(postIds: number[]): Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>> {
+    if (postIds.length === 0) return new Map();
+
+    return this.query(async (client) => {
+      // Get community info for posts that are in communities
+      const result = await client.queryObject<{ post_id: number; public_id: string; name: string | null; handle: string; avatar_url: string | null }>`
+        SELECT cp.post_id, a.public_id, a.name, a.handle, a.avatar_url
+        FROM community_posts cp
+        JOIN actors a ON cp.community_id = a.id
+        WHERE cp.post_id = ANY(${postIds}::int[]) AND cp.status = 'approved'
+      `;
+
+      const map = new Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>();
+      for (const row of result.rows) {
+        map.set(row.post_id, {
+          public_id: row.public_id,
+          name: row.name,
+          handle: row.handle,
+          avatar_url: row.avatar_url,
+        });
+      }
+      return map;
+    });
+  }
+}

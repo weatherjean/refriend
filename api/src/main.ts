@@ -7,6 +7,9 @@ import { federation, setDomain, setDB } from "./federation.ts";
 import { createApi } from "./api.ts";
 import { initStorage, getUploadsDir } from "./storage.ts";
 import { initCache } from "./cache.ts";
+import { CommunityDB } from "./communities/db.ts";
+import { addCommunityFederationRoutes, setCommunityDB as setCommunityDBFed } from "./communities/federation.ts";
+import { setCommunityDb as setActivityCommunityDb } from "./activities.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
 const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://refriend:refriend@localhost:5432/refriend";
@@ -45,14 +48,20 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// Fedify middleware handles ActivityPub routes
+// Fedify middleware handles ActivityPub routes (including WebFinger)
 app.use(fedifyIntegration(federation, () => undefined));
 
 // Set up database reference for federation
 setDB(db);
 
+// Initialize community federation
+const communityDb = new CommunityDB(db.getPool());
+setCommunityDBFed(communityDb);
+addCommunityFederationRoutes(app);
+setActivityCommunityDb(communityDb);
+
 // API routes for the React frontend - pass domain dynamically
-app.route("/api", createApi(db, federation));
+app.route("/api", createApi(db, federation, communityDb));
 
 // Health check
 app.get("/health", (c) => c.json({ ok: true }));

@@ -51,6 +51,12 @@ export interface Post {
     created_at: string;
     author: Actor | null;
   } | null;
+  community?: {
+    id: string;
+    name: string;
+    handle: string;
+    avatar_url: string | null;
+  };
 }
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -319,4 +325,157 @@ export const notifications = {
     fetchJson<{ ok: boolean }>(`/notifications${ids?.length ? `?ids=${ids.join(',')}` : ''}`, {
       method: 'DELETE',
     }),
+};
+
+// Communities
+export interface Community {
+  id: string;  // UUID
+  uri: string;
+  handle: string;
+  name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  url: string | null;
+  member_count: number;
+  require_approval: boolean;
+  created_at: string;
+}
+
+export interface CommunityModerationInfo {
+  isMember: boolean;
+  isAdmin: boolean;
+  isOwner: boolean;
+  isBanned: boolean;
+  pendingPostsCount: number;
+}
+
+export interface CommunityAdmin {
+  id: number;
+  role: 'owner' | 'admin';
+  actor: Actor;
+  created_at: string;
+}
+
+export interface CommunityBan {
+  id: number;
+  actor: Actor;
+  reason: string | null;
+  created_at: string;
+}
+
+// CommunityPost extends Post with community info
+export interface CommunityPost extends Post {
+  internal_id?: number;
+  submitted_at?: string;
+  community?: {
+    id: string;
+    name: string;
+    handle: string;
+    avatar_url: string | null;
+  };
+}
+
+export interface PaginatedCommunities {
+  communities: Community[];
+  next_cursor: number | null;
+}
+
+export interface PaginatedCommunityPosts {
+  posts: CommunityPost[];
+  next_cursor: number | null;
+}
+
+export const communities = {
+  // List and search
+  list: (params?: PaginationParams) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const queryStr = query.toString();
+    return fetchJson<PaginatedCommunities>(`/communities${queryStr ? '?' + queryStr : ''}`);
+  },
+  search: (q: string, limit = 20) =>
+    fetchJson<{ communities: Community[] }>(`/communities/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  getJoined: (limit = 50) =>
+    fetchJson<{ communities: Community[] }>(`/communities/joined?limit=${limit}`),
+
+  // CRUD
+  create: (name: string, bio?: string, requireApproval?: boolean) =>
+    fetchJson<{ community: Community }>('/communities', {
+      method: 'POST',
+      body: JSON.stringify({ name, bio, require_approval: requireApproval }),
+    }),
+  get: (name: string) =>
+    fetchJson<{ community: Community; moderation: CommunityModerationInfo | null }>(`/communities/${name}`),
+  update: (name: string, updates: { name?: string; bio?: string; avatar_url?: string; require_approval?: boolean }) =>
+    fetchJson<{ community: Community }>(`/communities/${name}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    }),
+  delete: (name: string) =>
+    fetchJson<{ ok: boolean }>(`/communities/${name}`, { method: 'DELETE' }),
+
+  // Membership
+  join: (name: string) =>
+    fetchJson<{ ok: boolean; is_member: boolean }>(`/communities/${name}/join`, { method: 'POST' }),
+  leave: (name: string) =>
+    fetchJson<{ ok: boolean; is_member: boolean }>(`/communities/${name}/leave`, { method: 'POST' }),
+  getMembers: (name: string, params?: PaginationParams) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const queryStr = query.toString();
+    return fetchJson<{ members: Actor[]; next_cursor: number | null }>(`/communities/${name}/members${queryStr ? '?' + queryStr : ''}`);
+  },
+
+  // Admin management
+  getAdmins: (name: string) =>
+    fetchJson<{ admins: CommunityAdmin[] }>(`/communities/${name}/admins`),
+  addAdmin: (name: string, actorId: string, role: 'owner' | 'admin' = 'admin') =>
+    fetchJson<{ ok: boolean }>(`/communities/${name}/admins`, {
+      method: 'POST',
+      body: JSON.stringify({ actor_id: actorId, role }),
+    }),
+  removeAdmin: (name: string, actorId: string) =>
+    fetchJson<{ ok: boolean }>(`/communities/${name}/admins/${actorId}`, { method: 'DELETE' }),
+
+  // Ban management
+  getBans: (name: string, params?: PaginationParams) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const qs = query.toString();
+    return fetchJson<{ bans: CommunityBan[]; total_count: number; next_cursor: number | null }>(
+      `/communities/${name}/bans${qs ? `?${qs}` : ''}`
+    );
+  },
+  ban: (name: string, actorId: string, reason?: string) =>
+    fetchJson<{ ok: boolean }>(`/communities/${name}/bans`, {
+      method: 'POST',
+      body: JSON.stringify({ actor_id: actorId, reason }),
+    }),
+  unban: (name: string, actorId: string) =>
+    fetchJson<{ ok: boolean }>(`/communities/${name}/bans/${actorId}`, { method: 'DELETE' }),
+
+  // Posts
+  getPosts: (name: string, params?: PaginationParams) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const queryStr = query.toString();
+    return fetchJson<PaginatedCommunityPosts>(`/communities/${name}/posts${queryStr ? '?' + queryStr : ''}`);
+  },
+  getPendingPosts: (name: string, limit = 20) =>
+    fetchJson<{ posts: CommunityPost[] }>(`/communities/${name}/posts/pending?limit=${limit}`),
+  submitPost: (name: string, postId: string) =>
+    fetchJson<{ ok: boolean; status: 'pending' | 'approved'; requires_approval: boolean }>(`/communities/${name}/posts`, {
+      method: 'POST',
+      body: JSON.stringify({ post_id: postId }),
+    }),
+  approvePost: (name: string, postId: string) =>
+    fetchJson<{ ok: boolean; status: 'approved' }>(`/communities/${name}/posts/${postId}/approve`, { method: 'POST' }),
+  rejectPost: (name: string, postId: string) =>
+    fetchJson<{ ok: boolean; status: 'rejected' }>(`/communities/${name}/posts/${postId}/reject`, { method: 'POST' }),
+  removePost: (name: string, postId: string) =>
+    fetchJson<{ ok: boolean }>(`/communities/${name}/posts/${postId}`, { method: 'DELETE' }),
 };

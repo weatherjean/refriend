@@ -5,6 +5,7 @@ import {
   Delete,
   Document,
   Follow,
+  Group,
   Image,
   Like,
   Note,
@@ -19,6 +20,17 @@ import type { DB, Actor } from "./db.ts";
 import { invalidateProfileCache } from "./cache.ts";
 import { updatePostScore, updateParentPostScore } from "./scoring.ts";
 import { createNotification, removeNotification } from "./notifications.ts";
+import { CommunityDB } from "./communities/db.ts";
+import { CommunityModeration } from "./communities/moderation.ts";
+
+// Community DB instance (set during initialization)
+let communityDb: CommunityDB | null = null;
+let communityModeration: CommunityModeration | null = null;
+
+export function setCommunityDb(db: CommunityDB) {
+  communityDb = db;
+  communityModeration = new CommunityModeration(db);
+}
 
 // Activity processing result
 export interface ProcessResult {
@@ -31,16 +43,26 @@ export interface ProcessResult {
 export async function persistActor(db: DB, domain: string, actor: APActor): Promise<Actor | null> {
   if (!actor.id) return null;
 
+  // Determine if this is a Group (community) or Person
+  const isGroup = actor instanceof Group;
+
   // Check if this is a local actor
   if (actor.id.host === domain.replace(/:\d+$/, "") || actor.id.host === domain) {
     const username = actor.preferredUsername?.toString();
     if (username) {
-      const existing = await db.getActorByUsername(username);
-      if (existing) return existing;
+      // For groups, check by community name
+      if (isGroup && communityDb) {
+        const existing = await communityDb.getCommunityByName(username);
+        if (existing) return existing;
+      } else {
+        const existing = await db.getActorByUsername(username);
+        if (existing) return existing;
+      }
     }
   }
 
   const prefUsername = actor.preferredUsername?.toString();
+  // Use @ prefix for all actors (persons and groups/communities)
   const handle = prefUsername
     ? `@${prefUsername}@${actor.id.host}`
     : `@unknown@${actor.id.host}`;
@@ -83,6 +105,7 @@ export async function persistActor(db: DB, domain: string, actor: APActor): Prom
     inbox_url: inboxUrl,
     shared_inbox_url: actor.endpoints?.sharedInbox?.href ?? null,
     url: urlString,
+    actor_type: isGroup ? "Group" : "Person",
   });
 }
 
@@ -550,6 +573,11 @@ async function processCreate(
 
   console.log(`[Create] Post from ${authorActor.handle}: ${post.id}`);
 
+  // Check if this post is addressed to a community (via to/cc)
+  if (communityDb && direction === "inbound") {
+    await checkAndSubmitToCommunity(db, object, post.id, authorActor.id, inReplyToId);
+  }
+
   // If this is a reply, update the parent post's hot score and notify
   if (inReplyToId) {
     await updateParentPostScore(db, inReplyToId);
@@ -973,6 +1001,87 @@ async function processUndo(
         );
         console.log(`[Undo Announce] Sent to ${postAuthor.handle}`);
       }
+    }
+  }
+}
+
+// Helper to check if a post is addressed to a community and submit it
+async function checkAndSubmitToCommunity(
+  db: DB,
+  note: Note,
+  postId: number,
+  authorActorId: number,
+  inReplyToId: number | null
+): Promise<void> {
+  if (!communityDb || !communityModeration) return;
+
+  // Get all recipients from to/cc
+  const recipients: string[] = [];
+
+  // Get 'to' recipients
+  try {
+    const toRecipients = note.toIds;
+    if (toRecipients) {
+      for (const uri of toRecipients) {
+        if (uri instanceof URL) {
+          recipients.push(uri.href);
+        }
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  // Get 'cc' recipients
+  try {
+    const ccRecipients = note.ccIds;
+    if (ccRecipients) {
+      for (const uri of ccRecipients) {
+        if (uri instanceof URL) {
+          recipients.push(uri.href);
+        }
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  // Check each recipient to see if it's a community
+  for (const uri of recipients) {
+    if (uri === PUBLIC_COLLECTION.href) continue;
+
+    const community = await communityDb.getCommunityByUri(uri);
+    if (community) {
+      // Found a community! Check if the author can post
+      const permission = await communityModeration.canPost(community.id, authorActorId);
+      if (!permission.allowed) {
+        console.log(`[Create] Post ${postId} rejected from community ${community.name}: ${permission.reason}`);
+        continue;
+      }
+
+      // Submit the post to the community
+      const autoApprove = await communityModeration.shouldAutoApprove(community.id, authorActorId);
+      await communityDb.submitCommunityPost(community.id, postId, autoApprove);
+      console.log(`[Create] Post ${postId} submitted to community ${community.name} (auto-approved: ${autoApprove})`);
+      return; // Only submit to one community
+    }
+  }
+
+  // If this is a reply, check if the parent post belongs to a community
+  if (inReplyToId) {
+    const parentCommunity = await communityDb.getCommunityForPost(inReplyToId);
+    if (parentCommunity) {
+      // Check if author can post to this community
+      const permission = await communityModeration.canPost(parentCommunity.id, authorActorId);
+      if (!permission.allowed) {
+        console.log(`[Create] Reply ${postId} rejected from community ${parentCommunity.name}: ${permission.reason}`);
+        return;
+      }
+
+      // Submit the reply to the community (replies inherit community context)
+      const autoApprove = await communityModeration.shouldAutoApprove(parentCommunity.id, authorActorId);
+      await communityDb.submitCommunityPost(parentCommunity.id, postId, autoApprove);
+      console.log(`[Create] Reply ${postId} submitted to community ${parentCommunity.name} (inherited from parent)`);
     }
   }
 }

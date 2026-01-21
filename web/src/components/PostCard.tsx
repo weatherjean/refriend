@@ -5,12 +5,20 @@ import { formatTimeAgo, getUsername } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import { TagBadge } from './TagBadge';
 
+interface CommunityInfo {
+  id: string;
+  name: string;
+  handle: string;
+  avatar_url?: string | null;
+}
+
 interface PostCardProps {
   post: Post;
   linkToPost?: boolean;
+  community?: CommunityInfo;
 }
 
-export function PostCard({ post, linkToPost = true }: PostCardProps) {
+export function PostCard({ post, linkToPost = true, community: communityProp }: PostCardProps) {
   const navigate = useNavigate();
   const { user, actor } = useAuth();
   const [liked, setLiked] = useState(post.liked);
@@ -28,6 +36,8 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
   const [imageLoaded, setImageLoaded] = useState<Record<number, boolean>>({});
 
   const isOwnPost = !!(actor && post.author && actor.id === post.author.id);
+  // Use community from post data or prop
+  const community = post.community || communityProp;
 
   if (!post.author) return null;
 
@@ -114,6 +124,25 @@ export function PostCard({ post, linkToPost = true }: PostCardProps) {
       style={{ cursor: linkToPost ? 'pointer' : 'default' }}
     >
       <div className="card-body">
+        {community && (
+          <Link
+            to={`/c/${community.name}`}
+            className="d-flex align-items-center text-decoration-none mb-2 small"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {community.avatar_url ? (
+              <img
+                src={community.avatar_url}
+                alt=""
+                className="rounded me-2"
+                style={{ width: 18, height: 18, objectFit: 'cover' }}
+              />
+            ) : (
+              <i className="bi bi-people-fill text-muted me-2"></i>
+            )}
+            <span className="text-muted">{community.name}</span>
+          </Link>
+        )}
         <div className="d-flex">
           <Link to={authorLink}>
             {post.author.avatar_url ? (

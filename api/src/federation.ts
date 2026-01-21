@@ -6,6 +6,7 @@ import {
   Create,
   Delete,
   Document,
+  Group,
   Image,
   createFederation,
   Endpoints,
@@ -88,21 +89,49 @@ federation.setNodeInfoDispatcher("/nodeinfo/2.1", async () => {
 federation
   .setActorDispatcher("/users/{identifier}", async (ctx, identifier) => {
     const actor = await db.getActorByUsername(identifier);
-    if (!actor || !actor.user_id) return null;
+    if (!actor) return null;
+
+    // Must be either a local user (Person) or a community (Group)
+    const isLocalUser = actor.user_id !== null;
+    const isCommunity = actor.actor_type === "Group";
+    if (!isLocalUser && !isCommunity) return null;
 
     const keys = await ctx.getActorKeyPairs(identifier);
+
+    // Helper for icon
+    const icon = actor.avatar_url ? new Image({
+      url: new URL(actor.avatar_url),
+      mediaType: actor.avatar_url.includes('.webp') ? "image/webp" :
+                 actor.avatar_url.includes('.svg') || actor.avatar_url.includes('dicebear') ? "image/svg+xml" :
+                 actor.avatar_url.includes('.png') ? "image/png" : "image/jpeg"
+    }) : undefined;
+
+    // Return Group for communities, Person for users
+    if (isCommunity) {
+      return new Group({
+        id: ctx.getActorUri(identifier),
+        preferredUsername: identifier,
+        name: actor.name ?? identifier,
+        summary: actor.bio ?? undefined,
+        icon,
+        url: new URL(`https://${DOMAIN}/c/${identifier}`),
+        inbox: ctx.getInboxUri(identifier),
+        endpoints: new Endpoints({
+          sharedInbox: ctx.getInboxUri(),
+        }),
+        followers: ctx.getFollowersUri(identifier),
+        outbox: ctx.getOutboxUri(identifier),
+        publicKey: keys[0]?.cryptographicKey,
+        assertionMethods: keys.map((k) => k.multikey),
+      });
+    }
 
     return new Person({
       id: ctx.getActorUri(identifier),
       preferredUsername: identifier,
       name: actor.name ?? undefined,
       summary: actor.bio ?? undefined,
-      icon: actor.avatar_url ? new Image({
-        url: new URL(actor.avatar_url),
-        mediaType: actor.avatar_url.includes('.webp') ? "image/webp" :
-                   actor.avatar_url.includes('.svg') || actor.avatar_url.includes('dicebear') ? "image/svg+xml" :
-                   actor.avatar_url.includes('.png') ? "image/png" : "image/jpeg"
-      }) : undefined,
+      icon,
       url: new URL(`https://${DOMAIN}/@${identifier}`),
       inbox: ctx.getInboxUri(identifier),
       endpoints: new Endpoints({
@@ -119,42 +148,71 @@ federation
   })
   .setKeyPairsDispatcher(async (_ctx, identifier) => {
     const actor = await db.getActorByUsername(identifier);
-    if (!actor || !actor.user_id) return [];
+    if (!actor) return [];
 
-    const userId = actor.user_id;
     const keyPairs: CryptoKeyPair[] = [];
 
-    let rsaKey = await db.getKeyPair(userId, "RSASSA-PKCS1-v1_5");
-    if (!rsaKey) {
-      const generated = await generateCryptoKeyPair("RSASSA-PKCS1-v1_5");
-      const privateJwk = await exportJwk(generated.privateKey);
-      const publicJwk = await exportJwk(generated.publicKey);
-      rsaKey = await db.saveKeyPair(userId, "RSASSA-PKCS1-v1_5", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
-    }
-    keyPairs.push({
-      privateKey: await importJwk(JSON.parse(rsaKey.private_key), "private"),
-      publicKey: await importJwk(JSON.parse(rsaKey.public_key), "public"),
-    });
+    // For users, use user_id based keys; for communities, use actor_id based keys
+    if (actor.user_id) {
+      const userId = actor.user_id;
 
-    let edKey = await db.getKeyPair(userId, "Ed25519");
-    if (!edKey) {
-      const generated = await generateCryptoKeyPair("Ed25519");
-      const privateJwk = await exportJwk(generated.privateKey);
-      const publicJwk = await exportJwk(generated.publicKey);
-      edKey = await db.saveKeyPair(userId, "Ed25519", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
+      let rsaKey = await db.getKeyPair(userId, "RSASSA-PKCS1-v1_5");
+      if (!rsaKey) {
+        const generated = await generateCryptoKeyPair("RSASSA-PKCS1-v1_5");
+        const privateJwk = await exportJwk(generated.privateKey);
+        const publicJwk = await exportJwk(generated.publicKey);
+        rsaKey = await db.saveKeyPair(userId, "RSASSA-PKCS1-v1_5", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
+      }
+      keyPairs.push({
+        privateKey: await importJwk(JSON.parse(rsaKey.private_key), "private"),
+        publicKey: await importJwk(JSON.parse(rsaKey.public_key), "public"),
+      });
+
+      let edKey = await db.getKeyPair(userId, "Ed25519");
+      if (!edKey) {
+        const generated = await generateCryptoKeyPair("Ed25519");
+        const privateJwk = await exportJwk(generated.privateKey);
+        const publicJwk = await exportJwk(generated.publicKey);
+        edKey = await db.saveKeyPair(userId, "Ed25519", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
+      }
+      keyPairs.push({
+        privateKey: await importJwk(JSON.parse(edKey.private_key), "private"),
+        publicKey: await importJwk(JSON.parse(edKey.public_key), "public"),
+      });
+    } else if (actor.actor_type === "Group") {
+      // Community - use actor_id based keys
+      let rsaKey = await db.getKeyPairByActorId(actor.id, "RSASSA-PKCS1-v1_5");
+      if (!rsaKey) {
+        const generated = await generateCryptoKeyPair("RSASSA-PKCS1-v1_5");
+        const privateJwk = await exportJwk(generated.privateKey);
+        const publicJwk = await exportJwk(generated.publicKey);
+        rsaKey = await db.saveKeyPairByActorId(actor.id, "RSASSA-PKCS1-v1_5", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
+      }
+      keyPairs.push({
+        privateKey: await importJwk(JSON.parse(rsaKey.private_key), "private"),
+        publicKey: await importJwk(JSON.parse(rsaKey.public_key), "public"),
+      });
+
+      let edKey = await db.getKeyPairByActorId(actor.id, "Ed25519");
+      if (!edKey) {
+        const generated = await generateCryptoKeyPair("Ed25519");
+        const privateJwk = await exportJwk(generated.privateKey);
+        const publicJwk = await exportJwk(generated.publicKey);
+        edKey = await db.saveKeyPairByActorId(actor.id, "Ed25519", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
+      }
+      keyPairs.push({
+        privateKey: await importJwk(JSON.parse(edKey.private_key), "private"),
+        publicKey: await importJwk(JSON.parse(edKey.public_key), "public"),
+      });
     }
-    keyPairs.push({
-      privateKey: await importJwk(JSON.parse(edKey.private_key), "private"),
-      publicKey: await importJwk(JSON.parse(edKey.public_key), "public"),
-    });
 
     return keyPairs;
   })
   .mapHandle(async (_ctx, handle) => {
-    // Map handle (username) to identifier
-    // Handle comes in as just the username part (e.g., "bob" from "@bob@domain")
+    // Map handle (username/community name) to identifier
+    // Handle comes in as just the name part (e.g., "bob" from "@bob@domain")
     const actor = await db.getActorByUsername(handle);
-    if (actor && actor.user_id) {
+    if (actor && (actor.user_id || actor.actor_type === "Group")) {
       return handle;
     }
     return null;

@@ -27,12 +27,15 @@ CREATE TABLE IF NOT EXISTS actors (
 -- Keys: Cryptographic key pairs for local actors
 CREATE TABLE IF NOT EXISTS keys (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  actor_id INTEGER REFERENCES actors(id) ON DELETE CASCADE,
   type TEXT NOT NULL CHECK (type IN ('RSASSA-PKCS1-v1_5', 'Ed25519')),
   private_key TEXT NOT NULL,
   public_key TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (user_id, type)
+  UNIQUE (user_id, type),
+  UNIQUE (actor_id, type),
+  CHECK (user_id IS NOT NULL OR actor_id IS NOT NULL)
 );
 
 -- Follows: Who follows whom
@@ -154,6 +157,50 @@ CREATE TABLE IF NOT EXISTS jobs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Actor type for distinguishing Person vs Group (communities)
+ALTER TABLE actors ADD COLUMN IF NOT EXISTS actor_type TEXT NOT NULL DEFAULT 'Person'
+  CHECK (actor_type IN ('Person', 'Group'));
+
+-- Community settings (extends actors for Group type)
+CREATE TABLE IF NOT EXISTS community_settings (
+  actor_id INTEGER PRIMARY KEY REFERENCES actors(id) ON DELETE CASCADE,
+  require_approval BOOLEAN NOT NULL DEFAULT false,
+  created_by INTEGER REFERENCES actors(id) ON DELETE SET NULL
+);
+
+-- Community admins (owners and admins - followers are regular members)
+CREATE TABLE IF NOT EXISTS community_admins (
+  id SERIAL PRIMARY KEY,
+  community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('owner', 'admin')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (community_id, actor_id)
+);
+
+-- Community bans
+CREATE TABLE IF NOT EXISTS community_bans (
+  id SERIAL PRIMARY KEY,
+  community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  reason TEXT,
+  banned_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (community_id, actor_id)
+);
+
+-- Community posts with approval workflow
+CREATE TABLE IF NOT EXISTS community_posts (
+  id SERIAL PRIMARY KEY,
+  community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
+  UNIQUE (community_id, post_id)
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_actors_public_id ON actors(public_id);
 CREATE INDEX IF NOT EXISTS idx_actors_user_id ON actors(user_id);
@@ -185,3 +232,12 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_pending ON jobs(run_at) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_notifications_target ON notifications(target_actor_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(target_actor_id, read) WHERE read = FALSE;
+
+-- Community indexes
+CREATE INDEX IF NOT EXISTS idx_actors_type ON actors(actor_type);
+CREATE INDEX IF NOT EXISTS idx_community_admins_community ON community_admins(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_admins_actor ON community_admins(actor_id);
+CREATE INDEX IF NOT EXISTS idx_community_bans_community ON community_bans(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_bans_actor ON community_bans(actor_id);
+CREATE INDEX IF NOT EXISTS idx_community_posts_community ON community_posts(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_posts_status ON community_posts(community_id, status);
