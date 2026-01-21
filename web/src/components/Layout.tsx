@@ -57,8 +57,8 @@ export function Layout({ children }: LayoutProps) {
         {/* Left Sidebar */}
         <div className="col-lg-4 sidebar py-4 px-3">
           {/* Branding */}
-          <Link to="/" className="d-flex align-items-center mb-4 text-decoration-none text-reset">
-            <img src="/logo.svg" alt="riff" height="48" />
+          <Link to="/" className="d-flex align-items-center mb-4 text-decoration-none text-reset" style={{ paddingLeft: '0.75rem' }}>
+            <img src="/icon.svg" alt="riff" height="36" />
           </Link>
 
           {/* Navigation */}

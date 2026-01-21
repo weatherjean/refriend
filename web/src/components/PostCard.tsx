@@ -24,13 +24,13 @@ interface PostCardProps {
 export function PostCard({ post, linkToPost = true, community: communityProp }: PostCardProps) {
   const navigate = useNavigate();
   const { user, actor } = useAuth();
-  const [liked, setLiked] = useState(post.liked);
-  const [likesCount, setLikesCount] = useState(post.likes_count);
+  const [liked, setLiked] = useState(post.liked ?? false);
+  const [likesCount, setLikesCount] = useState(post.likes_count ?? 0);
   const [likeLoading, setLikeLoading] = useState(false);
-  const [boosted, setBoosted] = useState(post.boosted);
-  const [boostsCount, setBoostsCount] = useState(post.boosts_count);
+  const [boosted, setBoosted] = useState(post.boosted ?? false);
+  const [boostsCount, setBoostsCount] = useState(post.boosts_count ?? 0);
   const [boostLoading, setBoostLoading] = useState(false);
-  const [pinned, setPinned] = useState(post.pinned);
+  const [pinned, setPinned] = useState(post.pinned ?? false);
   const [pinLoading, setPinLoading] = useState(false);
   const [showSensitive, setShowSensitive] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -223,7 +223,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
         )}
 
         {/* Hashtags */}
-        {post.hashtags.length > 0 && (
+        {post.hashtags && post.hashtags.length > 0 && (
           <div className="post-hashtags">
             {post.hashtags.map((tag) => (
               <TagBadge key={tag} tag={tag} />
@@ -252,12 +252,12 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
           {linkToPost && (
             <Link
               to={postLink}
-              className={`post-action-btn ${post.replies_count > 0 ? 'has-replies' : ''}`}
+              className={`post-action-btn ${(post.replies_count ?? 0) > 0 ? 'has-replies' : ''}`}
               onClick={(e) => e.stopPropagation()}
               title="View replies"
             >
               <i className="bi bi-chat"></i>
-              <span>{post.replies_count}</span>
+              <span>{post.replies_count ?? 0}</span>
             </Link>
           )}
 

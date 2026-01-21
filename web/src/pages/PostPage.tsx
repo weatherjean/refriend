@@ -81,16 +81,14 @@ export function PostPage() {
 
   const isOwner = actor && post.author && actor.id === post.author.id;
 
-  // Rainbow colors for thread lines
+  // Rainbow colors for thread lines (starts with logo colors)
   const threadColors = [
-    '#ef4444', // red
-    '#f97316', // orange
-    '#eab308', // yellow
-    '#22c55e', // green
-    '#06b6d4', // cyan
-    '#3b82f6', // blue
-    '#8b5cf6', // violet
-    '#ec4899', // pink
+    '#f87171', // red (logo)
+    '#fbbf24', // yellow (logo)
+    '#4ade80', // green (logo)
+    '#38bdf8', // sky
+    '#818cf8', // indigo
+    '#e879f9', // fuchsia
   ];
 
   // Build nested thread structure

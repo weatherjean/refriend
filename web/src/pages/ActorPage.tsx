@@ -366,26 +366,17 @@ export function ActorPage() {
           <>
             {postsWithReplies.map((post) => (
               <div key={post.id} className="mb-3">
-                {/* Show the original post this is replying to */}
                 {post.in_reply_to && (
-                  <Link to={`/posts/${post.in_reply_to.id}`} className="text-decoration-none d-block mb-2 ms-4 ps-3 border-start border-2 text-muted">
-                    <div className="d-flex align-items-center small mb-1">
-                      <Avatar
-                        src={post.in_reply_to.author?.avatar_url}
-                        name={post.in_reply_to.author?.name || post.in_reply_to.author?.handle || '?'}
-                        size="xs"
-                        className="me-1"
-                      />
-                      <span>{post.in_reply_to.author?.name || post.in_reply_to.author?.handle || 'Unknown'}</span>
+                  <div>
+                    <PostCard post={post.in_reply_to as Post} />
+                    <div style={{ borderLeft: '3px solid #333', paddingLeft: 16, marginLeft: 8 }}>
+                      <PostCard post={post} />
                     </div>
-                    <div
-                      className="small"
-                      style={{ maxHeight: '2.5em', overflow: 'hidden', opacity: 0.8 }}
-                      dangerouslySetInnerHTML={{ __html: post.in_reply_to.content }}
-                    />
-                  </Link>
+                  </div>
                 )}
-                <PostCard post={post} />
+                {!post.in_reply_to && (
+                  <PostCard post={post} />
+                )}
               </div>
             ))}
             {repliesCursor && (
