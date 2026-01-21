@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { notifications as notificationsApi, Notification } from '../api';
 import { formatTimeAgo } from '../utils';
+import { Avatar } from '../components/Avatar';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
 
 export function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -43,11 +46,7 @@ export function NotificationsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="text-center py-5">
-        <div className="spinner-border text-primary"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   const handleClearAll = async () => {
@@ -75,10 +74,7 @@ export function NotificationsPage() {
       </div>
 
       {notifications.length === 0 ? (
-        <div className="text-center text-muted py-5">
-          <i className="bi bi-bell fs-1 mb-3 d-block"></i>
-          <p>No notifications yet</p>
-        </div>
+        <EmptyState icon="bell" title="No notifications yet" />
       ) : (
         <div className="d-flex flex-column gap-2">
           {notifications.map((n) => (
@@ -89,21 +85,12 @@ export function NotificationsPage() {
             >
               <div className="card-body py-3">
                 <div className="d-flex align-items-center gap-3">
-                  {n.actor.avatar_url ? (
-                    <img
-                      src={n.actor.avatar_url}
-                      alt=""
-                      className="rounded-circle flex-shrink-0"
-                      style={{ width: 40, height: 40, objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <div
-                      className="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white flex-shrink-0"
-                      style={{ width: 40, height: 40 }}
-                    >
-                      {(n.actor.name || n.actor.handle)[0]?.toUpperCase()}
-                    </div>
-                  )}
+                  <Avatar
+                    src={n.actor.avatar_url}
+                    name={n.actor.name || n.actor.handle}
+                    size="md"
+                    className="flex-shrink-0"
+                  />
                   <div className="flex-grow-1" style={{ minWidth: 0 }}>
                     <div>
                       <strong>{n.actor.name || n.actor.handle}</strong>

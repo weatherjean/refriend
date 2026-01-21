@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { communities } from '../../api';
-import { ConfirmModal } from './ConfirmModal';
+import { ConfirmModal } from '../ConfirmModal';
+import { Avatar } from '../Avatar';
 
 interface Admin {
   id: number;
@@ -114,21 +115,12 @@ export function AdminManagement({ communityName, isOwner }: { communityName: str
           {admins.map((admin) => (
             <div key={admin.id} className="list-group-item d-flex align-items-center justify-content-between">
               <div className="d-flex align-items-center">
-                {admin.actor.avatar_url ? (
-                  <img
-                    src={admin.actor.avatar_url}
-                    alt=""
-                    className="rounded-circle me-2"
-                    style={{ width: 32, height: 32, objectFit: 'cover' }}
-                  />
-                ) : (
-                  <div
-                    className="rounded-circle me-2 bg-secondary d-flex align-items-center justify-content-center"
-                    style={{ width: 32, height: 32 }}
-                  >
-                    <i className="bi bi-person text-white small"></i>
-                  </div>
-                )}
+                <Avatar
+                  src={admin.actor.avatar_url}
+                  name={admin.actor.name || admin.actor.handle}
+                  size="sm"
+                  className="me-2"
+                />
                 <div>
                   <div className="fw-semibold">{admin.actor.name || admin.actor.handle}</div>
                   <small className="text-muted">{admin.actor.handle}</small>

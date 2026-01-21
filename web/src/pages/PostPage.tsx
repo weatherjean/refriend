@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { posts as postsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 import { useAuth } from '../context/AuthContext';
 
 export function PostPage() {
@@ -66,11 +67,7 @@ export function PostPage() {
   };
 
   if (loading) {
-    return (
-      <div className="text-center py-5">
-        <div className="spinner-border text-primary"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error || !post) {

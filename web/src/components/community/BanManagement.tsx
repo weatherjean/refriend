@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { communities, type Actor } from '../../api';
-import { ConfirmModal } from './ConfirmModal';
+import { ConfirmModal } from '../ConfirmModal';
+import { Avatar } from '../Avatar';
 
 interface Ban {
   id: number;
@@ -146,21 +147,12 @@ export function BanManagement({ communityName }: { communityName: string }) {
               {bans.map((ban) => (
                 <div key={ban.id} className="list-group-item d-flex align-items-center justify-content-between">
                   <div className="d-flex align-items-center">
-                    {ban.actor.avatar_url ? (
-                      <img
-                        src={ban.actor.avatar_url}
-                        alt=""
-                        className="rounded-circle me-2"
-                        style={{ width: 32, height: 32, objectFit: 'cover' }}
-                      />
-                    ) : (
-                      <div
-                        className="rounded-circle me-2 bg-secondary d-flex align-items-center justify-content-center"
-                        style={{ width: 32, height: 32 }}
-                      >
-                        <i className="bi bi-person text-white small"></i>
-                      </div>
-                    )}
+                    <Avatar
+                      src={ban.actor.avatar_url}
+                      name={ban.actor.name || ban.actor.handle}
+                      size="sm"
+                      className="me-2"
+                    />
                     <div>
                       <div className="fw-semibold">{ban.actor.name || ban.actor.handle}</div>
                       <small className="text-muted">{ban.actor.handle}</small>
@@ -238,21 +230,12 @@ export function BanManagement({ communityName }: { communityName: string }) {
                             className="list-group-item list-group-item-action d-flex align-items-center"
                             onClick={() => setSelectedUser(user)}
                           >
-                            {user.avatar_url ? (
-                              <img
-                                src={user.avatar_url}
-                                alt=""
-                                className="rounded-circle me-2"
-                                style={{ width: 32, height: 32, objectFit: 'cover' }}
-                              />
-                            ) : (
-                              <div
-                                className="rounded-circle me-2 bg-secondary d-flex align-items-center justify-content-center"
-                                style={{ width: 32, height: 32 }}
-                              >
-                                <i className="bi bi-person text-white small"></i>
-                              </div>
-                            )}
+                            <Avatar
+                              src={user.avatar_url}
+                              name={user.name || user.handle}
+                              size="sm"
+                              className="me-2"
+                            />
                             <div>
                               <div className="fw-semibold">{user.name || user.handle}</div>
                               <small className="text-muted">{user.handle}</small>
@@ -268,21 +251,12 @@ export function BanManagement({ communityName }: { communityName: string }) {
                 ) : (
                   <>
                     <div className="d-flex align-items-center mb-3 p-2 bg-body-secondary rounded">
-                      {selectedUser.avatar_url ? (
-                        <img
-                          src={selectedUser.avatar_url}
-                          alt=""
-                          className="rounded-circle me-2"
-                          style={{ width: 40, height: 40, objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <div
-                          className="rounded-circle me-2 bg-secondary d-flex align-items-center justify-content-center"
-                          style={{ width: 40, height: 40 }}
-                        >
-                          <i className="bi bi-person text-white"></i>
-                        </div>
-                      )}
+                      <Avatar
+                        src={selectedUser.avatar_url}
+                        name={selectedUser.name || selectedUser.handle}
+                        size="md"
+                        className="me-2"
+                      />
                       <div className="flex-grow-1">
                         <div className="fw-semibold">{selectedUser.name || selectedUser.handle}</div>
                         <small className="text-muted">{selectedUser.handle}</small>

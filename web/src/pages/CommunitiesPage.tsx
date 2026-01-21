@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { communities, type Community } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
+import { LoadMoreButton } from '../components/LoadMoreButton';
 
 export function CommunitiesPage() {
   const { user } = useAuth();
@@ -115,23 +118,17 @@ export function CommunitiesPage() {
       </h5>
 
       {loading && !isSearching ? (
-        <div className="text-center py-4">
-          <div className="spinner-border spinner-border-sm text-primary"></div>
-        </div>
+        <LoadingSpinner size="sm" className="py-4" />
       ) : displayCommunities.length === 0 ? (
         <div className="text-center text-muted py-4">
-          <i className="bi bi-people fs-1 mb-3 d-block"></i>
-          {isSearching ? (
-            <p>No communities found matching "{searchInput.trim()}"</p>
-          ) : (
-            <>
-              <p>No communities yet.</p>
-              {user && (
-                <Link to="/communities/new" className="btn btn-outline-primary btn-sm">
-                  Create the first community
-                </Link>
-              )}
-            </>
+          <EmptyState
+            icon="people"
+            title={isSearching ? `No communities found matching "${searchInput.trim()}"` : 'No communities yet.'}
+          />
+          {!isSearching && user && (
+            <Link to="/communities/new" className="btn btn-outline-primary btn-sm mt-3">
+              Create the first community
+            </Link>
           )}
         </div>
       ) : (
@@ -181,19 +178,7 @@ export function CommunitiesPage() {
       )}
 
       {!isSearching && nextCursor && (
-        <div className="text-center mt-4">
-          <button
-            className="btn btn-outline-primary"
-            onClick={loadMore}
-            disabled={loadingMore}
-          >
-            {loadingMore ? (
-              <span className="spinner-border spinner-border-sm"></span>
-            ) : (
-              'Load more'
-            )}
-          </button>
-        </div>
+        <LoadMoreButton loading={loadingMore} onClick={loadMore} className="mt-4" />
       )}
     </div>
   );

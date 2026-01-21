@@ -5,6 +5,7 @@ import { getUsername } from '../utils';
 import { tags, users, notifications as notificationsApi, TrendingUser } from '../api';
 import { TagBadge } from './TagBadge';
 import { SettingsDrawer } from './SettingsDrawer';
+import { Avatar } from './Avatar';
 
 interface LayoutProps {
   children: ReactNode;
@@ -130,21 +131,12 @@ export function Layout({ children }: LayoutProps) {
                       to={`/u/${u.handle}`}
                       className="d-flex align-items-center text-decoration-none text-reset"
                     >
-                      {u.avatar_url ? (
-                        <img
-                          src={u.avatar_url}
-                          alt=""
-                          className="rounded-circle me-2"
-                          style={{ width: 28, height: 28, objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <div
-                          className="rounded-circle bg-secondary d-flex align-items-center justify-content-center me-2"
-                          style={{ width: 28, height: 28, fontSize: 12 }}
-                        >
-                          {(u.name || u.handle)[0]?.toUpperCase()}
-                        </div>
-                      )}
+                      <Avatar
+                        src={u.avatar_url}
+                        name={u.name || u.handle}
+                        size="sm"
+                        className="me-2"
+                      />
                       <div className="flex-grow-1 text-truncate" style={{ minWidth: 0 }}>
                         <div className="small fw-semibold text-truncate">{u.name || getUsername(u.handle)}</div>
                       </div>
@@ -161,16 +153,12 @@ export function Layout({ children }: LayoutProps) {
             <div className="card">
               <div className="card-body">
                 <div className="d-flex align-items-center mb-3">
-                  {actor?.avatar_url ? (
-                    <img
-                      src={actor.avatar_url}
-                      alt=""
-                      className="rounded-circle flex-shrink-0"
-                      style={{ width: 32, height: 32, objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <div className="avatar avatar-sm flex-shrink-0">{username[0]?.toUpperCase()}</div>
-                  )}
+                  <Avatar
+                    src={actor?.avatar_url}
+                    name={username}
+                    size="sm"
+                    className="flex-shrink-0"
+                  />
                   <span
                     className="ms-2 text-truncate"
                     style={{ minWidth: 0 }}

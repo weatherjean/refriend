@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { search, follows, users, Actor } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
+import { Avatar } from '../components/Avatar';
+import { EmptyState } from '../components/EmptyState';
 
 export function SearchPage() {
   const { user, actor: currentActor } = useAuth();
@@ -115,10 +117,7 @@ export function SearchPage() {
       {searched && (
         <>
           {results.length === 0 ? (
-            <div className="text-center text-muted py-5">
-              <i className="bi bi-search fs-1 mb-3 d-block"></i>
-              <p>No results found for "{query}"</p>
-            </div>
+            <EmptyState icon="search" title={`No results found for "${query}"`} />
           ) : (
             <div className="list-group">
               {results.map((actor) => {
@@ -131,18 +130,12 @@ export function SearchPage() {
                   <div key={actor.id} className="list-group-item">
                     <div className="d-flex align-items-center">
                       <Link to={profileLink} className="text-decoration-none text-reset d-flex align-items-center flex-grow-1">
-                        {actor.avatar_url ? (
-                          <img
-                            src={actor.avatar_url}
-                            alt=""
-                            className="rounded-circle me-3"
-                            style={{ width: 40, height: 40, objectFit: 'cover' }}
-                          />
-                        ) : (
-                          <div className="avatar avatar-sm me-3">
-                            {username[0].toUpperCase()}
-                          </div>
-                        )}
+                        <Avatar
+                          src={actor.avatar_url}
+                          name={username}
+                          size="md"
+                          className="me-3"
+                        />
                         <div className="flex-grow-1">
                           <div className="fw-semibold">
                             {actor.name || username}

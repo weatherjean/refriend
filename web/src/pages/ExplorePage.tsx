@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { tags } from '../api';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
 
 export function ExplorePage() {
   const [tagInput, setTagInput] = useState('');
@@ -89,21 +91,13 @@ export function ExplorePage() {
       </h5>
 
       {loading && !isSearching ? (
-        <div className="text-center py-4">
-          <div className="spinner-border spinner-border-sm text-primary"></div>
-        </div>
+        <LoadingSpinner size="sm" className="py-4" />
       ) : displayTags.length === 0 ? (
-        <div className="text-center text-muted py-4">
-          <i className="bi bi-hash fs-1 mb-3 d-block"></i>
-          {isSearching ? (
-            <p>No tags found matching "#{tagInput.trim().replace(/^#/, '')}"</p>
-          ) : (
-            <>
-              <p>No trending tags yet.</p>
-              <p className="small">Start posting with hashtags to see trends!</p>
-            </>
-          )}
-        </div>
+        <EmptyState
+          icon="hash"
+          title={isSearching ? `No tags found matching "#${tagInput.trim().replace(/^#/, '')}"` : 'No trending tags yet.'}
+          description={isSearching ? undefined : 'Start posting with hashtags to see trends!'}
+        />
       ) : (
         <div className="list-group">
           {displayTags.map((tag, index) => (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { actors } from '../api';
+import { LoadingSpinner } from '../components/LoadingSpinner';
 
 export function ActorByIdPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,11 +25,7 @@ export function ActorByIdPage() {
   }
 
   if (!handle) {
-    return (
-      <div className="text-center py-5">
-        <div className="spinner-border text-primary"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return <Navigate to={`/u/${handle}`} replace />;

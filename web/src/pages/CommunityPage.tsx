@@ -4,6 +4,9 @@ import { communities, type Community, type CommunityModerationInfo, type Communi
 import { useAuth } from '../context/AuthContext';
 import { SettingsTab } from '../components/community';
 import { PostCard } from '../components/PostCard';
+import { Avatar } from '../components/Avatar';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
 
 export function CommunityPage() {
   const { name } = useParams<{ name: string }>();
@@ -93,11 +96,7 @@ export function CommunityPage() {
   };
 
   if (loading) {
-    return (
-      <div className="text-center py-5">
-        <div className="spinner-border text-primary"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error || !community) {
@@ -211,13 +210,11 @@ export function CommunityPage() {
       {activeTab === 'posts' && (
         <div>
           {posts.length === 0 ? (
-            <div className="text-center text-muted py-4">
-              <i className="bi bi-chat-square-text fs-1 mb-3 d-block"></i>
-              <p>No posts yet.</p>
-              {moderation?.isMember && (
-                <p className="small">Be the first to post in this community!</p>
-              )}
-            </div>
+            <EmptyState
+              icon="chat-square-text"
+              title="No posts yet."
+              description={moderation?.isMember ? 'Be the first to post in this community!' : undefined}
+            />
           ) : (
             <div>
               {posts.map((post) => (
@@ -231,30 +228,18 @@ export function CommunityPage() {
       {activeTab === 'pending' && moderation?.isAdmin && (
         <div>
           {pendingPosts.length === 0 ? (
-            <div className="text-center text-muted py-4">
-              <i className="bi bi-check-circle fs-1 mb-3 d-block"></i>
-              <p>No pending posts</p>
-            </div>
+            <EmptyState icon="check-circle" title="No pending posts" />
           ) : (
             <div className="list-group">
               {pendingPosts.map((post) => (
                 <div key={post.id} className="list-group-item">
                   <div className="d-flex align-items-start">
-                    {post.author?.avatar_url ? (
-                      <img
-                        src={post.author.avatar_url}
-                        alt=""
-                        className="rounded-circle me-2"
-                        style={{ width: 32, height: 32, objectFit: 'cover' }}
-                      />
-                    ) : (
-                      <div
-                        className="rounded-circle me-2 bg-secondary d-flex align-items-center justify-content-center"
-                        style={{ width: 32, height: 32 }}
-                      >
-                        <i className="bi bi-person text-white small"></i>
-                      </div>
-                    )}
+                    <Avatar
+                      src={post.author?.avatar_url}
+                      name={post.author?.name || post.author?.handle || '?'}
+                      size="sm"
+                      className="me-2"
+                    />
                     <div className="flex-grow-1">
                       <div className="d-flex justify-content-between align-items-start">
                         <div>

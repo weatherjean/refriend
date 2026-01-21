@@ -1,0 +1,80 @@
+import { useState, useEffect } from 'react';
+import { Attachment } from '../api';
+
+interface ImageLightboxProps {
+  attachments: Attachment[];
+  initialIndex: number;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function ImageLightbox({ attachments, initialIndex, isOpen, onClose }: ImageLightboxProps) {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+
+  // Reset index when opened with a new initial index
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentIndex(initialIndex);
+    }
+  }, [isOpen, initialIndex]);
+
+  if (!isOpen || attachments.length === 0) return null;
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((currentIndex - 1 + attachments.length) % attachments.length);
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((currentIndex + 1) % attachments.length);
+  };
+
+  const handleClose = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onClose();
+  };
+
+  return (
+    <div
+      className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+      style={{ backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 9999 }}
+      onClick={handleClose}
+    >
+      <button
+        className="btn btn-link text-white position-absolute top-0 end-0 m-3 fs-3"
+        onClick={handleClose}
+      >
+        <i className="bi bi-x-lg"></i>
+      </button>
+      {attachments.length > 1 && (
+        <>
+          <button
+            className="btn btn-link text-white position-absolute start-0 top-50 translate-middle-y ms-3 fs-2"
+            onClick={handlePrev}
+          >
+            <i className="bi bi-chevron-left"></i>
+          </button>
+          <button
+            className="btn btn-link text-white position-absolute end-0 top-50 translate-middle-y me-3 fs-2"
+            onClick={handleNext}
+          >
+            <i className="bi bi-chevron-right"></i>
+          </button>
+        </>
+      )}
+      <img
+        src={attachments[currentIndex].url}
+        alt={attachments[currentIndex].alt_text ?? ''}
+        style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }}
+        onClick={(e) => e.stopPropagation()}
+      />
+      {attachments.length > 1 && (
+        <div className="position-absolute bottom-0 start-50 translate-middle-x mb-4 text-white">
+          {currentIndex + 1} / {attachments.length}
+        </div>
+      )}
+    </div>
+  );
+}

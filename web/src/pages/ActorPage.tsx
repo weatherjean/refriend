@@ -5,6 +5,13 @@ import { PostCard } from '../components/PostCard';
 import { SettingsDrawer } from '../components/SettingsDrawer';
 import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
+import { Avatar } from '../components/Avatar';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
+import { LoadMoreButton } from '../components/LoadMoreButton';
+import { ActorListModal } from '../components/ActorListModal';
+import { ProfileHeader } from '../components/ProfileHeader';
+import { ProfileTabs } from '../components/ProfileTabs';
 
 export function ActorPage() {
   const location = useLocation();
@@ -270,11 +277,7 @@ export function ActorPage() {
   };
 
   if (loading) {
-    return (
-      <div className="text-center py-5">
-        <div className="spinner-border text-primary"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error || !actor) {
@@ -283,92 +286,22 @@ export function ActorPage() {
     );
   }
 
-  const displayName = actor.name || username;
-
   return (
     <div>
       {/* Header */}
-      <div className="card mb-4">
-        <div className="card-body">
-          <div className="d-flex align-items-start">
-            {actor.avatar_url ? (
-              <img
-                src={actor.avatar_url}
-                alt=""
-                className="rounded-circle me-3"
-                style={{ width: 80, height: 80, objectFit: 'cover' }}
-              />
-            ) : (
-              <div className="avatar avatar-lg me-3">
-                {username[0]?.toUpperCase()}
-              </div>
-            )}
-            <div className="flex-grow-1">
-              <h4 className="mb-0">{displayName}</h4>
-              <div className="text-muted">{actor.handle}</div>
-
-              {!actor.is_local && (
-                <span className="badge bg-secondary mt-1">
-                  <i className="bi bi-globe me-1"></i>Remote
-                </span>
-              )}
-
-              {actor.bio && (
-                <div className="mt-2" dangerouslySetInnerHTML={{ __html: actor.bio }} />
-              )}
-
-              {/* Stats - only for local actors */}
-              {actor.is_local && (
-                <div className="mt-2">
-                  <button
-                    className="btn btn-link text-decoration-none p-0 me-3"
-                    onClick={() => setShowFollowing(true)}
-                  >
-                    <strong>{stats.following}</strong>{' '}
-                    <span className="text-muted">Following</span>
-                  </button>
-                  <button
-                    className="btn btn-link text-decoration-none p-0"
-                    onClick={() => setShowFollowers(true)}
-                  >
-                    <strong>{stats.followers}</strong>{' '}
-                    <span className="text-muted">Followers</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {user && !isOwnProfile && (
-              <div>
-                <button
-                  className={`btn ${isFollowing ? 'btn-outline-primary' : 'btn-primary'}`}
-                  onClick={handleFollow}
-                  disabled={followLoading}
-                >
-                  {followLoading ? (
-                    <span className="spinner-border spinner-border-sm"></span>
-                  ) : isFollowing ? (
-                    'Following'
-                  ) : (
-                    'Follow'
-                  )}
-                </button>
-              </div>
-            )}
-
-            {user && isOwnProfile && (
-              <div>
-                <button
-                  className="btn btn-outline-secondary"
-                  onClick={() => setShowSettings(true)}
-                >
-                  <i className="bi bi-gear me-1"></i> Settings
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <ProfileHeader
+        actor={actor}
+        username={username}
+        stats={stats}
+        isFollowing={isFollowing}
+        isOwnProfile={isOwnProfile}
+        followLoading={followLoading}
+        loggedIn={!!user}
+        onFollow={handleFollow}
+        onShowFollowers={() => setShowFollowers(true)}
+        onShowFollowing={() => setShowFollowing(true)}
+        onShowSettings={() => setShowSettings(true)}
+      />
 
       {message && (
         <div className="alert alert-info alert-dismissible">
@@ -388,48 +321,20 @@ export function ActorPage() {
       )}
 
       {/* Posts Tabs */}
-      <ul className="nav nav-tabs mb-3">
-        <li className="nav-item">
-          <button
-            className={`nav-link ${activeTab === 'posts' ? 'active' : ''}`}
-            onClick={() => setActiveTab('posts')}
-          >
-            Posts
-          </button>
-        </li>
-        <li className="nav-item">
-          <button
-            className={`nav-link ${activeTab === 'replies' ? 'active' : ''}`}
-            onClick={() => setActiveTab('replies')}
-          >
-            Replies
-          </button>
-        </li>
-        {actor.is_local && (
-          <li className="nav-item">
-            <button
-              className={`nav-link ${activeTab === 'boosts' ? 'active' : ''}`}
-              onClick={() => setActiveTab('boosts')}
-            >
-              Boosts
-            </button>
-          </li>
-        )}
-      </ul>
+      <ProfileTabs
+        activeTab={activeTab}
+        showBoosts={actor.is_local}
+        onTabChange={setActiveTab}
+      />
 
       {/* Posts Content */}
       {activeTab === 'posts' && (
         posts.length === 0 && pinnedPosts.length === 0 ? (
-          <div className="text-center text-muted py-5">
-            {actor.is_local ? (
-              <p>No posts yet.</p>
-            ) : (
-              <>
-                <i className="bi bi-globe fs-1 mb-3 d-block"></i>
-                <p>No posts from this user yet. New posts will appear after you follow them.</p>
-              </>
-            )}
-          </div>
+          <EmptyState
+            icon={actor.is_local ? 'file-text' : 'globe'}
+            title={actor.is_local ? 'No posts yet.' : 'No posts from this user yet.'}
+            description={actor.is_local ? undefined : 'New posts will appear after you follow them.'}
+          />
         ) : (
           <>
             {/* Pinned posts first */}
@@ -446,19 +351,7 @@ export function ActorPage() {
               <PostCard key={post.id} post={post} />
             ))}
             {postsCursor && (
-              <div className="text-center py-3">
-                <button
-                  className="btn btn-outline-primary"
-                  onClick={loadMorePosts}
-                  disabled={loadingMorePosts}
-                >
-                  {loadingMorePosts ? (
-                    <><span className="spinner-border spinner-border-sm me-1"></span> Loading...</>
-                  ) : (
-                    'Load More'
-                  )}
-                </button>
-              </div>
+              <LoadMoreButton loading={loadingMorePosts} onClick={loadMorePosts} />
             )}
           </>
         )
@@ -467,13 +360,9 @@ export function ActorPage() {
       {/* Replies Content */}
       {activeTab === 'replies' && (
         !repliesLoaded ? (
-          <div className="text-center py-5">
-            <div className="spinner-border text-primary"></div>
-          </div>
+          <LoadingSpinner />
         ) : postsWithReplies.length === 0 ? (
-          <div className="text-center text-muted py-5">
-            <p>No replies yet.</p>
-          </div>
+          <EmptyState icon="chat" title="No replies yet." />
         ) : (
           <>
             {postsWithReplies.map((post) => (
@@ -482,16 +371,12 @@ export function ActorPage() {
                 {post.in_reply_to && (
                   <Link to={`/posts/${post.in_reply_to.id}`} className="text-decoration-none d-block mb-2 ms-4 ps-3 border-start border-2 text-muted">
                     <div className="d-flex align-items-center small mb-1">
-                      {post.in_reply_to.author?.avatar_url ? (
-                        <img
-                          src={post.in_reply_to.author.avatar_url}
-                          alt=""
-                          className="rounded-circle me-1"
-                          style={{ width: 16, height: 16, objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <span className="me-1">@</span>
-                      )}
+                      <Avatar
+                        src={post.in_reply_to.author?.avatar_url}
+                        name={post.in_reply_to.author?.name || post.in_reply_to.author?.handle || '?'}
+                        size="xs"
+                        className="me-1"
+                      />
                       <span>{post.in_reply_to.author?.name || post.in_reply_to.author?.handle || 'Unknown'}</span>
                     </div>
                     <div
@@ -505,19 +390,7 @@ export function ActorPage() {
               </div>
             ))}
             {repliesCursor && (
-              <div className="text-center py-3">
-                <button
-                  className="btn btn-outline-primary"
-                  onClick={loadMoreReplies}
-                  disabled={loadingMoreReplies}
-                >
-                  {loadingMoreReplies ? (
-                    <><span className="spinner-border spinner-border-sm me-1"></span> Loading...</>
-                  ) : (
-                    'Load More'
-                  )}
-                </button>
-              </div>
+              <LoadMoreButton loading={loadingMoreReplies} onClick={loadMoreReplies} />
             )}
           </>
         )
@@ -526,13 +399,9 @@ export function ActorPage() {
       {/* Boosts Content */}
       {activeTab === 'boosts' && (
         !boostsLoaded ? (
-          <div className="text-center py-5">
-            <div className="spinner-border text-primary"></div>
-          </div>
+          <LoadingSpinner />
         ) : boosts.length === 0 ? (
-          <div className="text-center text-muted py-5">
-            <p>No boosts yet.</p>
-          </div>
+          <EmptyState icon="arrow-repeat" title="No boosts yet." />
         ) : (
           <>
             {boosts.map((post) => (
@@ -544,121 +413,31 @@ export function ActorPage() {
               </div>
             ))}
             {boostsCursor && (
-              <div className="text-center py-3">
-                <button
-                  className="btn btn-outline-primary"
-                  onClick={loadMoreBoosts}
-                  disabled={loadingMoreBoosts}
-                >
-                  {loadingMoreBoosts ? (
-                    <><span className="spinner-border spinner-border-sm me-1"></span> Loading...</>
-                  ) : (
-                    'Load More'
-                  )}
-                </button>
-              </div>
+              <LoadMoreButton loading={loadingMoreBoosts} onClick={loadMoreBoosts} />
             )}
           </>
         )
       )}
 
       {/* Followers Modal */}
-      {showFollowers && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowFollowers(false)}>
-          <div className="modal-dialog" onClick={e => e.stopPropagation()}>
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Followers</h5>
-                <button className="btn-close" onClick={() => setShowFollowers(false)}></button>
-              </div>
-              <div className="modal-body">
-                {!followersLoaded ? (
-                  <div className="text-center py-3"><div className="spinner-border spinner-border-sm"></div></div>
-                ) : followers.length === 0 ? (
-                  <p className="text-muted">No followers yet</p>
-                ) : (
-                  <div className="list-group list-group-flush">
-                    {followers.map((a) => (
-                      <Link
-                        key={a.id}
-                        to={`/u/${a.handle}`}
-                        className="list-group-item list-group-item-action"
-                        onClick={() => setShowFollowers(false)}
-                      >
-                        <div className="d-flex align-items-center">
-                          {a.avatar_url ? (
-                            <img
-                              src={a.avatar_url}
-                              alt=""
-                              className="rounded-circle me-2"
-                              style={{ width: 32, height: 32, objectFit: 'cover' }}
-                            />
-                          ) : (
-                            <div className="avatar avatar-sm me-2">{getUsername(a.handle)[0].toUpperCase()}</div>
-                          )}
-                          <div>
-                            <div className="fw-semibold">{a.name || getUsername(a.handle)}</div>
-                            <small className="text-muted">{a.handle}</small>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ActorListModal
+        show={showFollowers}
+        title="Followers"
+        actors={followers}
+        loading={!followersLoaded}
+        onClose={() => setShowFollowers(false)}
+        emptyMessage="No followers yet"
+      />
 
       {/* Following Modal */}
-      {showFollowing && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowFollowing(false)}>
-          <div className="modal-dialog" onClick={e => e.stopPropagation()}>
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Following</h5>
-                <button className="btn-close" onClick={() => setShowFollowing(false)}></button>
-              </div>
-              <div className="modal-body">
-                {!followingLoaded ? (
-                  <div className="text-center py-3"><div className="spinner-border spinner-border-sm"></div></div>
-                ) : following.length === 0 ? (
-                  <p className="text-muted">Not following anyone yet</p>
-                ) : (
-                  <div className="list-group list-group-flush">
-                    {following.map((a) => (
-                      <Link
-                        key={a.id}
-                        to={`/u/${a.handle}`}
-                        className="list-group-item list-group-item-action"
-                        onClick={() => setShowFollowing(false)}
-                      >
-                        <div className="d-flex align-items-center">
-                          {a.avatar_url ? (
-                            <img
-                              src={a.avatar_url}
-                              alt=""
-                              className="rounded-circle me-2"
-                              style={{ width: 32, height: 32, objectFit: 'cover' }}
-                            />
-                          ) : (
-                            <div className="avatar avatar-sm me-2">{getUsername(a.handle)[0].toUpperCase()}</div>
-                          )}
-                          <div>
-                            <div className="fw-semibold">{a.name || getUsername(a.handle)}</div>
-                            <small className="text-muted">{a.handle}</small>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <ActorListModal
+        show={showFollowing}
+        title="Following"
+        actors={following}
+        loading={!followingLoaded}
+        onClose={() => setShowFollowing(false)}
+        emptyMessage="Not following anyone yet"
+      />
 
       {/* Settings Drawer */}
       {showSettings && actor && (

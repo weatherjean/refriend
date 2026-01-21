@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { tags, Post } from '../api';
 import { PostCard } from '../components/PostCard';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
+import { LoadMoreButton } from '../components/LoadMoreButton';
 
 export function TagPage() {
   const { tag } = useParams<{ tag: string }>();
@@ -44,11 +47,7 @@ export function TagPage() {
   }, [tag, nextCursor, loadingMore]);
 
   if (loading) {
-    return (
-      <div className="text-center py-5">
-        <div className="spinner-border text-primary"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (error) {
@@ -62,29 +61,14 @@ export function TagPage() {
       <h4 className="mb-4">#{tag}</h4>
 
       {postList.length === 0 ? (
-        <div className="text-center text-muted py-5">
-          <i className="bi bi-hash fs-1 mb-3 d-block"></i>
-          <p>No posts with this hashtag yet.</p>
-        </div>
+        <EmptyState icon="hash" title="No posts with this hashtag yet." />
       ) : (
         <>
           {postList.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
           {nextCursor && (
-            <div className="text-center py-3">
-              <button
-                className="btn btn-outline-primary"
-                onClick={loadMore}
-                disabled={loadingMore}
-              >
-                {loadingMore ? (
-                  <><span className="spinner-border spinner-border-sm me-1"></span> Loading...</>
-                ) : (
-                  'Load More'
-                )}
-              </button>
-            </div>
+            <LoadMoreButton loading={loadingMore} onClick={loadMore} />
           )}
         </>
       )}

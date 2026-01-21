@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { posts as postsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
+import { LoadingSpinner } from '../components/LoadingSpinner';
+import { EmptyState } from '../components/EmptyState';
+import { LoadMoreButton } from '../components/LoadMoreButton';
 import { useAuth } from '../context/AuthContext';
 
 export function HomePage() {
@@ -43,11 +46,7 @@ export function HomePage() {
   }, [timeline, nextCursor, loadingMore]);
 
   if (loading) {
-    return (
-      <div className="text-center py-5">
-        <div className="spinner-border text-primary"></div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
@@ -57,33 +56,18 @@ export function HomePage() {
       </h4>
 
       {postList.length === 0 ? (
-        <div className="text-center text-muted py-5">
-          <i className="bi bi-inbox fs-1 mb-3 d-block"></i>
-          {user ? (
-            <p>No posts yet. Follow some users to see posts here.</p>
-          ) : (
-            <p>No posts yet. Be the first to post!</p>
-          )}
-        </div>
+        <EmptyState
+          icon="inbox"
+          title={user ? 'No posts yet.' : 'No posts yet.'}
+          description={user ? 'Follow some users to see posts here.' : 'Be the first to post!'}
+        />
       ) : (
         <>
           {postList.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
           {nextCursor && (
-            <div className="text-center py-3">
-              <button
-                className="btn btn-outline-primary"
-                onClick={loadMore}
-                disabled={loadingMore}
-              >
-                {loadingMore ? (
-                  <><span className="spinner-border spinner-border-sm me-1"></span> Loading...</>
-                ) : (
-                  'Load More'
-                )}
-              </button>
-            </div>
+            <LoadMoreButton loading={loadingMore} onClick={loadMore} />
           )}
         </>
       )}

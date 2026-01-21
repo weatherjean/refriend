@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { communities, type Community, type CommunityModerationInfo } from '../../api';
 import { AdminManagement } from './AdminManagement';
 import { BanManagement } from './BanManagement';
-import { ConfirmModal } from './ConfirmModal';
+import { ConfirmModal } from '../ConfirmModal';
 
 export function SettingsTab({
   community,
