@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { posts as postsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { useAuth } from '../context/AuthContext';
 
 export function PostPage() {
@@ -15,6 +16,7 @@ export function PostPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [replyContent, setReplyContent] = useState('');
   const [replying, setReplying] = useState(false);
 
@@ -38,7 +40,7 @@ export function PostPage() {
   }, [id]);
 
   const handleDelete = async () => {
-    if (!post || !confirm('Are you sure you want to delete this post?')) return;
+    if (!post) return;
 
     setDeleting(true);
     try {
@@ -47,6 +49,7 @@ export function PostPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete post');
       setDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -139,13 +142,24 @@ export function PostPage() {
         <div className="mt-3">
           <button
             className="btn btn-danger btn-sm"
-            onClick={handleDelete}
+            onClick={() => setShowDeleteConfirm(true)}
             disabled={deleting}
           >
             {deleting ? 'Deleting...' : 'Delete Post'}
           </button>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        show={showDeleteConfirm}
+        title="Delete Post"
+        message="Are you sure you want to delete this post? This action cannot be undone."
+        confirmText={deleting ? 'Deleting...' : 'Delete'}
+        confirmVariant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
 
       {/* Reply form */}
       {user && (

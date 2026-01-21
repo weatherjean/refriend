@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { users, follows, search, actors, Actor, Post } from '../api';
 import { PostCard } from '../components/PostCard';
-import { SettingsDrawer } from '../components/SettingsDrawer';
 import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
 import { Avatar } from '../components/Avatar';
@@ -12,6 +11,7 @@ import { LoadMoreButton } from '../components/LoadMoreButton';
 import { ActorListModal } from '../components/ActorListModal';
 import { ProfileHeader } from '../components/ProfileHeader';
 import { ProfileTabs } from '../components/ProfileTabs';
+import { ProfileSettingsTab } from '../components/ProfileSettingsTab';
 
 export function ActorPage() {
   const location = useLocation();
@@ -34,7 +34,7 @@ export function ActorPage() {
   const [loadingMorePosts, setLoadingMorePosts] = useState(false);
   const [loadingMoreReplies, setLoadingMoreReplies] = useState(false);
   const [loadingMoreBoosts, setLoadingMoreBoosts] = useState(false);
-  const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'boosts'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'boosts' | 'settings'>('posts');
   const [followers, setFollowers] = useState<Actor[]>([]);
   const [following, setFollowing] = useState<Actor[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -45,7 +45,6 @@ export function ActorPage() {
   const [message, setMessage] = useState('');
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [isLocalUser, setIsLocalUser] = useState(false);
   const [followersLoaded, setFollowersLoaded] = useState(false);
   const [followingLoaded, setFollowingLoaded] = useState(false);
@@ -300,7 +299,6 @@ export function ActorPage() {
         onFollow={handleFollow}
         onShowFollowers={() => setShowFollowers(true)}
         onShowFollowing={() => setShowFollowing(true)}
-        onShowSettings={() => setShowSettings(true)}
       />
 
       {message && (
@@ -324,6 +322,7 @@ export function ActorPage() {
       <ProfileTabs
         activeTab={activeTab}
         showBoosts={actor.is_local}
+        showSettings={isOwnProfile}
         onTabChange={setActiveTab}
       />
 
@@ -439,12 +438,11 @@ export function ActorPage() {
         emptyMessage="Not following anyone yet"
       />
 
-      {/* Settings Drawer */}
-      {showSettings && actor && (
-        <SettingsDrawer
+      {/* Settings Tab Content */}
+      {activeTab === 'settings' && isOwnProfile && actor && (
+        <ProfileSettingsTab
           actor={actor}
-          onClose={() => setShowSettings(false)}
-          onSave={(updated) => setActor(updated)}
+          onUpdate={(updated) => setActor(updated)}
         />
       )}
     </div>

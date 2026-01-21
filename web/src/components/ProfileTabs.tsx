@@ -1,12 +1,13 @@
-type TabType = 'posts' | 'replies' | 'boosts';
+type TabType = 'posts' | 'replies' | 'boosts' | 'settings';
 
 interface ProfileTabsProps {
   activeTab: TabType;
   showBoosts: boolean;
+  showSettings?: boolean;
   onTabChange: (tab: TabType) => void;
 }
 
-export function ProfileTabs({ activeTab, showBoosts, onTabChange }: ProfileTabsProps) {
+export function ProfileTabs({ activeTab, showBoosts, showSettings, onTabChange }: ProfileTabsProps) {
   return (
     <ul className="nav nav-tabs mb-3">
       <li className="nav-item">
@@ -32,6 +33,16 @@ export function ProfileTabs({ activeTab, showBoosts, onTabChange }: ProfileTabsP
             onClick={() => onTabChange('boosts')}
           >
             Boosts
+          </button>
+        </li>
+      )}
+      {showSettings && (
+        <li className="nav-item">
+          <button
+            className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => onTabChange('settings')}
+          >
+            <i className="bi bi-gear me-1"></i>Settings
           </button>
         </li>
       )}

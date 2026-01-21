@@ -12,7 +12,6 @@ interface ProfileHeaderProps {
   onFollow: () => void;
   onShowFollowers: () => void;
   onShowFollowing: () => void;
-  onShowSettings: () => void;
 }
 
 export function ProfileHeader({
@@ -26,7 +25,6 @@ export function ProfileHeader({
   onFollow,
   onShowFollowers,
   onShowFollowing,
-  onShowSettings,
 }: ProfileHeaderProps) {
   const displayName = actor.name || username;
 
@@ -93,16 +91,6 @@ export function ProfileHeader({
             </div>
           )}
 
-          {loggedIn && isOwnProfile && (
-            <div>
-              <button
-                className="btn btn-outline-secondary"
-                onClick={onShowSettings}
-              >
-                <i className="bi bi-gear me-1"></i> Settings
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>

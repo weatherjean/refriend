@@ -5,10 +5,13 @@ import { formatTimeAgo } from '../utils';
 import { Avatar } from '../components/Avatar';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 export function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     loadNotifications();
@@ -50,12 +53,15 @@ export function NotificationsPage() {
   }
 
   const handleClearAll = async () => {
-    if (!confirm('Clear all notifications?')) return;
+    setClearing(true);
     try {
       await notificationsApi.delete();
       setNotifications([]);
+      setShowClearConfirm(false);
     } catch (err) {
       console.error('Failed to clear notifications:', err);
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -65,7 +71,7 @@ export function NotificationsPage() {
         <h4 className="mb-0">Notifications</h4>
         {notifications.length > 0 && (
           <button
-            onClick={handleClearAll}
+            onClick={() => setShowClearConfirm(true)}
             className="btn btn-outline-secondary btn-sm"
           >
             Clear all
@@ -112,6 +118,17 @@ export function NotificationsPage() {
           ))}
         </div>
       )}
+
+      {/* Clear Confirmation Modal */}
+      <ConfirmModal
+        show={showClearConfirm}
+        title="Clear Notifications"
+        message="Are you sure you want to clear all notifications? This action cannot be undone."
+        confirmText={clearing ? 'Clearing...' : 'Clear All'}
+        confirmVariant="danger"
+        onConfirm={handleClearAll}
+        onCancel={() => setShowClearConfirm(false)}
+      />
     </div>
   );
 }

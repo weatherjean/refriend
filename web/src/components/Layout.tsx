@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
 import { tags, users, notifications as notificationsApi, TrendingUser } from '../api';
 import { TagBadge } from './TagBadge';
-import { SettingsDrawer } from './SettingsDrawer';
 import { Avatar } from './Avatar';
 
 interface LayoutProps {
@@ -12,11 +11,10 @@ interface LayoutProps {
 }
 
 export function Layout({ children }: LayoutProps) {
-  const { user, actor, logout, setActor } = useAuth();
+  const { user, actor, logout } = useAuth();
   const navigate = useNavigate();
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
   const [trendingUsers, setTrendingUsers] = useState<TrendingUser[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -168,12 +166,12 @@ export function Layout({ children }: LayoutProps) {
                   </span>
                 </div>
                 <div className="d-flex gap-2">
-                  <button
-                    onClick={() => setShowSettings(true)}
+                  <Link
+                    to={`/u/${actor?.handle}`}
                     className="btn btn-outline-secondary btn-sm flex-grow-1"
                   >
-                    <i className="bi bi-gear me-1"></i> Settings
-                  </button>
+                    <i className="bi bi-person me-1"></i> Profile
+                  </Link>
                   <button onClick={handleLogout} className="btn btn-outline-secondary btn-sm flex-grow-1">
                     <i className="bi bi-box-arrow-right me-1"></i> Logout
                   </button>
@@ -201,14 +199,6 @@ export function Layout({ children }: LayoutProps) {
         </div>
       </div>
 
-      {/* Settings Drawer */}
-      {showSettings && actor && (
-        <SettingsDrawer
-          actor={actor}
-          onClose={() => setShowSettings(false)}
-          onSave={(updated) => setActor(updated)}
-        />
-      )}
     </div>
   );
 }
