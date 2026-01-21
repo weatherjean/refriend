@@ -1,3 +1,4 @@
+import { Modal } from 'react-bootstrap';
 import { Actor } from '../api';
 import { ActorListItem } from './ActorListItem';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -19,35 +20,24 @@ export function ActorListModal({
   onClose,
   emptyMessage = 'No users yet',
 }: ActorListModalProps) {
-  if (!show) return null;
-
   return (
-    <div
-      className="modal show d-block"
-      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-      onClick={onClose}
-    >
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-content">
-          <div className="modal-header">
-            <h5 className="modal-title">{title}</h5>
-            <button className="btn-close" onClick={onClose}></button>
+    <Modal show={show} onHide={onClose}>
+      <Modal.Header closeButton>
+        <Modal.Title>{title}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {loading ? (
+          <LoadingSpinner size="sm" className="py-3" />
+        ) : actors.length === 0 ? (
+          <p className="text-muted">{emptyMessage}</p>
+        ) : (
+          <div className="list-group list-group-flush">
+            {actors.map((actor) => (
+              <ActorListItem key={actor.id} actor={actor} onClick={onClose} />
+            ))}
           </div>
-          <div className="modal-body">
-            {loading ? (
-              <LoadingSpinner size="sm" className="py-3" />
-            ) : actors.length === 0 ? (
-              <p className="text-muted">{emptyMessage}</p>
-            ) : (
-              <div className="list-group list-group-flush">
-                {actors.map((actor) => (
-                  <ActorListItem key={actor.id} actor={actor} onClick={onClose} />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+        )}
+      </Modal.Body>
+    </Modal>
   );
 }

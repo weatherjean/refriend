@@ -1,3 +1,15 @@
+import { Modal, Button } from 'react-bootstrap';
+
+interface ConfirmModalProps {
+  show: boolean;
+  title: string;
+  message: string;
+  confirmText: string;
+  confirmVariant?: 'danger' | 'warning' | 'primary' | 'secondary';
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
 export function ConfirmModal({
   show,
   title,
@@ -6,38 +18,23 @@ export function ConfirmModal({
   confirmVariant = 'danger',
   onConfirm,
   onCancel,
-}: {
-  show: boolean;
-  title: string;
-  message: string;
-  confirmText: string;
-  confirmVariant?: 'danger' | 'warning' | 'primary' | 'secondary';
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  if (!show) return null;
-
+}: ConfirmModalProps) {
   return (
-    <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-      <div className="modal-dialog modal-dialog-centered">
-        <div className="modal-content">
-          <div className="modal-header">
-            <h5 className="modal-title">{title}</h5>
-            <button type="button" className="btn-close" onClick={onCancel}></button>
-          </div>
-          <div className="modal-body">
-            <p>{message}</p>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onCancel}>
-              Cancel
-            </button>
-            <button type="button" className={`btn btn-${confirmVariant}`} onClick={onConfirm}>
-              {confirmText}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <Modal show={show} onHide={onCancel} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>{title}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <p>{message}</p>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button variant={confirmVariant} onClick={onConfirm}>
+          {confirmText}
+        </Button>
+      </Modal.Footer>
+    </Modal>
   );
 }
