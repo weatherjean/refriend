@@ -123,13 +123,37 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
       style={{ cursor: linkToPost ? 'pointer' : 'default' }}
     >
       <div className="card-body">
-        {/* Author row */}
-        <div className="d-flex align-items-center mb-3">
-          {/* Community pill - right aligned */}
+        {/* Header: Avatar + Meta + Community */}
+        <div className="post-header">
+          <Link to={authorLink} onClick={(e) => e.stopPropagation()} className="post-avatar-link">
+            <Avatar
+              src={post.author.avatar_url}
+              name={username}
+              size="md"
+            />
+          </Link>
+          <div className="post-meta-block">
+            <div className="post-author-line">
+              <Link
+                to={authorLink}
+                className="post-author text-decoration-none"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {post.author.name || username}
+              </Link>
+              {!post.author.is_local && (
+                <span className="post-remote-icon" title="Remote user">
+                  <i className="bi bi-globe2"></i>
+                </span>
+              )}
+              <span className="post-time">{formatTimeAgo(post.created_at)}</span>
+            </div>
+            <div className="post-handle">{post.author.handle}</div>
+          </div>
           {community && (
             <Link
               to={`/c/${community.name}`}
-              className="community-pill ms-auto order-1"
+              className="community-pill"
               onClick={(e) => e.stopPropagation()}
             >
               {community.avatar_url ? (
@@ -140,44 +164,15 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
               <span>{community.name}</span>
             </Link>
           )}
-          <Link to={authorLink} onClick={(e) => e.stopPropagation()}>
-            <Avatar
-              src={post.author.avatar_url}
-              name={username}
-              size="md"
-              className="me-3 flex-shrink-0"
-            />
-          </Link>
-          <div className="flex-grow-1 min-width-0">
-            <div className="d-flex align-items-baseline flex-wrap gap-1">
-              <Link
-                to={authorLink}
-                className="post-author text-decoration-none"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {post.author.name || username}
-              </Link>
-              <span className="post-handle">{post.author.handle}</span>
-              {!post.author.is_local && (
-                <span className="text-success ms-1" title="Remote user">
-                  <i className="bi bi-globe2"></i>
-                </span>
-              )}
-            </div>
-            <div className="post-time">
-              {formatTimeAgo(post.created_at)}
-            </div>
-          </div>
         </div>
 
         {/* Reply indicator */}
         {post.in_reply_to && post.in_reply_to.author && (
-          <div className="post-meta mb-2">
-            <i className="bi bi-reply me-1"></i>
-            Replying to{' '}
+          <div className="post-reply-indicator">
+            <i className="bi bi-reply"></i>
+            <span>Replying to </span>
             <Link
               to={`/u/${post.in_reply_to.author.handle}`}
-              className="text-decoration-none"
               onClick={(e) => e.stopPropagation()}
             >
               {post.in_reply_to.author.name || post.in_reply_to.author.handle}
@@ -188,25 +183,24 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
         {/* Content */}
         {post.sensitive && !showSensitive ? (
           <div
-            className="rounded p-3 mb-3 text-center"
-            style={{ backgroundColor: 'var(--bs-tertiary-bg)', cursor: 'pointer' }}
+            className="post-sensitive-cover"
             onClick={(e) => {
               e.stopPropagation();
               setShowSensitive(true);
             }}
           >
-            <i className="bi bi-eye-slash fs-4 d-block mb-1 text-muted"></i>
-            <span className="text-muted small">Sensitive content · Click to reveal</span>
+            <i className="bi bi-eye-slash"></i>
+            <span>Sensitive content · Click to reveal</span>
           </div>
         ) : (
           <>
             <div
-              className="post-content mb-3"
+              className="post-content"
               dangerouslySetInnerHTML={{ __html: post.content }}
             />
 
             {post.attachments && post.attachments.length > 0 && (
-              <div className="mb-3">
+              <div className="post-attachments">
                 <ImageSlider
                   attachments={post.attachments}
                   onOpenLightbox={(index) => {
@@ -230,7 +224,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
 
         {/* Hashtags */}
         {post.hashtags.length > 0 && (
-          <div className="d-flex flex-wrap gap-1 mb-2">
+          <div className="post-hashtags">
             {post.hashtags.map((tag) => (
               <TagBadge key={tag} tag={tag} />
             ))}
@@ -250,7 +244,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
             ) : (
               <>
                 <i className={`bi ${liked ? 'bi-heart-fill' : 'bi-heart'}`}></i>
-                <span>{likesCount || ''}</span>
+                <span>{likesCount}</span>
               </>
             )}
           </button>
@@ -263,7 +257,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
               title="View replies"
             >
               <i className="bi bi-chat"></i>
-              <span>{post.replies_count || ''}</span>
+              <span>{post.replies_count}</span>
             </Link>
           )}
 
@@ -279,7 +273,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
               ) : (
                 <>
                   <i className="bi bi-arrow-repeat"></i>
-                  <span>{boostsCount || ''}</span>
+                  <span>{boostsCount}</span>
                 </>
               )}
             </button>
