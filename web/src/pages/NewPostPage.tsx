@@ -155,7 +155,7 @@ export function NewPostPage() {
                         className="rounded me-2 bg-secondary d-flex align-items-center justify-content-center"
                         style={{ width: 24, height: 24 }}
                       >
-                        <i className="bi bi-people text-white" style={{ fontSize: '0.7rem' }}></i>
+                        <i className="bi bi-people-fill text-white" style={{ fontSize: '0.7rem' }}></i>
                       </div>
                     )}
                     <span>{selectedCommunity.name}</span>
@@ -205,7 +205,7 @@ export function NewPostPage() {
                               className="rounded me-2 bg-secondary d-flex align-items-center justify-content-center"
                               style={{ width: 24, height: 24 }}
                             >
-                              <i className="bi bi-people text-white" style={{ fontSize: '0.7rem' }}></i>
+                              <i className="bi bi-people-fill text-white" style={{ fontSize: '0.7rem' }}></i>
                             </div>
                           )}
                           <div>
@@ -264,7 +264,7 @@ export function NewPostPage() {
             onClick={() => fileInputRef.current?.click()}
             disabled={images.length >= 4}
           >
-            <i className="bi bi-image me-2"></i>
+            <i className="bi bi-image-fill me-2"></i>
             Add Images ({images.length}/4)
           </button>
         </div>
@@ -280,7 +280,7 @@ export function NewPostPage() {
               onChange={(e) => setSensitive(e.target.checked)}
             />
             <label className="form-check-label" htmlFor="sensitive">
-              <i className="bi bi-eye-slash me-1"></i>
+              <i className="bi bi-eye-slash-fill me-1"></i>
               Mark as sensitive content
             </label>
             <div className="form-text">Images will be blurred until clicked</div>

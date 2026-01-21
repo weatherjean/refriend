@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { tags } from '../api';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
+import { PageHeader } from '../components/PageHeader';
 
 export function ExplorePage() {
   const [tagInput, setTagInput] = useState('');
@@ -51,7 +52,7 @@ export function ExplorePage() {
 
   return (
     <div>
-      <h4 className="mb-4">Explore Tags</h4>
+      <PageHeader title="Tags" icon="hash" />
 
       <div className="card mb-4">
         <div className="card-body">

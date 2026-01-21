@@ -169,7 +169,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
         {/* Reply indicator */}
         {post.in_reply_to && post.in_reply_to.author && (
           <div className="post-reply-indicator">
-            <i className="bi bi-reply"></i>
+            <i className="bi bi-reply-fill"></i>
             <span>Replying to </span>
             <Link
               to={`/u/${post.in_reply_to.author.handle}`}
@@ -189,7 +189,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
               setShowSensitive(true);
             }}
           >
-            <i className="bi bi-eye-slash"></i>
+            <i className="bi bi-eye-slash-fill"></i>
             <span>Sensitive content · Click to reveal</span>
           </div>
         ) : (

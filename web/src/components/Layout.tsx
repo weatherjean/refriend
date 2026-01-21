@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFeed } from '../context/FeedContext';
@@ -17,6 +17,15 @@ export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleSearch = (e: FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      setSearchQuery('');
+    }
+  };
 
   useEffect(() => {
     tags.getPopular()
@@ -59,30 +68,43 @@ export function Layout({ children }: LayoutProps) {
             <img src="/icon.svg" alt="riff" height="36" />
           </Link>
 
+          {/* Search Bar */}
+          <form onSubmit={handleSearch} className="mb-3">
+            <div className="input-group">
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <button type="submit" className="btn btn-outline-secondary">
+                <i className="bi bi-search"></i>
+              </button>
+            </div>
+          </form>
+
           {/* Navigation */}
           <div className="list-group sidebar-nav mb-4">
             <Link to="/" className="list-group-item list-group-item-action">
-              <i className="bi bi-house me-2"></i> Feed
-            </Link>
-            <Link to="/search" className="list-group-item list-group-item-action">
-              <i className="bi bi-search me-2"></i> Search
+              <i className="bi bi-house-fill me-2"></i> Feed
             </Link>
             <Link to="/explore" className="list-group-item list-group-item-action">
               <i className="bi bi-hash me-2"></i> Tags
             </Link>
             <Link to="/communities" className="list-group-item list-group-item-action">
-              <i className="bi bi-people me-2"></i> Communities
+              <i className="bi bi-people-fill me-2"></i> Communities
             </Link>
             {user && actor && (
               <>
                 <Link to="/notifications" className="list-group-item list-group-item-action d-flex align-items-center">
-                  <i className="bi bi-bell me-2"></i> Notifications
+                  <i className="bi bi-bell-fill me-2"></i> Notifications
                   {unreadCount > 0 && (
                     <span className="badge bg-danger rounded-pill ms-auto">{unreadCount > 99 ? '99+' : unreadCount}</span>
                   )}
                 </Link>
                 <Link to={`/u/${username}`} className="list-group-item list-group-item-action">
-                  <i className="bi bi-person me-2"></i> Profile
+                  <i className="bi bi-person-fill me-2"></i> Profile
                 </Link>
               </>
             )}
@@ -96,7 +118,7 @@ export function Layout({ children }: LayoutProps) {
                 className={`btn btn-sm ${feedType === 'new' ? 'btn-primary' : 'btn-outline-secondary'}`}
                 onClick={() => setFeedType('new')}
               >
-                <i className="bi bi-clock me-1"></i> New
+                <i className="bi bi-clock-fill me-1"></i> New
               </button>
               <button
                 type="button"
@@ -153,7 +175,7 @@ export function Layout({ children }: LayoutProps) {
                     to={`/u/${actor?.handle}`}
                     className="btn btn-outline-secondary btn-sm flex-grow-1"
                   >
-                    <i className="bi bi-person me-1"></i> Profile
+                    <i className="bi bi-person-fill me-1"></i> Profile
                   </Link>
                   <button onClick={handleLogout} className="btn btn-outline-secondary btn-sm flex-grow-1">
                     <i className="bi bi-box-arrow-right me-1"></i> Logout

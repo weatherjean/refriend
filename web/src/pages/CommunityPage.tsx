@@ -102,7 +102,7 @@ export function CommunityPage() {
   if (error || !community) {
     return (
       <div className="text-center py-5">
-        <i className="bi bi-exclamation-circle text-danger fs-1 mb-3 d-block"></i>
+        <i className="bi bi-exclamation-circle-fill text-danger fs-1 mb-3 d-block"></i>
         <p className="text-muted">{error || 'Community not found'}</p>
         <Link to="/communities" className="btn btn-outline-primary btn-sm">
           Back to communities
@@ -129,7 +129,7 @@ export function CommunityPage() {
                 className="rounded me-3 bg-secondary d-flex align-items-center justify-content-center"
                 style={{ width: 80, height: 80 }}
               >
-                <i className="bi bi-people text-white fs-2"></i>
+                <i className="bi bi-people-fill text-white fs-2"></i>
               </div>
             )}
             <div className="flex-grow-1">
@@ -158,7 +158,7 @@ export function CommunityPage() {
               <div className="d-flex gap-3 text-muted small">
                 <span><strong>{community.member_count}</strong> members</span>
                 {community.require_approval && (
-                  <span><i className="bi bi-shield-check me-1"></i>Posts require approval</span>
+                  <span><i className="bi bi-shield-fill-check me-1"></i>Posts require approval</span>
                 )}
                 {moderation?.isAdmin && (
                   <span className="text-primary"><i className="bi bi-star-fill me-1"></i>{moderation.isOwner ? 'Owner' : 'Admin'}</span>
@@ -200,7 +200,7 @@ export function CommunityPage() {
               className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`}
               onClick={() => setActiveTab('settings')}
             >
-              <i className="bi bi-gear me-1"></i>Settings
+              <i className="bi bi-gear-fill me-1"></i>Settings
             </button>
           </li>
         )}

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { tags, Post } from '../api';
 import { PostCard } from '../components/PostCard';
+import { PageHeader } from '../components/PageHeader';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { LoadMoreButton } from '../components/LoadMoreButton';
@@ -58,7 +59,7 @@ export function TagPage() {
 
   return (
     <div>
-      <h4 className="mb-4">#{tag}</h4>
+      <PageHeader title={`#${tag}`} icon="hash" />
 
       {postList.length === 0 ? (
         <EmptyState icon="hash" title="No posts with this hashtag yet." />

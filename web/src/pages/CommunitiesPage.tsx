@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { LoadMoreButton } from '../components/LoadMoreButton';
+import { PageHeader } from '../components/PageHeader';
 
 export function CommunitiesPage() {
   const { user } = useAuth();
@@ -71,14 +72,15 @@ export function CommunitiesPage() {
 
   return (
     <div>
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h4 className="mb-0">Communities</h4>
-        {user && (
+      <PageHeader
+        title="Communities"
+        icon="people-fill"
+        actions={user ? (
           <Link to="/communities/new" className="btn btn-primary btn-sm">
             <i className="bi bi-plus-lg me-1"></i> Create
           </Link>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       <div className="card mb-4">
         <div className="card-body">
@@ -122,7 +124,7 @@ export function CommunitiesPage() {
       ) : displayCommunities.length === 0 ? (
         <div className="text-center text-muted py-4">
           <EmptyState
-            icon="people"
+            icon="people-fill"
             title={isSearching ? `No communities found matching "${searchInput.trim()}"` : 'No communities yet.'}
           />
           {!isSearching && user && (
@@ -152,7 +154,7 @@ export function CommunitiesPage() {
                     className="rounded me-3 bg-secondary d-flex align-items-center justify-content-center"
                     style={{ width: 48, height: 48 }}
                   >
-                    <i className="bi bi-people text-white fs-5"></i>
+                    <i className="bi bi-people-fill text-white fs-5"></i>
                   </div>
                 )}
                 <div className="flex-grow-1">

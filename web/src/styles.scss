@@ -23,10 +23,16 @@ $font-family-monospace: "Monaco", "Lucida Console", "DejaVu Sans Mono", "Courier
 }
 
 // Use monospace for brand and headings
-h1, h2, h3, .display-1, .display-2, .display-3, .display-4, .display-5, .display-6 {
+h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .display-6 {
   font-family: $font-family-monospace;
   font-weight: 600;
   letter-spacing: -0.02em;
+
+  // Ensure Bootstrap icons render correctly in headings
+  i.bi {
+    font-family: "bootstrap-icons" !important;
+    vertical-align: middle;
+  }
 }
 
 // Dark mode color overrides
@@ -443,4 +449,14 @@ h1, h2, h3, .display-1, .display-2, .display-3, .display-4, .display-5, .display
 .post-images.blurred .image-grid {
   filter: blur(20px);
   pointer-events: none;
+}
+
+// Spin animation for refresh icons
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
 }

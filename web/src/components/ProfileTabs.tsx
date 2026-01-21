@@ -42,7 +42,7 @@ export function ProfileTabs({ activeTab, showBoosts, showSettings, onTabChange }
             className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`}
             onClick={() => onTabChange('settings')}
           >
-            <i className="bi bi-gear me-1"></i>Settings
+            <i className="bi bi-gear-fill me-1"></i>Settings
           </button>
         </li>
       )}

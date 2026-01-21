@@ -6,6 +6,7 @@ import { Avatar } from '../components/Avatar';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { PageHeader } from '../components/PageHeader';
 
 export function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -67,20 +68,21 @@ export function NotificationsPage() {
 
   return (
     <div>
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h4 className="mb-0">Notifications</h4>
-        {notifications.length > 0 && (
+      <PageHeader
+        title="Notifications"
+        icon="bell-fill"
+        actions={notifications.length > 0 ? (
           <button
             onClick={() => setShowClearConfirm(true)}
             className="btn btn-outline-secondary btn-sm"
           >
             Clear all
           </button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {notifications.length === 0 ? (
-        <EmptyState icon="bell" title="No notifications yet" />
+        <EmptyState icon="bell-fill" title="No notifications yet" />
       ) : (
         <div className="d-flex flex-column gap-2">
           {notifications.map((n) => (

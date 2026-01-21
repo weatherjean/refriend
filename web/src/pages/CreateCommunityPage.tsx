@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { communities } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { PageHeader } from '../components/PageHeader';
 
 export function CreateCommunityPage() {
   const { user } = useAuth();
@@ -15,7 +16,7 @@ export function CreateCommunityPage() {
   if (!user) {
     return (
       <div className="text-center py-5">
-        <i className="bi bi-lock fs-1 mb-3 d-block text-muted"></i>
+        <i className="bi bi-lock-fill fs-1 mb-3 d-block text-muted"></i>
         <p className="text-muted">You need to be logged in to create a community.</p>
         <Link to="/login" className="btn btn-primary">Log in</Link>
       </div>
@@ -56,14 +57,14 @@ export function CreateCommunityPage() {
 
   return (
     <div>
-      <h4 className="mb-4">Create a Community</h4>
+      <PageHeader title="Create a Community" icon="plus-lg" />
 
       <div className="card">
         <div className="card-body">
           <form onSubmit={handleSubmit}>
             {error && (
               <div className="alert alert-danger py-2">
-                <i className="bi bi-exclamation-circle me-2"></i>{error}
+                <i className="bi bi-exclamation-circle-fill me-2"></i>{error}
               </div>
             )}
 

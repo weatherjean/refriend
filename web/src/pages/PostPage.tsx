@@ -190,7 +190,7 @@ export function PostPage() {
       {replies.length > 0 && (
         <div className="mt-4">
           <h5 className="mb-3">
-            <i className="bi bi-chat-dots me-2"></i>
+            <i className="bi bi-chat-dots-fill me-2"></i>
             Replies ({replies.length})
           </h5>
           {replies.map((reply) => (

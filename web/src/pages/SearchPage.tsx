@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { search, follows, users, Actor, Post } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
 import { Avatar } from '../components/Avatar';
 import { EmptyState } from '../components/EmptyState';
 import { PostCard } from '../components/PostCard';
+import { PageHeader } from '../components/PageHeader';
 
 export function SearchPage() {
   const { user, actor: currentActor } = useAuth();
-  const [query, setQuery] = useState('');
+  const [searchParams] = useSearchParams();
+  const initialQuery = searchParams.get('q') || '';
+  const [query, setQuery] = useState(initialQuery);
   const [userResults, setUserResults] = useState<Actor[]>([]);
   const [postResults, setPostResults] = useState<Post[]>([]);
   const [postsLowConfidence, setPostsLowConfidence] = useState(false);
@@ -35,15 +38,14 @@ export function SearchPage() {
     loadFollowing();
   }, [currentActor]);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
+  const performSearch = async (searchQuery: string) => {
+    if (!searchQuery.trim()) return;
 
     setSearching(true);
     setSearched(true);
     setMessage('');
     try {
-      const { users: userRes, posts: postRes, postsLowConfidence: lowConf } = await search.query(query.trim());
+      const { users: userRes, posts: postRes, postsLowConfidence: lowConf } = await search.query(searchQuery.trim());
       setUserResults(userRes || []);
       setPostResults(postRes || []);
       setPostsLowConfidence(lowConf || false);
@@ -60,6 +62,18 @@ export function SearchPage() {
     } finally {
       setSearching(false);
     }
+  };
+
+  // Auto-search if query param is provided
+  useEffect(() => {
+    if (initialQuery) {
+      performSearch(initialQuery);
+    }
+  }, [initialQuery]);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    performSearch(query);
   };
 
   const handleFollow = async (actor: Actor) => {
@@ -104,7 +118,7 @@ export function SearchPage() {
 
   return (
     <div>
-      <h4 className="mb-4">Search</h4>
+      <PageHeader title="Search" icon="search" />
 
       <div className="card mb-4">
         <div className="card-body">
@@ -256,7 +270,7 @@ export function SearchPage() {
                   <div>
                     {postsLowConfidence && (
                       <div className="alert alert-secondary small py-2 mb-3">
-                        <i className="bi bi-info-circle me-2"></i>
+                        <i className="bi bi-info-circle-fill me-2"></i>
                         No exact matches found. Showing loosely related posts.
                       </div>
                     )}
