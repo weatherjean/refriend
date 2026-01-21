@@ -28,9 +28,6 @@ await initCache();
 // Create Hono app
 const app = new Hono();
 
-// Track if we've migrated to a tunnel domain
-let migratedDomain: string | null = null;
-
 // Dynamic domain detection middleware - extracts domain from request
 app.use("*", async (c, next) => {
   const url = new URL(c.req.url);
@@ -38,12 +35,6 @@ app.use("*", async (c, next) => {
 
   // Update federation domain dynamically based on incoming request
   setDomain(domain);
-
-  // If this is a tunnel domain (not localhost) and we haven't migrated yet, migrate the DB
-  if (!domain.includes("localhost") && migratedDomain !== domain) {
-    await db.migrateDomain(domain);
-    migratedDomain = domain;
-  }
 
   await next();
 });

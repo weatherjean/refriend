@@ -133,54 +133,6 @@ export class DB {
     }
   }
 
-  // Migrate local actors to a new domain
-  async migrateDomain(newDomain: string) {
-    await this.query(async (client) => {
-      const localActors = (await client.queryObject<{ id: number; uri: string; handle: string; url: string | null }>`
-        SELECT id, uri, handle, url FROM actors WHERE user_id IS NOT NULL
-      `).rows;
-
-      for (const actor of localActors) {
-        const match = actor.handle.match(/^@([^@]+)@/);
-        if (!match) continue;
-        const username = match[1];
-        const newUri = `https://${newDomain}/users/${username}`;
-        const newHandle = `@${username}@${newDomain}`;
-        const newUrl = `https://${newDomain}/@${username}`;
-        const newInbox = `https://${newDomain}/users/${username}/inbox`;
-
-        await client.queryArray`
-          UPDATE actors SET uri = ${newUri}, handle = ${newHandle}, url = ${newUrl}, inbox_url = ${newInbox}
-          WHERE id = ${actor.id}
-        `;
-      }
-
-      const localPosts = (await client.queryObject<{ id: number; uri: string; url: string | null; username: string }>`
-        SELECT p.id, p.uri, p.url, u.username
-        FROM posts p
-        JOIN actors a ON p.actor_id = a.id
-        JOIN users u ON a.user_id = u.id
-      `).rows;
-
-      for (const post of localPosts) {
-        const match = post.uri.match(/\/posts\/([^/]+)$/);
-        if (!match) continue;
-        const postId = match[1];
-        const newUri = `https://${newDomain}/users/${post.username}/posts/${postId}`;
-        const newUrl = `https://${newDomain}/@${post.username}/posts/${postId}`;
-
-        await client.queryArray`UPDATE posts SET uri = ${newUri}, url = ${newUrl} WHERE id = ${post.id}`;
-      }
-
-      await client.queryArray`
-        UPDATE activities SET uri = REPLACE(uri, 'localhost:8000', ${newDomain})
-        WHERE uri LIKE '%localhost:8000%'
-      `;
-
-      console.log(`[DB] Migrated ${localActors.length} actors and ${localPosts.length} posts to ${newDomain}`);
-    });
-  }
-
   // ============ Users ============
 
   async createUser(username: string, passwordHash: string): Promise<User> {
