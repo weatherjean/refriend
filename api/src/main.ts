@@ -12,7 +12,7 @@ import { addCommunityFederationRoutes, setCommunityDB as setCommunityDBFed } fro
 import { setCommunityDb as setActivityCommunityDb } from "./activities.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
-const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://refriend:refriend@localhost:5432/refriend";
+const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://riff:riff@localhost:5432/riff";
 const STATIC_DIR = Deno.env.get("STATIC_DIR") || "../web/dist";
 
 // Initialize database
@@ -64,7 +64,7 @@ app.use("/uploads/*", serveStatic({ root: getUploadsDir(), rewriteRequestPath: (
 // Hash router handles client-side routing, so we just serve static files
 app.use("/*", serveStatic({ root: STATIC_DIR }));
 
-console.log(`Refriend v3 running on http://localhost:${PORT}`);
+console.log(`Riff running on http://localhost:${PORT}`);
 console.log(`Use 'ngrok http ${PORT}' to expose to the internet`);
 
 // Use behindProxy to handle X-Forwarded-* headers from tunnel

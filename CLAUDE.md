@@ -33,8 +33,8 @@ npm run build                  # Production build to dist/
 
 ### Database
 ```bash
-psql postgres://refriend:refriend@localhost:5432/refriend
-docker compose exec db psql -U refriend
+psql postgres://riff:riff@localhost:5432/riff
+docker compose exec db psql -U riff
 ```
 
 ### Federation Testing
@@ -45,7 +45,7 @@ ngrok http 8000
 
 ## Architecture Overview
 
-**Refriend** is an ActivityPub/Fediverse social application. Users can create posts, follow others (locally and across the fediverse), and interact via the ActivityPub protocol.
+**Riff** is an ActivityPub/Fediverse social application. Users can create posts, follow others (locally and across the fediverse), and interact via the ActivityPub protocol.
 
 ### Tech Stack
 - **Backend:** Deno, Hono framework, Fedify (ActivityPub), PostgreSQL

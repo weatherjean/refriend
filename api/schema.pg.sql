@@ -1,4 +1,4 @@
--- Refriend v3 Schema - PostgreSQL version
+-- Riff Schema - PostgreSQL version
 
 -- Users: Local accounts that can authenticate
 CREATE TABLE IF NOT EXISTS users (

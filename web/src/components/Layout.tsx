@@ -58,8 +58,7 @@ export function Layout({ children }: LayoutProps) {
         <div className="col-lg-4 sidebar py-4 px-3">
           {/* Branding */}
           <Link to="/" className="d-flex align-items-center mb-4 text-decoration-none text-reset">
-            <i className="bi bi-people-fill fs-3 text-primary me-2"></i>
-            <span className="fs-4 fw-bold">Refriend</span>
+            <img src="/logo.svg" alt="riff" height="48" />
           </Link>
 
           {/* Navigation */}
@@ -181,15 +180,15 @@ export function Layout({ children }: LayoutProps) {
           ) : (
             <div className="card">
               <div className="card-body text-center">
-                <p className="small mb-3">Join Refriend to post and participate</p>
+                <p className="small mb-3">Join Riff to post and participate</p>
                 <Link to="/register" className="btn btn-primary btn-sm w-100 mb-2">Sign up</Link>
                 <Link to="/login" className="btn btn-outline-secondary btn-sm w-100">Login</Link>
               </div>
             </div>
           )}
 
-          <div className="text-muted small text-center mt-3">
-            Refriend &middot; Federated
+          <div className="text-center mt-3">
+            <img src="/logo-mono.svg" alt="riff" height="24" style={{ opacity: 0.6 }} />
           </div>
         </div>
 

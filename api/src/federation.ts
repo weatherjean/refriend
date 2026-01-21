@@ -68,9 +68,9 @@ export const federation = createFederation<void>({
 federation.setNodeInfoDispatcher("/nodeinfo/2.1", async () => {
   return {
     software: {
-      name: "refriend",
+      name: "riff",
       version: { major: 0, minor: 1, patch: 0 },
-      homepage: new URL("https://github.com/anthropics/refriend"),
+      homepage: new URL("https://github.com/anthropics/riff"),
     },
     protocols: ["activitypub"],
     usage: {

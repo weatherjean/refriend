@@ -37,7 +37,6 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const isOwnPost = !!(actor && post.author && actor.id === post.author.id);
-  // Use community from post data or prop
   const community = post.community || communityProp;
 
   if (!post.author) return null;
@@ -47,7 +46,6 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
   const postLink = `/posts/${post.id}`;
 
   const handleCardClick = (e: React.MouseEvent) => {
-    // Don't navigate if clicking on a link or button inside
     if ((e.target as HTMLElement).closest('a, button')) return;
     if (linkToPost) {
       navigate(postLink);
@@ -125,194 +123,182 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
       style={{ cursor: linkToPost ? 'pointer' : 'default' }}
     >
       <div className="card-body">
-        {community && (
-          <Link
-            to={`/c/${community.name}`}
-            className="d-flex align-items-center text-decoration-none mb-2 small"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {community.avatar_url ? (
-              <img
-                src={community.avatar_url}
-                alt=""
-                className="rounded me-2"
-                style={{ width: 18, height: 18, objectFit: 'cover' }}
-              />
-            ) : (
-              <i className="bi bi-people-fill text-muted me-2"></i>
-            )}
-            <span className="text-muted">{community.name}</span>
-          </Link>
-        )}
-        <div className="d-flex">
-          <Link to={authorLink}>
+        {/* Author row */}
+        <div className="d-flex align-items-center mb-3">
+          {/* Community pill - right aligned */}
+          {community && (
+            <Link
+              to={`/c/${community.name}`}
+              className="community-pill ms-auto order-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {community.avatar_url ? (
+                <img src={community.avatar_url} alt="" />
+              ) : (
+                <i className="bi bi-people-fill"></i>
+              )}
+              <span>{community.name}</span>
+            </Link>
+          )}
+          <Link to={authorLink} onClick={(e) => e.stopPropagation()}>
             <Avatar
               src={post.author.avatar_url}
               name={username}
               size="md"
-              className="me-3"
+              className="me-3 flex-shrink-0"
             />
           </Link>
-          <div className="flex-grow-1">
-            <div className="d-flex align-items-center mb-1">
-              <Link to={authorLink} className="text-decoration-none">
-                <span className="fw-semibold me-2">
-                  {post.author.name || username}
-                </span>
+          <div className="flex-grow-1 min-width-0">
+            <div className="d-flex align-items-baseline flex-wrap gap-1">
+              <Link
+                to={authorLink}
+                className="post-author text-decoration-none"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {post.author.name || username}
               </Link>
-              <span className="text-muted small">{post.author.handle}</span>
-              <span className="text-muted small ms-2">
-                &middot; {formatTimeAgo(post.created_at)}
-              </span>
-            </div>
-
-            {post.in_reply_to && post.in_reply_to.author && (
-              <div className="text-muted small mb-1">
-                <i className="bi bi-reply me-1"></i>
-                Replying to{' '}
-                <Link to={`/u/${post.in_reply_to.author.handle}`} className="text-decoration-none">
-                  {post.in_reply_to.author.handle}
-                </Link>
-              </div>
-            )}
-
-            {/* Sensitive content wrapper */}
-            {post.sensitive && !showSensitive ? (
-              <div
-                className="sensitive-content position-relative mb-2 p-3 rounded"
-                style={{ backgroundColor: 'var(--bs-tertiary-bg)', cursor: 'pointer' }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowSensitive(true);
-                }}
-              >
-                <div className="text-center text-muted">
-                  <i className="bi bi-eye-slash fs-4 mb-2 d-block"></i>
-                  <span>Sensitive content</span>
-                  <br />
-                  <small>Click to reveal</small>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="mb-2" dangerouslySetInnerHTML={{ __html: post.content }} />
-
-                {/* Image attachments */}
-                {post.attachments && post.attachments.length > 0 && (
-                  <ImageSlider
-                    attachments={post.attachments}
-                    onOpenLightbox={(index) => {
-                      setLightboxIndex(index);
-                      setLightboxOpen(true);
-                    }}
-                  />
-                )}
-
-                {/* Lightbox */}
-                {post.attachments && post.attachments.length > 0 && (
-                  <ImageLightbox
-                    attachments={post.attachments}
-                    initialIndex={lightboxIndex}
-                    isOpen={lightboxOpen}
-                    onClose={() => setLightboxOpen(false)}
-                  />
-                )}
-              </>
-            )}
-
-            {post.hashtags.length > 0 && (
-              <div className="mb-2 d-flex flex-wrap gap-1">
-                {post.hashtags.map((tag) => (
-                  <TagBadge key={tag} tag={tag} />
-                ))}
-              </div>
-            )}
-
-            {/* Actions row */}
-            <div className="d-flex align-items-center mt-2 pt-2 border-top">
-              <button
-                className={`btn btn-sm me-2 ${liked ? '' : 'btn-outline-secondary'}`}
-                onClick={handleLike}
-                disabled={!user || likeLoading}
-                title={user ? (liked ? 'Unlike' : 'Like') : 'Login to like'}
-                style={liked ? {
-                  backgroundColor: 'hsl(350, 70%, 90%)',
-                  color: 'hsl(350, 70%, 35%)',
-                  border: 'none',
-                } : undefined}
-              >
-                {likeLoading ? (
-                  <span className="spinner-border spinner-border-sm"></span>
-                ) : (
-                  <>
-                    <i className={`bi ${liked ? 'bi-heart-fill' : 'bi-heart'} me-1`}></i>
-                    {likesCount}
-                  </>
-                )}
-              </button>
-
-              {linkToPost && (
-                <Link
-                  to={postLink}
-                  className={`btn btn-sm me-2 ${post.replies_count > 0 ? 'btn-outline-primary' : 'btn-outline-secondary'}`}
-                  onClick={(e) => e.stopPropagation()}
-                  title="View replies"
-                >
-                  <i className="bi bi-chat me-1"></i>
-                  {post.replies_count}
-                </Link>
-              )}
-
-              {!linkToPost && (
-                <button
-                  className={`btn btn-sm me-2 ${boosted ? '' : 'btn-outline-secondary'}`}
-                  onClick={handleBoost}
-                  disabled={!user || boostLoading || isOwnPost}
-                  title={isOwnPost ? "Can't boost own post" : (user ? (boosted ? 'Unboost' : 'Boost') : 'Login to boost')}
-                  style={boosted ? {
-                    backgroundColor: 'hsl(140, 70%, 90%)',
-                    color: 'hsl(140, 70%, 30%)',
-                    border: 'none',
-                  } : undefined}
-                >
-                  {boostLoading ? (
-                    <span className="spinner-border spinner-border-sm"></span>
-                  ) : (
-                    <>
-                      <i className="bi bi-arrow-repeat me-1"></i>
-                      {boostsCount}
-                    </>
-                  )}
-                </button>
-              )}
-
-              {isOwnPost && (
-                <button
-                  className={`btn btn-sm me-2 ${pinned ? '' : 'btn-outline-secondary'}`}
-                  onClick={handlePin}
-                  disabled={pinLoading}
-                  title={pinned ? 'Unpin from profile' : 'Pin to profile'}
-                  style={pinned ? {
-                    backgroundColor: 'hsl(45, 70%, 85%)',
-                    color: 'hsl(45, 70%, 30%)',
-                    border: 'none',
-                  } : undefined}
-                >
-                  {pinLoading ? (
-                    <span className="spinner-border spinner-border-sm"></span>
-                  ) : (
-                    <i className={`bi ${pinned ? 'bi-pin-fill' : 'bi-pin'}`}></i>
-                  )}
-                </button>
-              )}
-
+              <span className="post-handle">{post.author.handle}</span>
               {!post.author.is_local && (
-                <span className="badge bg-secondary ms-auto">
-                  <i className="bi bi-globe me-1"></i>Remote
+                <span className="text-success ms-1" title="Remote user">
+                  <i className="bi bi-globe2"></i>
                 </span>
               )}
+            </div>
+            <div className="post-time">
+              {formatTimeAgo(post.created_at)}
             </div>
           </div>
+        </div>
+
+        {/* Reply indicator */}
+        {post.in_reply_to && post.in_reply_to.author && (
+          <div className="post-meta mb-2">
+            <i className="bi bi-reply me-1"></i>
+            Replying to{' '}
+            <Link
+              to={`/u/${post.in_reply_to.author.handle}`}
+              className="text-decoration-none"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {post.in_reply_to.author.name || post.in_reply_to.author.handle}
+            </Link>
+          </div>
+        )}
+
+        {/* Content */}
+        {post.sensitive && !showSensitive ? (
+          <div
+            className="rounded p-3 mb-3 text-center"
+            style={{ backgroundColor: 'var(--bs-tertiary-bg)', cursor: 'pointer' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowSensitive(true);
+            }}
+          >
+            <i className="bi bi-eye-slash fs-4 d-block mb-1 text-muted"></i>
+            <span className="text-muted small">Sensitive content · Click to reveal</span>
+          </div>
+        ) : (
+          <>
+            <div
+              className="post-content mb-3"
+              dangerouslySetInnerHTML={{ __html: post.content }}
+            />
+
+            {post.attachments && post.attachments.length > 0 && (
+              <div className="mb-3">
+                <ImageSlider
+                  attachments={post.attachments}
+                  onOpenLightbox={(index) => {
+                    setLightboxIndex(index);
+                    setLightboxOpen(true);
+                  }}
+                />
+              </div>
+            )}
+
+            {post.attachments && post.attachments.length > 0 && (
+              <ImageLightbox
+                attachments={post.attachments}
+                initialIndex={lightboxIndex}
+                isOpen={lightboxOpen}
+                onClose={() => setLightboxOpen(false)}
+              />
+            )}
+          </>
+        )}
+
+        {/* Hashtags */}
+        {post.hashtags.length > 0 && (
+          <div className="d-flex flex-wrap gap-1 mb-2">
+            {post.hashtags.map((tag) => (
+              <TagBadge key={tag} tag={tag} />
+            ))}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="post-actions">
+          <button
+            className={`post-action-btn ${liked ? 'liked' : ''}`}
+            onClick={handleLike}
+            disabled={!user || likeLoading}
+            title={user ? (liked ? 'Unlike' : 'Like') : 'Login to like'}
+          >
+            {likeLoading ? (
+              <span className="spinner-border spinner-border-sm"></span>
+            ) : (
+              <>
+                <i className={`bi ${liked ? 'bi-heart-fill' : 'bi-heart'}`}></i>
+                <span>{likesCount || ''}</span>
+              </>
+            )}
+          </button>
+
+          {linkToPost && (
+            <Link
+              to={postLink}
+              className={`post-action-btn ${post.replies_count > 0 ? 'has-replies' : ''}`}
+              onClick={(e) => e.stopPropagation()}
+              title="View replies"
+            >
+              <i className="bi bi-chat"></i>
+              <span>{post.replies_count || ''}</span>
+            </Link>
+          )}
+
+          {!linkToPost && (
+            <button
+              className={`post-action-btn ${boosted ? 'boosted' : ''}`}
+              onClick={handleBoost}
+              disabled={!user || boostLoading || isOwnPost}
+              title={isOwnPost ? "Can't boost own post" : (user ? (boosted ? 'Unboost' : 'Boost') : 'Login to boost')}
+            >
+              {boostLoading ? (
+                <span className="spinner-border spinner-border-sm"></span>
+              ) : (
+                <>
+                  <i className="bi bi-arrow-repeat"></i>
+                  <span>{boostsCount || ''}</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {isOwnPost && (
+            <button
+              className={`post-action-btn ${pinned ? 'pinned' : ''}`}
+              onClick={handlePin}
+              disabled={pinLoading}
+              title={pinned ? 'Unpin from profile' : 'Pin to profile'}
+            >
+              {pinLoading ? (
+                <span className="spinner-border spinner-border-sm"></span>
+              ) : (
+                <i className={`bi ${pinned ? 'bi-pin-fill' : 'bi-pin'}`}></i>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

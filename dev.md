@@ -1,4 +1,4 @@
-# Refriend Development Guide
+# Riff Development Guide
 
 ## Prerequisites
 
@@ -60,18 +60,18 @@ docker compose up
 
 Connect directly:
 ```bash
-psql postgres://refriend:refriend@localhost:5432/refriend
+psql postgres://riff:riff@localhost:5432/riff
 ```
 
 Or via Docker:
 ```bash
-docker compose exec db psql -U refriend
+docker compose exec db psql -U riff
 ```
 
 ## Project Structure
 
 ```
-refriend/
+riff/
 ├── api/                 # Backend (Deno + Hono + Fedify)
 │   ├── src/
 │   │   ├── main.ts      # Entry point
