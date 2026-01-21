@@ -293,6 +293,47 @@ export class DB {
     });
   }
 
+  async searchPosts(query: string, limit = 20): Promise<{ posts: PostWithActor[]; lowConfidence: boolean }> {
+    return this.query(async (client) => {
+      // Hybrid search: ILIKE for exact matches + trigram similarity for fuzzy
+      const pattern = `%${query}%`;
+      const result = await client.queryObject(`
+        SELECT DISTINCT ON (p.id) ${this.postWithActorSelect},
+               COALESCE(similarity(p.content, $1), 0) as sim,
+               CASE WHEN p.content ILIKE $2 THEN 1 ELSE 0 END as exact_match
+        FROM posts p
+        JOIN actors a ON p.actor_id = a.id
+        WHERE (p.content ILIKE $2 OR similarity(p.content, $1) > 0.05)
+          AND p.created_at > NOW() - INTERVAL '14 days'
+        ORDER BY p.id, sim DESC
+        LIMIT $3
+      `, [query, pattern, limit * 3]);
+
+      const rows = result.rows.map(row => ({
+        post: this.parsePostWithActor(row as Record<string, unknown>),
+        sim: (row as Record<string, unknown>).sim as number,
+        exactMatch: (row as Record<string, unknown>).exact_match === 1
+      }));
+
+      // Sort by exact match first, then similarity
+      rows.sort((a, b) => {
+        if (a.exactMatch !== b.exactMatch) return b.exactMatch ? 1 : -1;
+        return b.sim - a.sim;
+      });
+
+      // High confidence: exact matches or similarity > 0.2
+      const highConfidence = rows.filter(r => r.exactMatch || r.sim > 0.2);
+
+      if (highConfidence.length > 0) {
+        return { posts: highConfidence.slice(0, limit).map(r => r.post), lowConfidence: false };
+      }
+
+      // Fallback: return a few low confidence results
+      const lowConfidenceResults = rows.slice(0, 5).map(r => r.post);
+      return { posts: lowConfidenceResults, lowConfidence: lowConfidenceResults.length > 0 };
+    });
+  }
+
   async upsertActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "user_id">): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`

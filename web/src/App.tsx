@@ -9,7 +9,6 @@ import { ActorPage } from './pages/ActorPage';
 import { SearchPage } from './pages/SearchPage';
 import { TagPage } from './pages/TagPage';
 import { ExplorePage } from './pages/ExplorePage';
-import { HotPage } from './pages/HotPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { ActorByIdPage } from './pages/ActorByIdPage';
 import { CommunitiesPage } from './pages/CommunitiesPage';
@@ -32,7 +31,6 @@ function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/hot" element={<HotPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/search" element={<SearchPage />} />

@@ -1,8 +1,9 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useFeed } from '../context/FeedContext';
 import { getUsername } from '../utils';
-import { tags, users, notifications as notificationsApi, TrendingUser } from '../api';
+import { tags, notifications as notificationsApi } from '../api';
 import { TagBadge } from './TagBadge';
 import { Avatar } from './Avatar';
 
@@ -12,17 +13,14 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const { user, actor, logout } = useAuth();
+  const { feedType, setFeedType } = useFeed();
   const navigate = useNavigate();
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
-  const [trendingUsers, setTrendingUsers] = useState<TrendingUser[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     tags.getPopular()
       .then(({ tags }) => setPopularTags(tags))
-      .catch(() => {});
-    users.getTrending()
-      .then(({ users }) => setTrendingUsers(users))
       .catch(() => {});
   }, []);
 
@@ -64,10 +62,7 @@ export function Layout({ children }: LayoutProps) {
           {/* Navigation */}
           <div className="list-group sidebar-nav mb-4">
             <Link to="/" className="list-group-item list-group-item-action">
-              <i className="bi bi-house me-2"></i> Home
-            </Link>
-            <Link to="/hot" className="list-group-item list-group-item-action">
-              <i className="bi bi-fire me-2 text-danger"></i> Hot
+              <i className="bi bi-house me-2"></i> Feed
             </Link>
             <Link to="/search" className="list-group-item list-group-item-action">
               <i className="bi bi-search me-2"></i> Search
@@ -93,6 +88,26 @@ export function Layout({ children }: LayoutProps) {
             )}
           </div>
 
+          {/* Feed Toggle (only for logged-in users) */}
+          {user && (
+            <div className="btn-group w-100 mb-4" role="group">
+              <button
+                type="button"
+                className={`btn btn-sm ${feedType === 'new' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                onClick={() => setFeedType('new')}
+              >
+                <i className="bi bi-clock me-1"></i> New
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${feedType === 'hot' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                onClick={() => setFeedType('hot')}
+              >
+                <i className="bi bi-fire me-1"></i> Hot
+              </button>
+            </div>
+          )}
+
           {/* New Post Button */}
           {user && (
             <Link to="/new" className="btn btn-primary w-100 mb-4">
@@ -108,37 +123,6 @@ export function Layout({ children }: LayoutProps) {
                 <div className="d-flex flex-wrap gap-2">
                   {popularTags.map((tag) => (
                     <TagBadge key={tag.name} tag={tag.name} />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Trending Users */}
-          {trendingUsers.length > 0 && (
-            <div className="card mb-4">
-              <div className="card-body">
-                <h6 className="card-title mb-3">
-                  <i className="bi bi-graph-up-arrow me-1"></i> Rising
-                </h6>
-                <div className="d-flex flex-column gap-2">
-                  {trendingUsers.map((u) => (
-                    <Link
-                      key={u.id}
-                      to={`/u/${u.handle}`}
-                      className="d-flex align-items-center text-decoration-none text-reset"
-                    >
-                      <Avatar
-                        src={u.avatar_url}
-                        name={u.name || u.handle}
-                        size="sm"
-                        className="me-2"
-                      />
-                      <div className="flex-grow-1 text-truncate" style={{ minWidth: 0 }}>
-                        <div className="small fw-semibold text-truncate">{u.name || getUsername(u.handle)}</div>
-                      </div>
-                      <span className="badge bg-success ms-2">+{u.new_followers}</span>
-                    </Link>
                   ))}
                 </div>
               </div>

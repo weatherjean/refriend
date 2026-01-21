@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { users, follows, search, actors, Actor, Post } from '../api';
 import { PostCard } from '../components/PostCard';
 import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
-import { Avatar } from '../components/Avatar';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { LoadMoreButton } from '../components/LoadMoreButton';
@@ -106,9 +105,9 @@ export function ActorPage() {
       }
 
       // Search for remote user
-      const { results } = await search.query(fullHandle);
-      if (results.length > 0) {
-        const remoteActor = results[0];
+      const { users: searchResults } = await search.query(fullHandle);
+      if (searchResults.length > 0) {
+        const remoteActor = searchResults[0];
         setActor(remoteActor);
         setStats({ followers: 0, following: 0 });
         setFollowers([]);

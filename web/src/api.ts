@@ -15,6 +15,7 @@ export interface Actor {
   avatar_url: string | null;
   url: string | null;
   is_local: boolean;
+  actor_type?: 'Person' | 'Group';
   created_at: string;
 }
 
@@ -272,8 +273,8 @@ export const follows = {
 
 // Search
 export const search = {
-  query: (q: string) =>
-    fetchJson<{ results: Actor[] }>(`/search?q=${encodeURIComponent(q)}`),
+  query: (q: string, type?: 'all' | 'users' | 'posts') =>
+    fetchJson<{ users: Actor[]; posts: Post[]; postsLowConfidence: boolean }>(`/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}`),
 };
 
 // Tags

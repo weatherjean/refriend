@@ -1,5 +1,8 @@
 -- Riff Schema - PostgreSQL version
 
+-- Enable pg_trgm for fuzzy text search
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 -- Users: Local accounts that can authenticate
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
@@ -241,3 +244,6 @@ CREATE INDEX IF NOT EXISTS idx_community_bans_community ON community_bans(commun
 CREATE INDEX IF NOT EXISTS idx_community_bans_actor ON community_bans(actor_id);
 CREATE INDEX IF NOT EXISTS idx_community_posts_community ON community_posts(community_id);
 CREATE INDEX IF NOT EXISTS idx_community_posts_status ON community_posts(community_id, status);
+
+-- Fuzzy search index for post content (pg_trgm)
+CREATE INDEX IF NOT EXISTS idx_posts_content_trgm ON posts USING GIN (content gin_trgm_ops);

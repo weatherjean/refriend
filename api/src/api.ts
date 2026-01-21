@@ -1425,8 +1425,11 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
 
   api.get("/search", async (c) => {
     const query = c.req.query("q") || "";
+    const type = c.req.query("type") || "all"; // "all", "users", "posts"
     const db = c.get("db");
     const domain = c.get("domain");
+    const currentUser = c.get("user");
+    const currentActor = currentUser ? await db.getActorByUserId(currentUser.id) : null;
 
     // If it looks like a handle, try to look it up
     if (query.match(/^@?[\w.-]+@[\w.-]+$/)) {
@@ -1436,7 +1439,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
         if (actor && isActor(actor)) {
           const persisted = await persistActor(db, domain, actor);
           if (persisted) {
-            return c.json({ results: [sanitizeActor(persisted)] });
+            return c.json({ users: [sanitizeActor(persisted)], posts: [] });
           }
         }
       } catch (err) {
@@ -1444,9 +1447,21 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       }
     }
 
-    // Local search by username
-    const localResults = await db.searchActors(query);
-    return c.json({ results: localResults.map(sanitizeActor) });
+    // Search users
+    const users = (type === "all" || type === "users")
+      ? (await db.searchActors(query)).map(sanitizeActor)
+      : [];
+
+    // Search posts (fuzzy search with pg_trgm)
+    let posts: unknown[] = [];
+    let postsLowConfidence = false;
+    if ((type === "all" || type === "posts") && query.length >= 3) {
+      const { posts: postResults, lowConfidence } = await db.searchPosts(query, 20);
+      posts = await Promise.all(postResults.map(post => enrichPost(db, post, currentActor?.id)));
+      postsLowConfidence = lowConfidence;
+    }
+
+    return c.json({ users, posts, postsLowConfidence });
   });
 
   // ============ Hashtags ============
@@ -1638,6 +1653,7 @@ export function sanitizeActor(actor: Actor) {
     avatar_url: actor.avatar_url,
     url: actor.url,
     is_local: actor.user_id !== null,
+    actor_type: actor.actor_type || 'Person',
     created_at: formatDate(actor.created_at),
   };
 }

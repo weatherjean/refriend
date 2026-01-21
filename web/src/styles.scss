@@ -114,8 +114,9 @@ h1, h2, h3, .display-1, .display-2, .display-3, .display-4, .display-5, .display
   transition: background-color 0.15s, color 0.15s;
 
   i {
+    display: inline-block;
     font-size: 1.25rem;
-    width: 1.75rem;
+    width: 1.5rem;
     text-align: center;
     color: #f0f0f0;
   }
