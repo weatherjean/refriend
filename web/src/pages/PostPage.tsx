@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { posts as postsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { LoadMoreButton } from '../components/LoadMoreButton';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { useAuth } from '../context/AuthContext';
 
@@ -19,17 +20,26 @@ export function PostPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [replyContent, setReplyContent] = useState('');
   const [replying, setReplying] = useState(false);
+  const [replySort, setReplySort] = useState<'new' | 'hot'>('hot');
+  const [opAuthorId, setOpAuthorId] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     const load = async () => {
+      setLoading(true);
+      setReplies([]);
+      setNextCursor(null);
       try {
         const [postData, repliesData] = await Promise.all([
           postsApi.get(id!),
-          postsApi.getReplies(id!),
+          postsApi.getReplies(id!, replySort),
         ]);
         setPost(postData.post);
         setAncestors(postData.ancestors || []);
-        setReplies(repliesData.replies);
+        setOpAuthorId(repliesData.op_author_id);
+        setNextCursor(repliesData.next_cursor);
+        setReplies(repliesData.replies); // OP sorting handled by backend
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load post');
       } finally {
@@ -37,7 +47,7 @@ export function PostPage() {
       }
     };
     load();
-  }, [id]);
+  }, [id, replySort]);
 
   const handleDelete = async () => {
     if (!post) return;
@@ -66,6 +76,20 @@ export function PostPage() {
       setError(err instanceof Error ? err.message : 'Failed to post reply');
     } finally {
       setReplying(false);
+    }
+  };
+
+  const loadMoreReplies = async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const repliesData = await postsApi.getReplies(id!, replySort, nextCursor);
+      setReplies(prev => [...prev, ...repliesData.replies]);
+      setNextCursor(repliesData.next_cursor);
+    } catch (err) {
+      console.error('Failed to load more replies:', err);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -189,13 +213,36 @@ export function PostPage() {
       {/* Replies section */}
       {replies.length > 0 && (
         <div className="mt-4">
-          <h5 className="mb-3">
-            <i className="bi bi-chat-dots-fill me-2"></i>
-            Replies ({replies.length})
-          </h5>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h5 className="mb-0">
+              <i className="bi bi-chat-dots-fill me-2"></i>
+              Replies ({post.replies_count})
+            </h5>
+            <div className="btn-group btn-group-sm">
+              <button
+                className={`btn ${replySort === 'new' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                onClick={() => setReplySort('new')}
+              >
+                New
+              </button>
+              <button
+                className={`btn ${replySort === 'hot' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                onClick={() => setReplySort('hot')}
+              >
+                Hot
+              </button>
+            </div>
+          </div>
           {replies.map((reply) => (
-            <PostCard key={reply.id} post={reply} />
+            <PostCard
+              key={reply.id}
+              post={reply}
+              isOP={reply.author?.id === opAuthorId}
+            />
           ))}
+          {nextCursor && (
+            <LoadMoreButton loading={loadingMore} onClick={loadMoreReplies} />
+          )}
         </div>
       )}
     </div>

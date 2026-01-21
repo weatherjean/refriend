@@ -566,7 +566,8 @@ export class CommunityDB {
     communityId: number,
     status: "pending" | "approved" | "rejected" | "all" = "approved",
     limit = 20,
-    before?: number
+    before?: number,
+    sort: "new" | "hot" = "new"
   ): Promise<(CommunityPost & { post: Post })[]> {
     return this.query(async (client) => {
       let query: string;
@@ -574,30 +575,31 @@ export class CommunityDB {
 
       const selectColumns = `
         cp.id as cp_id, cp.community_id, cp.post_id, cp.status, cp.submitted_at, cp.reviewed_at, cp.reviewed_by,
-        p.id as p_id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.sensitive, p.created_at
+        p.id as p_id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.sensitive, p.created_at, p.hot_score
       `;
+      const orderBy = sort === "hot" ? "p.hot_score DESC, p.id DESC" : "p.id DESC";
 
       if (status === "all") {
         query = before
           ? `SELECT ${selectColumns} FROM community_posts cp
              JOIN posts p ON cp.post_id = p.id
              WHERE cp.community_id = $1 AND p.id < $2
-             ORDER BY p.id DESC LIMIT $3`
+             ORDER BY ${orderBy} LIMIT $3`
           : `SELECT ${selectColumns} FROM community_posts cp
              JOIN posts p ON cp.post_id = p.id
              WHERE cp.community_id = $1
-             ORDER BY p.id DESC LIMIT $2`;
+             ORDER BY ${orderBy} LIMIT $2`;
         params = before ? [communityId, before, limit] : [communityId, limit];
       } else {
         query = before
           ? `SELECT ${selectColumns} FROM community_posts cp
              JOIN posts p ON cp.post_id = p.id
              WHERE cp.community_id = $1 AND cp.status = $2 AND p.id < $3
-             ORDER BY p.id DESC LIMIT $4`
+             ORDER BY ${orderBy} LIMIT $4`
           : `SELECT ${selectColumns} FROM community_posts cp
              JOIN posts p ON cp.post_id = p.id
              WHERE cp.community_id = $1 AND cp.status = $2
-             ORDER BY p.id DESC LIMIT $3`;
+             ORDER BY ${orderBy} LIMIT $3`;
         params = before ? [communityId, status, before, limit] : [communityId, status, limit];
       }
 

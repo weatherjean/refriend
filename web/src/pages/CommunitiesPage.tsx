@@ -4,7 +4,6 @@ import { communities, type Community } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
-import { LoadMoreButton } from '../components/LoadMoreButton';
 import { PageHeader } from '../components/PageHeader';
 
 export function CommunitiesPage() {
@@ -14,15 +13,17 @@ export function CommunitiesPage() {
   const [communityList, setCommunityList] = useState<Community[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [nextCursor, setNextCursor] = useState<number | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     const loadCommunities = async () => {
       try {
-        const { communities: list, next_cursor } = await communities.list({ limit: 20 });
-        setCommunityList(list);
-        setNextCursor(next_cursor);
+        if (user) {
+          const { communities: list } = await communities.getJoined();
+          setCommunityList(list);
+        } else {
+          const { communities: list } = await communities.list({ limit: 20 });
+          setCommunityList(list);
+        }
       } catch (err) {
         console.error('Failed to load communities:', err);
       } finally {
@@ -30,12 +31,15 @@ export function CommunitiesPage() {
       }
     };
     loadCommunities();
-  }, []);
+  }, [user]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     const query = searchInput.trim();
-    if (!query) return;
+    if (!query) {
+      setSearchResults(null);
+      return;
+    }
 
     setSearchLoading(true);
     try {
@@ -51,20 +55,6 @@ export function CommunitiesPage() {
   const handleClear = () => {
     setSearchInput('');
     setSearchResults(null);
-  };
-
-  const loadMore = async () => {
-    if (!nextCursor || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const { communities: more, next_cursor } = await communities.list({ limit: 20, before: nextCursor });
-      setCommunityList(prev => [...prev, ...more]);
-      setNextCursor(next_cursor);
-    } catch (err) {
-      console.error('Failed to load more communities:', err);
-    } finally {
-      setLoadingMore(false);
-    }
   };
 
   const displayCommunities = searchResults !== null ? searchResults : communityList;
@@ -116,7 +106,7 @@ export function CommunitiesPage() {
       </div>
 
       <h5 className="mb-3">
-        {isSearching ? `Results for "${searchInput.trim()}"` : 'All Communities'}
+        {isSearching ? `Results for "${searchInput.trim()}"` : (user ? 'Your Communities' : 'All Communities')}
       </h5>
 
       {loading && !isSearching ? (
@@ -125,12 +115,10 @@ export function CommunitiesPage() {
         <div className="text-center text-muted py-4">
           <EmptyState
             icon="people-fill"
-            title={isSearching ? `No communities found matching "${searchInput.trim()}"` : 'No communities yet.'}
+            title={isSearching ? `No communities found matching "${searchInput.trim()}"` : (user ? 'No communities joined yet.' : 'No communities yet.')}
           />
           {!isSearching && user && (
-            <Link to="/communities/new" className="btn btn-outline-primary btn-sm mt-3">
-              Create the first community
-            </Link>
+            <p className="text-muted small mt-2">Search for communities to join, or create your own.</p>
           )}
         </div>
       ) : (
@@ -160,12 +148,17 @@ export function CommunitiesPage() {
                 <div className="flex-grow-1">
                   <div className="d-flex justify-content-between align-items-start">
                     <div>
-                      <h6 className="mb-0">{community.name}</h6>
+                      <h6 className="mb-0 fw-bold text-white">{community.name}</h6>
                       <small className="text-muted">{community.handle}</small>
                     </div>
-                    <span className="badge bg-primary rounded-pill">
-                      {community.member_count} {community.member_count === 1 ? 'member' : 'members'}
-                    </span>
+                    <div className="d-flex gap-2 align-items-center">
+                      {user && !isSearching && (
+                        <span className="badge bg-success">Joined</span>
+                      )}
+                      <span className="badge bg-secondary">
+                        {community.member_count} {community.member_count === 1 ? 'member' : 'members'}
+                      </span>
+                    </div>
                   </div>
                   {community.bio && (
                     <p className="mb-0 mt-1 text-muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -177,10 +170,6 @@ export function CommunitiesPage() {
             </Link>
           ))}
         </div>
-      )}
-
-      {!isSearching && nextCursor && (
-        <LoadMoreButton loading={loadingMore} onClick={loadMore} className="mt-4" />
       )}
     </div>
   );

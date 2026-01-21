@@ -131,6 +131,7 @@ export const auth = {
 export interface PaginationParams {
   limit?: number;
   before?: number;
+  sort?: 'new' | 'hot';
 }
 
 export interface PaginatedPosts {
@@ -161,6 +162,7 @@ export const users = {
     const query = new URLSearchParams();
     if (params?.limit) query.set('limit', params.limit.toString());
     if (params?.before) query.set('before', params.before.toString());
+    if (params?.sort) query.set('sort', params.sort);
     const queryStr = query.toString();
     return fetchJson<PaginatedPosts>(`/users/${username}/posts${queryStr ? '?' + queryStr : ''}`);
   },
@@ -193,6 +195,7 @@ export const actors = {
     const query = new URLSearchParams();
     if (params?.limit) query.set('limit', params.limit.toString());
     if (params?.before) query.set('before', params.before.toString());
+    if (params?.sort) query.set('sort', params.sort);
     const queryStr = query.toString();
     return fetchJson<PaginatedPosts>(`/actors/${actorId}/posts${queryStr ? '?' + queryStr : ''}`);
   },
@@ -223,7 +226,15 @@ export const posts = {
   },
   getHot: (limit = 10) => fetchJson<{ posts: Post[] }>(`/posts/hot?limit=${limit}`),
   get: (id: string) => fetchJson<{ post: Post; ancestors: Post[] }>(`/posts/${id}`),
-  getReplies: (id: string) => fetchJson<{ replies: Post[] }>(`/posts/${id}/replies`),
+  getReplies: (id: string, sort?: 'new' | 'hot', after?: number) => {
+    const params = new URLSearchParams();
+    if (sort) params.set('sort', sort);
+    if (after) params.set('after', after.toString());
+    const query = params.toString();
+    return fetchJson<{ replies: Post[]; op_author_id: string | null; next_cursor: number | null }>(
+      `/posts/${id}/replies${query ? `?${query}` : ''}`
+    );
+  },
   create: (content: string, inReplyTo?: string, attachments?: AttachmentInput[], sensitive?: boolean) =>
     fetchJson<{ post: Post }>('/posts', {
       method: 'POST',
@@ -273,8 +284,10 @@ export const follows = {
 
 // Search
 export const search = {
-  query: (q: string, type?: 'all' | 'users' | 'posts') =>
-    fetchJson<{ users: Actor[]; posts: Post[]; postsLowConfidence: boolean }>(`/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}`),
+  query: (q: string, type?: 'all' | 'users' | 'posts', handleOnly?: boolean) =>
+    fetchJson<{ users: Actor[]; posts: Post[]; postsLowConfidence: boolean }>(
+      `/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}${handleOnly ? '&handleOnly=true' : ''}`
+    ),
 };
 
 // Tags
@@ -463,6 +476,7 @@ export const communities = {
     const query = new URLSearchParams();
     if (params?.limit) query.set('limit', params.limit.toString());
     if (params?.before) query.set('before', params.before.toString());
+    if (params?.sort) query.set('sort', params.sort);
     const queryStr = query.toString();
     return fetchJson<PaginatedCommunityPosts>(`/communities/${name}/posts${queryStr ? '?' + queryStr : ''}`);
   },

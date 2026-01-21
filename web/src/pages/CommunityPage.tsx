@@ -20,6 +20,7 @@ export function CommunityPage() {
   const [joining, setJoining] = useState(false);
   const [activeTab, setActiveTab] = useState<'posts' | 'pending' | 'settings'>('posts');
   const [_nextCursor, setNextCursor] = useState<number | null>(null);
+  const [postSort, setPostSort] = useState<'new' | 'hot'>('hot');
 
   useEffect(() => {
     if (!name) return;
@@ -32,7 +33,7 @@ export function CommunityPage() {
         setModeration(mod);
 
         // Load posts
-        const { posts: p, next_cursor } = await communities.getPosts(name, { limit: 20 });
+        const { posts: p, next_cursor } = await communities.getPosts(name, { limit: 20, sort: postSort });
         setPosts(p);
         setNextCursor(next_cursor);
 
@@ -49,7 +50,7 @@ export function CommunityPage() {
       }
     };
     loadCommunity();
-  }, [name]);
+  }, [name, postSort]);
 
   const handleJoinLeave = async () => {
     if (!name || !community) return;
@@ -209,6 +210,24 @@ export function CommunityPage() {
       {/* Tab Content */}
       {activeTab === 'posts' && (
         <div>
+          {posts.length > 0 && (
+            <div className="d-flex justify-content-end mb-3">
+              <div className="btn-group btn-group-sm">
+                <button
+                  className={`btn ${postSort === 'hot' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                  onClick={() => setPostSort('hot')}
+                >
+                  Hot
+                </button>
+                <button
+                  className={`btn ${postSort === 'new' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                  onClick={() => setPostSort('new')}
+                >
+                  New
+                </button>
+              </div>
+            </div>
+          )}
           {posts.length === 0 ? (
             <EmptyState
               icon="chat-square-text"

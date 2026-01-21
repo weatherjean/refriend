@@ -34,6 +34,7 @@ export function ActorPage() {
   const [loadingMoreReplies, setLoadingMoreReplies] = useState(false);
   const [loadingMoreBoosts, setLoadingMoreBoosts] = useState(false);
   const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'boosts' | 'settings'>('posts');
+  const [postSort, setPostSort] = useState<'new' | 'hot'>('new');
   const [followers, setFollowers] = useState<Actor[]>([]);
   const [following, setFollowing] = useState<Actor[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -90,7 +91,7 @@ export function ActorPage() {
 
           // Load posts and pinned in parallel (defer followers/following until needed)
           const [postsData, pinnedData] = await Promise.all([
-            users.getPosts(username),
+            users.getPosts(username, { sort: postSort }),
             users.getPinned(username),
           ]);
 
@@ -117,7 +118,7 @@ export function ActorPage() {
         // Fetch follow status and posts (skip pinned for remote - too slow)
         const [actorData, postsData] = await Promise.all([
           actors.get(remoteActor.id).catch(() => ({ is_following: false, is_own_profile: false })),
-          actors.getPosts(remoteActor.id).catch(() => ({ posts: [], next_cursor: null })),
+          actors.getPosts(remoteActor.id, { sort: postSort }).catch(() => ({ posts: [], next_cursor: null })),
         ]);
 
         setIsFollowing(actorData.is_following);
@@ -135,7 +136,7 @@ export function ActorPage() {
     } finally {
       setLoading(false);
     }
-  }, [fullHandle, username]);
+  }, [fullHandle, username, postSort]);
 
   const loadReplies = useCallback(async () => {
     if (!actor || repliesLoaded) return;
@@ -171,8 +172,8 @@ export function ActorPage() {
     setLoadingMorePosts(true);
     try {
       const postsData = isLocalUser
-        ? await users.getPosts(username, { before: postsCursor })
-        : await actors.getPosts(actor.id, { before: postsCursor });
+        ? await users.getPosts(username, { before: postsCursor, sort: postSort })
+        : await actors.getPosts(actor.id, { before: postsCursor, sort: postSort });
       setPosts(prev => [...prev, ...postsData.posts]);
       setPostsCursor(postsData.next_cursor);
     } catch (err) {
@@ -180,7 +181,7 @@ export function ActorPage() {
     } finally {
       setLoadingMorePosts(false);
     }
-  }, [actor, postsCursor, loadingMorePosts, isLocalUser, username]);
+  }, [actor, postsCursor, loadingMorePosts, isLocalUser, username, postSort]);
 
   const loadMoreReplies = useCallback(async () => {
     if (!actor || !repliesCursor || loadingMoreReplies) return;
@@ -335,6 +336,25 @@ export function ActorPage() {
           />
         ) : (
           <>
+            {/* Sort toggle */}
+            {(posts.length > 0 || pinnedPosts.length > 0) && (
+              <div className="d-flex justify-content-end mb-3">
+                <div className="btn-group btn-group-sm">
+                  <button
+                    className={`btn ${postSort === 'new' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setPostSort('new')}
+                  >
+                    New
+                  </button>
+                  <button
+                    className={`btn ${postSort === 'hot' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setPostSort('hot')}
+                  >
+                    Hot
+                  </button>
+                </div>
+              </div>
+            )}
             {/* Pinned posts first */}
             {pinnedPosts.map((post) => (
               <div key={`pinned-${post.id}`} className="position-relative">

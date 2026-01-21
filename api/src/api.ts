@@ -35,6 +35,7 @@ import {
   getUnreadCount,
   markAsRead,
   deleteNotifications,
+  createNotification,
 } from "./notifications.ts";
 import { createCommunityRoutes } from "./communities/routes.ts";
 
@@ -292,6 +293,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   api.get("/users/:username/posts", async (c) => {
     const username = c.req.param("username");
     const filter = c.req.query("filter");
+    const sort = c.req.query("sort") === "hot" ? "hot" : "new";
     const db = c.get("db");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
@@ -302,8 +304,8 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       return c.json({ error: "User not found" }, 404);
     }
 
-    // Only cache main posts (not replies) for logged-out users
-    if (!filter && !currentActor) {
+    // Only cache main posts (not replies) for logged-out users with default sort
+    if (!filter && !currentActor && sort === "new") {
       const cached = await getCachedProfilePosts(actor.id, limit, before);
       if (cached) {
         return c.json(cached);
@@ -313,7 +315,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     // Use optimized batch methods with pagination
     const posts = filter === "replies"
       ? await db.getRepliesByActorWithActor(actor.id, limit + 1, before)
-      : await db.getPostsByActorWithActor(actor.id, limit + 1, before);
+      : await db.getPostsByActorWithActor(actor.id, limit + 1, before, sort);
 
     const hasMore = posts.length > limit;
     const resultPosts = hasMore ? posts.slice(0, limit) : posts;
@@ -360,6 +362,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   api.get("/actors/:id/posts", async (c) => {
     const publicId = c.req.param("id");
     const filter = c.req.query("filter");
+    const sort = c.req.query("sort") === "hot" ? "hot" : "new";
     const db = c.get("db");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
@@ -370,8 +373,8 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       return c.json({ error: "Actor not found" }, 404);
     }
 
-    // Only cache main posts (not replies) for logged-out users
-    if (!filter && !currentActor) {
+    // Only cache main posts (not replies) for logged-out users with default sort
+    if (!filter && !currentActor && sort === "new") {
       const cached = await getCachedProfilePosts(actor.id, limit, before);
       if (cached) {
         return c.json(cached);
@@ -381,7 +384,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     // Use optimized batch methods with pagination
     const posts = filter === "replies"
       ? await db.getRepliesByActorWithActor(actor.id, limit + 1, before)
-      : await db.getPostsByActorWithActor(actor.id, limit + 1, before);
+      : await db.getPostsByActorWithActor(actor.id, limit + 1, before, sort);
 
     const hasMore = posts.length > limit;
     const resultPosts = hasMore ? posts.slice(0, limit) : posts;
@@ -730,8 +733,9 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       }
     }
 
-    // Escape HTML
-    const safeContent = `<p>${escapeHtml(content)}</p>`;
+    // Process content: escape HTML, linkify mentions and hashtags
+    const { html: processedContent, mentions } = processContent(content, domain);
+    const safeContent = `<p>${processedContent}</p>`;
 
     const ctx = federation.createContext(c.req.raw, undefined);
 
@@ -790,6 +794,23 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     // Invalidate the author's profile cache
     await invalidateProfileCache(actor.id);
 
+    // Create notifications for mentioned users
+    for (const mention of mentions) {
+      // Parse mention: @username or @username@domain
+      const mentionMatch = mention.match(/^@([\w.-]+)(?:@([\w.-]+))?$/);
+      if (!mentionMatch) continue;
+
+      const [, mentionUsername, mentionDomain] = mentionMatch;
+
+      // Only notify local users (on our domain or no domain specified)
+      if (mentionDomain && mentionDomain !== domain) continue;
+
+      const mentionedActor = await db.getActorByUsername(mentionUsername);
+      if (mentionedActor && mentionedActor.id !== actor.id) {
+        await createNotification(db, 'mention', actor.id, mentionedActor.id, post.id);
+      }
+    }
+
     return c.json({ post: await enrichPost(db, post, actor?.id) });
   });
 
@@ -829,9 +850,13 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     }
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const after = c.req.query("after") ? parseInt(c.req.query("after")!) : undefined;
+    const sort = c.req.query("sort") === "hot" ? "hot" : "new";
 
-    // Use optimized batch method with pagination (replies use "after" since they're ASC)
-    const replies = await db.getRepliesWithActor(post.id, limit + 1, after);
+    // Get the parent post's author to identify OP replies
+    const parentAuthor = await db.getActorById(post.actor_id);
+
+    // Use optimized batch method with pagination - pass OP actor ID to sort OP replies first
+    const replies = await db.getRepliesWithActor(post.id, limit + 1, after, sort, post.actor_id);
 
     const hasMore = replies.length > limit;
     const resultReplies = hasMore ? replies.slice(0, limit) : replies;
@@ -842,6 +867,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     return c.json({
       replies: await enrichPostsBatch(db, resultReplies, actor?.id),
       next_cursor: nextCursor,
+      op_author_id: parentAuthor?.public_id || null,
     });
   });
 
@@ -1426,6 +1452,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   api.get("/search", async (c) => {
     const query = c.req.query("q") || "";
     const type = c.req.query("type") || "all"; // "all", "users", "posts"
+    const handleOnly = c.req.query("handleOnly") === "true"; // For mention picker
     const db = c.get("db");
     const domain = c.get("domain");
     const currentUser = c.get("user");
@@ -1449,7 +1476,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
 
     // Search users
     const users = (type === "all" || type === "users")
-      ? (await db.searchActors(query)).map(sanitizeActor)
+      ? (await db.searchActors(query, 20, handleOnly)).map(sanitizeActor)
       : [];
 
     // Search posts (fuzzy search with pg_trgm)
@@ -1786,8 +1813,33 @@ function escapeHtml(text: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;")
-    .replace(/\n/g, "<br>");
+    .replace(/'/g, "&#039;");
+}
+
+// Process post content: escape HTML, convert newlines, linkify mentions and hashtags
+function processContent(text: string, domain: string): { html: string; mentions: string[] } {
+  // First escape HTML
+  let html = escapeHtml(text);
+
+  // Extract mentions before converting (to return them)
+  const mentionMatches = text.match(/@[\w.-]+(?:@[\w.-]+)?/g) || [];
+  const mentions = [...new Set(mentionMatches.map(m => m.startsWith('@') ? m : `@${m}`))];
+
+  // Convert @mentions to links
+  // Match @username or @username@domain
+  html = html.replace(/@([\w.-]+(?:@[\w.-]+)?)/g, (match, handle) => {
+    // If it's just @username, assume local domain
+    const fullHandle = handle.includes('@') ? `@${handle}` : `@${handle}@${domain}`;
+    return `<a href="/#/u/${fullHandle}" class="mention">@${handle}</a>`;
+  });
+
+  // Convert #hashtags to links
+  html = html.replace(/#([\w]+)/g, '<a href="/#/tags/$1" class="hashtag">#$1</a>');
+
+  // Convert newlines to <br>
+  html = html.replace(/\n/g, "<br>");
+
+  return { html, mentions };
 }
 
 async function hashPassword(password: string): Promise<string> {

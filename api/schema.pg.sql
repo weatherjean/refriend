@@ -245,5 +245,9 @@ CREATE INDEX IF NOT EXISTS idx_community_bans_actor ON community_bans(actor_id);
 CREATE INDEX IF NOT EXISTS idx_community_posts_community ON community_posts(community_id);
 CREATE INDEX IF NOT EXISTS idx_community_posts_status ON community_posts(community_id, status);
 
+-- Hot score indexes for sorting
+CREATE INDEX IF NOT EXISTS idx_posts_actor_hot ON posts(actor_id, hot_score DESC) WHERE in_reply_to_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_replies_hot ON posts(in_reply_to_id, hot_score DESC) WHERE in_reply_to_id IS NOT NULL;
+
 -- Fuzzy search index for post content (pg_trgm)
 CREATE INDEX IF NOT EXISTS idx_posts_content_trgm ON posts USING GIN (content gin_trgm_ops);

@@ -29,21 +29,11 @@ export function ActorListItem({ actor, onClick, actionButton }: ActorListItemPro
     </div>
   );
 
-  if (onClick) {
-    return (
-      <button
-        className="list-group-item list-group-item-action"
-        onClick={onClick}
-      >
-        {content}
-      </button>
-    );
-  }
-
   return (
     <Link
       to={profileLink}
       className="list-group-item list-group-item-action"
+      onClick={onClick}
     >
       {content}
     </Link>

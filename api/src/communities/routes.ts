@@ -563,13 +563,14 @@ export function createCommunityRoutes(
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const sort = c.req.query("sort") === "new" ? "new" : "hot"; // Default to hot
 
     const community = await communityDb.getCommunityByName(name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
 
-    const communityPosts = await communityDb.getCommunityPosts(community.id, "approved", limit + 1, before);
+    const communityPosts = await communityDb.getCommunityPosts(community.id, "approved", limit + 1, before, sort);
     const hasMore = communityPosts.length > limit;
     const result = hasMore ? communityPosts.slice(0, limit) : communityPosts;
     const nextCursor = hasMore && result.length > 0 ? result[result.length - 1].post.id : null;

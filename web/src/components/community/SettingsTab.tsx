@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { communities, type Community, type CommunityModerationInfo } from '../../api';
+import { communities, media, type Community, type CommunityModerationInfo } from '../../api';
 import { AdminManagement } from './AdminManagement';
 import { BanManagement } from './BanManagement';
 import { ConfirmModal } from '../ConfirmModal';
+import { resizeAndConvertToWebP } from '../../utils/imageUtils';
 
 export function SettingsTab({
   community,
@@ -17,10 +18,33 @@ export function SettingsTab({
   const navigate = useNavigate();
   const [bio, setBio] = useState(community.bio || '');
   const [requireApproval, setRequireApproval] = useState(community.require_approval);
+  const [avatarPreview, setAvatarPreview] = useState(community.avatar_url || '');
+  const [avatarData, setAvatarData] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setMessage({ type: 'error', text: 'Please select an image file' });
+      return;
+    }
+
+    try {
+      setMessage(null);
+      const webpData = await resizeAndConvertToWebP(file, 100);
+      setAvatarPreview(webpData);
+      setAvatarData(webpData);
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Failed to process image' });
+      console.error(err);
+    }
+  };
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -39,11 +63,21 @@ export function SettingsTab({
     setSaving(true);
     setMessage(null);
     try {
+      let avatarUrl = community.avatar_url;
+
+      // Upload avatar if changed
+      if (avatarData) {
+        const { url } = await media.upload(avatarData);
+        avatarUrl = url;
+      }
+
       const { community: updated } = await communities.update(community.name!, {
         bio: bio || undefined,
+        avatar_url: avatarUrl || undefined,
         require_approval: requireApproval,
       });
       onUpdate(updated);
+      setAvatarData(null);
       setMessage({ type: 'success', text: 'Settings saved!' });
     } catch (err) {
       setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save' });
@@ -64,6 +98,52 @@ export function SettingsTab({
               {message.text}
             </div>
           )}
+
+          {/* Avatar */}
+          <div className="mb-4">
+            <label className="form-label">Community Avatar</label>
+            <div className="d-flex align-items-center gap-3">
+              <div
+                className="rounded overflow-hidden"
+                style={{
+                  width: 80,
+                  height: 80,
+                  backgroundColor: '#e9ecef',
+                  cursor: 'pointer',
+                }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {avatarPreview ? (
+                  <img
+                    src={avatarPreview}
+                    alt="Avatar preview"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <div className="d-flex align-items-center justify-content-center h-100">
+                    <i className="bi bi-people-fill text-muted fs-3"></i>
+                  </div>
+                )}
+              </div>
+              <div>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <i className="bi bi-upload me-1"></i> Upload Photo
+                </button>
+                <div className="form-text">Image will be resized to 100x100</div>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+              />
+            </div>
+          </div>
 
           <div className="mb-3">
             <label className="form-label">Description</label>

@@ -279,6 +279,13 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
       color: #d1d5db;
       &:hover { text-decoration: underline; }
     }
+
+    &.post-content-truncated {
+      display: -webkit-box;
+      -webkit-line-clamp: 8;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
   }
 
   // Attachments
@@ -355,8 +362,12 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
   i {
     font-size: 1rem;
     line-height: 1;
-    display: flex;
-    align-items: center;
+    display: inline-flex;
+    align-items: flex-start;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    vertical-align: top;
   }
 
   span {

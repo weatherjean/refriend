@@ -39,6 +39,22 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+// Redirect /@username to hash router profile page
+// This handles mention links from ActivityPub that use our advertised profile URLs
+// Must be before Fedify middleware
+app.get("/:username{@.+}", async (c) => {
+  const usernameWithAt = c.req.param("username");
+  const username = usernameWithAt.slice(1); // Remove leading @
+  const domain = new URL(c.req.url).host;
+
+  // Check if this is a community (Group) or user (Person)
+  const actor = await db.getActorByUsername(username);
+  if (actor?.actor_type === "Group") {
+    return c.redirect(`/#/c/${username}`);
+  }
+  return c.redirect(`/#/u/@${username}@${domain}`);
+});
+
 // Fedify middleware handles ActivityPub routes (including WebFinger)
 app.use(fedifyIntegration(federation, () => undefined));
 

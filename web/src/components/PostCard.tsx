@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Post, posts as postsApi } from '../api';
 import { formatTimeAgo, getUsername } from '../utils';
@@ -19,9 +19,10 @@ interface PostCardProps {
   post: Post;
   linkToPost?: boolean;
   community?: CommunityInfo;
+  isOP?: boolean;
 }
 
-export function PostCard({ post, linkToPost = true, community: communityProp }: PostCardProps) {
+export function PostCard({ post, linkToPost = true, community: communityProp, isOP }: PostCardProps) {
   const navigate = useNavigate();
   const { user, actor } = useAuth();
   const [liked, setLiked] = useState(post.liked ?? false);
@@ -35,6 +36,15 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
   const [showSensitive, setShowSensitive] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (linkToPost && contentRef.current) {
+      const el = contentRef.current;
+      setIsTruncated(el.scrollHeight > el.clientHeight);
+    }
+  }, [linkToPost, post.content]);
 
   const isOwnPost = !!(actor && post.author && actor.id === post.author.id);
   const community = post.community || communityProp;
@@ -141,6 +151,9 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
               >
                 {post.author.name || username}
               </Link>
+              {isOP && (
+                <span className="badge text-bg-warning ms-1" style={{ fontSize: '0.65rem', verticalAlign: 'middle' }}>OP</span>
+              )}
               {!post.author.is_local && (
                 <span className="post-remote-icon" title="Remote user">
                   <i className="bi bi-globe2"></i>
@@ -195,9 +208,22 @@ export function PostCard({ post, linkToPost = true, community: communityProp }: 
         ) : (
           <>
             <div
-              className="post-content"
+              ref={contentRef}
+              className={`post-content ${linkToPost ? 'post-content-truncated' : ''}`}
               dangerouslySetInnerHTML={{ __html: post.content }}
             />
+            {linkToPost && isTruncated && (
+              <button
+                type="button"
+                className="btn btn-outline-secondary btn-sm mt-2 mb-3"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(postLink);
+                }}
+              >
+                Read in full <i className="bi bi-arrow-right ms-1"></i>
+              </button>
+            )}
 
             {post.attachments && post.attachments.length > 0 && (
               <div className="post-attachments">

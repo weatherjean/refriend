@@ -44,6 +44,17 @@ export function NotificationsPage() {
     }
   };
 
+  const getNotificationIcon = (type: Notification['type']) => {
+    switch (type) {
+      case 'like': return { icon: 'heart-fill', color: 'text-danger' };
+      case 'boost': return { icon: 'repeat', color: 'text-success' };
+      case 'follow': return { icon: 'person-plus-fill', color: 'text-primary' };
+      case 'reply': return { icon: 'chat-fill', color: 'text-info' };
+      case 'mention': return { icon: 'at', color: 'text-warning' };
+      default: return { icon: 'bell-fill', color: 'text-muted' };
+    }
+  };
+
   const getNotificationLink = (n: Notification) => {
     if (n.post) return `/posts/${n.post.id}`;
     return `/actor/${n.actor.id}`;  // For follows, link to the actor
@@ -85,39 +96,51 @@ export function NotificationsPage() {
         <EmptyState icon="bell-fill" title="No notifications yet" />
       ) : (
         <div className="d-flex flex-column gap-2">
-          {notifications.map((n) => (
-            <Link
-              key={n.id}
-              to={getNotificationLink(n)}
-              className="card text-decoration-none text-reset"
-            >
-              <div className="card-body py-3">
-                <div className="d-flex align-items-center gap-3">
-                  <Avatar
-                    src={n.actor.avatar_url}
-                    name={n.actor.name || n.actor.handle}
-                    size="md"
-                    className="flex-shrink-0"
-                  />
-                  <div className="flex-grow-1" style={{ minWidth: 0 }}>
-                    <div>
-                      <strong>{n.actor.name || n.actor.handle}</strong>
-                      {' '}{getNotificationText(n.type)}
+          {notifications.map((n) => {
+            const { icon, color } = getNotificationIcon(n.type);
+            return (
+              <Link
+                key={n.id}
+                to={getNotificationLink(n)}
+                className="card text-decoration-none text-reset"
+              >
+                <div className="card-body py-3" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {/* Avatar with notification type badge */}
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <Avatar
+                      src={n.actor.avatar_url}
+                      name={n.actor.name || n.actor.handle}
+                      size="md"
+                    />
+                    <div
+                      className={`d-flex align-items-center justify-content-center rounded-circle bg-body ${color}`}
+                      style={{
+                        position: 'absolute',
+                        width: 20,
+                        height: 20,
+                        bottom: -4,
+                        right: -4,
+                        border: '2px solid var(--bs-card-bg, var(--bs-body-bg))',
+                      }}
+                    >
+                      <i className={`bi bi-${icon}`} style={{ fontSize: '0.65rem' }}></i>
                     </div>
-                    {n.post && (
-                      <div
-                        className="text-muted small text-truncate mt-1"
-                        dangerouslySetInnerHTML={{ __html: n.post.content }}
-                      />
-                    )}
                   </div>
-                  <span className="text-muted small flex-shrink-0">
+
+                  {/* Text content */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <strong>{n.actor.name || n.actor.handle}</strong>
+                    {' '}{getNotificationText(n.type)}
+                  </div>
+
+                  {/* Timestamp */}
+                  <div className="text-muted small" style={{ flexShrink: 0 }}>
                     {formatTimeAgo(n.created_at)}
-                  </span>
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
 
