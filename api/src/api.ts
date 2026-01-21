@@ -33,6 +33,7 @@ import {
   getNotifications,
   getUnreadCount,
   markAsRead,
+  deleteNotifications,
 } from "./notifications.ts";
 
 type Env = {
@@ -1545,6 +1546,21 @@ export function createApi(db: DB, federation: Federation<void>) {
     const body = await c.req.json<{ ids?: number[] }>();
 
     await markAsRead(db, actor.id, body.ids);
+
+    return c.json({ ok: true });
+  });
+
+  // DELETE /notifications - Delete notifications
+  api.delete("/notifications", async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const db = c.get("db");
+    const ids = c.req.query("ids")?.split(",").map(Number).filter(n => !isNaN(n));
+
+    await deleteNotifications(db, actor.id, ids?.length ? ids : undefined);
 
     return c.json({ ok: true });
   });

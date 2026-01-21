@@ -315,4 +315,8 @@ export const notifications = {
       method: 'POST',
       body: JSON.stringify({ ids }),
     }),
+  delete: (ids?: number[]) =>
+    fetchJson<{ ok: boolean }>(`/notifications${ids?.length ? `?ids=${ids.join(',')}` : ''}`, {
+      method: 'DELETE',
+    }),
 };

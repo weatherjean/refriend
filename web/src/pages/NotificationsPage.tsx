@@ -50,12 +50,29 @@ export function NotificationsPage() {
     );
   }
 
+  const handleClearAll = async () => {
+    if (!confirm('Clear all notifications?')) return;
+    try {
+      await notificationsApi.delete();
+      setNotifications([]);
+    } catch (err) {
+      console.error('Failed to clear notifications:', err);
+    }
+  };
+
   return (
     <div>
-      <h4 className="mb-4">
-        <i className="bi bi-bell me-2"></i>
-        Notifications
-      </h4>
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h4 className="mb-0">Notifications</h4>
+        {notifications.length > 0 && (
+          <button
+            onClick={handleClearAll}
+            className="btn btn-outline-secondary btn-sm"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
 
       {notifications.length === 0 ? (
         <div className="text-center text-muted py-5">

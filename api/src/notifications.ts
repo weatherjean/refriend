@@ -190,3 +190,29 @@ export async function markAsRead(
     }
   });
 }
+
+/**
+ * Delete notifications
+ */
+export async function deleteNotifications(
+  db: DB,
+  targetActorId: number,
+  notificationIds?: number[]
+): Promise<void> {
+  await db.query(async (client) => {
+    if (notificationIds && notificationIds.length > 0) {
+      // Delete specific notifications
+      await client.queryArray`
+        DELETE FROM notifications
+        WHERE target_actor_id = ${targetActorId}
+          AND id = ANY(${notificationIds})
+      `;
+    } else {
+      // Delete all notifications for this user
+      await client.queryArray`
+        DELETE FROM notifications
+        WHERE target_actor_id = ${targetActorId}
+      `;
+    }
+  });
+}
