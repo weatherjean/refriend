@@ -471,3 +471,137 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
 .spin {
   animation: spin 1s linear infinite;
 }
+
+// Mobile responsive styles
+@media (max-width: 991.98px) {
+  // Hide sidebar by default on mobile
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 85%;
+    max-width: 320px;
+    height: 100vh;
+    z-index: 1050;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in-out;
+    background-color: var(--bs-body-bg);
+    border-right: 1px solid var(--bs-border-color);
+
+    &.mobile-open {
+      transform: translateX(0);
+    }
+  }
+
+  // Mobile sidebar close button
+  .mobile-sidebar-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: #a1a1aa;
+    font-size: 1.25rem;
+    border-radius: 50%;
+    transition: background-color 0.15s, color 0.15s;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.08);
+      color: #e5e5e5;
+    }
+  }
+
+  // Mobile backdrop overlay
+  .mobile-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1040;
+  }
+
+  // Main content takes full width on mobile
+  .main-content {
+    padding-bottom: 70px !important; // Space for bottom bar
+  }
+
+  // Mobile bottom navigation bar
+  .mobile-bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background-color: var(--bs-body-bg);
+    border-top: 1px solid var(--bs-border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    z-index: 1030;
+    padding: 0 1rem;
+    padding-bottom: env(safe-area-inset-bottom); // iOS safe area
+  }
+
+  .mobile-nav-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: transparent;
+    border: none;
+    color: #a1a1aa;
+    font-size: 1.5rem;
+    text-decoration: none;
+    transition: background-color 0.15s, color 0.15s;
+    position: relative;
+
+    &:hover, &:focus {
+      background-color: rgba(255, 255, 255, 0.08);
+      color: #e5e5e5;
+    }
+
+    img {
+      opacity: 0.7;
+      transition: opacity 0.15s;
+    }
+
+    &:hover img, &:focus img {
+      opacity: 1;
+    }
+  }
+
+  // Notification badge on menu button
+  .mobile-nav-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 8px;
+    height: 8px;
+    background-color: #ef4444;
+    border-radius: 50%;
+  }
+}
+
+// Hide mobile bottom bar on desktop
+@media (min-width: 992px) {
+  .mobile-bottom-bar {
+    display: none !important;
+  }
+
+  .mobile-backdrop {
+    display: none !important;
+  }
+
+  .mobile-sidebar-close {
+    display: none !important;
+  }
+}

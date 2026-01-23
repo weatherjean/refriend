@@ -18,6 +18,7 @@ export function Layout({ children }: LayoutProps) {
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -60,11 +61,28 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="container" style={{ maxWidth: 1100 }}>
+      {/* Mobile backdrop */}
+      {mobileMenuOpen && (
+        <div
+          className="mobile-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
       <div className="row">
         {/* Left Sidebar */}
-        <div className="col-lg-4 sidebar py-4 px-3">
+        <div className={`col-lg-4 sidebar py-4 px-3 ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+          {/* Mobile close button */}
+          <button
+            className="mobile-sidebar-close d-lg-none"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            <i className="bi bi-x-lg"></i>
+          </button>
+
           {/* Branding */}
-          <Link to="/" className="d-flex align-items-center mb-4 text-decoration-none text-reset" style={{ paddingLeft: '0.75rem' }}>
+          <Link to="/" className="d-flex align-items-center mb-4 text-decoration-none text-reset" style={{ paddingLeft: '0.75rem' }} onClick={() => setMobileMenuOpen(false)}>
             <img src="/icon.svg" alt="riff" height="36" />
           </Link>
 
@@ -86,24 +104,24 @@ export function Layout({ children }: LayoutProps) {
 
           {/* Navigation */}
           <div className="list-group sidebar-nav mb-4">
-            <Link to="/" className="list-group-item list-group-item-action">
+            <Link to="/" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
               <i className="bi bi-house-fill me-2"></i> Feed
             </Link>
-            <Link to="/explore" className="list-group-item list-group-item-action">
+            <Link to="/explore" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
               <i className="bi bi-hash me-2"></i> Tags
             </Link>
-            <Link to="/communities" className="list-group-item list-group-item-action">
+            <Link to="/communities" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
               <i className="bi bi-people-fill me-2"></i> Communities
             </Link>
             {user && actor && (
               <>
-                <Link to="/notifications" className="list-group-item list-group-item-action d-flex align-items-center">
+                <Link to="/notifications" className="list-group-item list-group-item-action d-flex align-items-center" onClick={() => setMobileMenuOpen(false)}>
                   <i className="bi bi-bell-fill me-2"></i> Notifications
                   {unreadCount > 0 && (
                     <span className="badge bg-danger rounded-pill ms-auto">{unreadCount > 99 ? '99+' : unreadCount}</span>
                   )}
                 </Link>
-                <Link to={`/u/${username}`} className="list-group-item list-group-item-action">
+                <Link to={`/u/${username}`} className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
                   <i className="bi bi-person-fill me-2"></i> Profile
                 </Link>
               </>
@@ -199,11 +217,28 @@ export function Layout({ children }: LayoutProps) {
         </div>
 
         {/* Main Content */}
-        <div className="col-lg-8 py-4 px-3">
+        <div className="col-lg-8 py-4 px-3 main-content">
           {children}
         </div>
       </div>
 
+      {/* Mobile Bottom Bar */}
+      <nav className="mobile-bottom-bar d-lg-none">
+        <Link to="/" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
+          <img src="/icon.svg" alt="Home" height="24" />
+        </Link>
+        <Link to="/search" className="mobile-nav-item">
+          <i className="bi bi-search"></i>
+        </Link>
+        <button
+          className="mobile-nav-item"
+          onClick={() => setMobileMenuOpen(true)}
+          aria-label="Open menu"
+        >
+          <i className="bi bi-list"></i>
+          {unreadCount > 0 && <span className="mobile-nav-badge"></span>}
+        </button>
+      </nav>
     </div>
   );
 }
