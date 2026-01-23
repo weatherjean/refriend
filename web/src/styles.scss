@@ -70,13 +70,6 @@ body {
   background-attachment: fixed;
 }
 
-// iOS PWA safe area - ensure content isn't hidden behind notch/status bar
-@supports (padding-top: env(safe-area-inset-top)) {
-  html {
-    // Extend background color into the safe area
-    background-color: #0f0f0f;
-  }
-}
 
 // Monochrome button overrides
 .btn-primary {
@@ -534,30 +527,43 @@ body {
     padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important; // Space for bottom bar + safe area
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
-
-    // In standalone PWA mode, add extra top padding to clear status bar
-    @media (display-mode: standalone) {
-      padding-top: calc(2.5rem + env(safe-area-inset-top, 20px)) !important;
-    }
   }
 
-  // Fixed top bar to cover status bar area with background
+  // Bootstrap modal positioning and scrolling fix for mobile
+  .modal-dialog {
+    margin-top: 15vh; // Push modal down from top to avoid status bar area
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-content {
+    max-height: 60vh; // Shorter modal that fits comfortably
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  // Toast positioning on mobile - lower to avoid status bar
+  .toast-container.top-0 {
+    top: calc(20px + env(safe-area-inset-top, 0px)) !important;
+  }
+
+  // Fixed top bar to cover status bar area with background (iOS PWA only)
   .mobile-top-bar {
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     height: env(safe-area-inset-top, 0px);
-    background:
-      radial-gradient(ellipse 120% 100% at 0% 0%, rgba(248, 113, 113, 0.12) 0%, transparent 70%),
-      radial-gradient(ellipse 120% 100% at 100% 0%, rgba(74, 222, 128, 0.12) 0%, transparent 70%),
-      #0f0f0f;
+    background-color: #0f0f0f;
     z-index: 1070;
-
-    // In standalone PWA mode, ensure minimum height for status bar area
-    @media (display-mode: standalone) {
-      min-height: 20px;
-    }
+    // Only visible when there's actual safe area inset (iOS with notch)
+    // Android doesn't need this bar
   }
 
   // Mobile bottom navigation bar (above modal at 1050)
