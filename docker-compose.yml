@@ -34,6 +34,7 @@ services:
     volumes:
       - ./api/src:/app/src:ro
       - ./web/dist:/app/static:ro
+      - ./api/uploads:/app/uploads
     command: ["deno", "run", "--allow-all", "--unstable-kv", "--unstable-temporal", "--watch", "src/main.ts"]
 
 volumes:

@@ -96,17 +96,8 @@ export function Layout({ children }: LayoutProps) {
       <div className="row">
         {/* Left Sidebar */}
         <div className={`col-lg-4 sidebar py-4 px-3 ${mobileMenuOpen ? 'mobile-open' : ''}`}>
-          {/* Mobile close button */}
-          <button
-            className="mobile-sidebar-close d-lg-none"
-            onClick={() => setMobileMenuOpen(false)}
-            aria-label="Close menu"
-          >
-            <i className="bi bi-x-lg"></i>
-          </button>
-
           {/* Branding */}
-          <Link to="/" className="d-flex align-items-center mb-4 text-decoration-none text-reset" style={{ paddingLeft: '0.75rem' }} onClick={() => setMobileMenuOpen(false)}>
+          <Link to="/" className="d-flex align-items-center mb-4 text-decoration-none text-reset sidebar-logo" style={{ paddingLeft: '0.75rem' }} onClick={() => setMobileMenuOpen(false)}>
             <img src="/icon.svg" alt="riff" height="36" />
           </Link>
 

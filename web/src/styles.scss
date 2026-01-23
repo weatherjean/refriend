@@ -116,7 +116,7 @@ body {
   height: 100vh;
   overflow-y: auto;
   border-right: 1px solid var(--bs-border-color);
-  padding-left: 0.5rem;
+  padding-left: 0.75rem;
 }
 
 .sidebar-nav .list-group-item {
@@ -504,27 +504,9 @@ body {
     }
   }
 
-  // Mobile sidebar close button
-  .mobile-sidebar-close {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    color: #a1a1aa;
-    font-size: 1.25rem;
-    border-radius: 50%;
-    transition: background-color 0.15s, color 0.15s;
-
-    &:hover {
-      background-color: rgba(255, 255, 255, 0.08);
-      color: #e5e5e5;
-    }
+  // Mobile sidebar logo margin
+  .sidebar-logo {
+    margin-top: 20px;
   }
 
   // Mobile backdrop overlay
@@ -542,6 +524,8 @@ body {
   .main-content {
     padding-top: calc(1.5rem + env(safe-area-inset-top, 0px)) !important; // Base padding + notch space
     padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important; // Space for bottom bar + safe area
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
   }
 
   // Fixed top bar to cover status bar area with background
@@ -653,10 +637,6 @@ body {
   .mobile-backdrop {
     display: none !important;
   }
-
-  .mobile-sidebar-close {
-    display: none !important;
-  }
 }
 
 // Post Modal (Twitter-style overlay)
@@ -729,16 +709,20 @@ body {
 
   .page-modal-header {
     border-radius: 0;
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
+    right: 0;
     z-index: 10;
   }
 
   .page-modal-content {
     border-radius: 0;
-    min-height: calc(100vh - 70px); // Account for header
-    padding-bottom: 80px; // Space for mobile bottom bar
-    margin-bottom: 56px; // Height of bottom bar
+    min-height: 100vh;
+    padding-top: 85px; // Space for fixed header
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); // Space for mobile bottom bar
   }
 }
 

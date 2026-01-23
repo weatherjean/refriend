@@ -9,6 +9,7 @@ interface ImageSliderProps {
 export function ImageSlider({ attachments, onOpenLightbox }: ImageSliderProps) {
   const [sliderIndex, setSliderIndex] = useState(0);
   const [imageLoaded, setImageLoaded] = useState<Record<number, boolean>>({});
+  const [imageError, setImageError] = useState<Record<number, boolean>>({});
 
   const currentAttachment = attachments[sliderIndex];
   const isNotSquare = currentAttachment.height && currentAttachment.width &&
@@ -30,12 +31,18 @@ export function ImageSlider({ attachments, onOpenLightbox }: ImageSliderProps) {
           onOpenLightbox(sliderIndex);
         }}
       >
-        {/* Placeholder spinner */}
-        {!imageLoaded[sliderIndex] && (
+        {/* Placeholder spinner or error */}
+        {!imageLoaded[sliderIndex] && !imageError[sliderIndex] && (
           <div className="position-absolute top-50 start-50 translate-middle">
             <div className="spinner-border text-secondary" role="status">
               <span className="visually-hidden">Loading...</span>
             </div>
+          </div>
+        )}
+        {imageError[sliderIndex] && (
+          <div className="position-absolute top-50 start-50 translate-middle text-center text-muted">
+            <i className="bi bi-image fs-1"></i>
+            <div className="small mt-1">Failed to load</div>
           </div>
         )}
         <img
@@ -44,11 +51,12 @@ export function ImageSlider({ attachments, onOpenLightbox }: ImageSliderProps) {
           className="w-100 h-100"
           style={{
             objectFit: 'cover',
-            opacity: imageLoaded[sliderIndex] ? 1 : 0,
+            opacity: imageLoaded[sliderIndex] && !imageError[sliderIndex] ? 1 : 0,
             transition: 'opacity 0.3s',
           }}
           loading="lazy"
           onLoad={() => setImageLoaded(prev => ({ ...prev, [sliderIndex]: true }))}
+          onError={() => setImageError(prev => ({ ...prev, [sliderIndex]: true }))}
         />
         {/* Cropped badge - show if image is not square */}
         <div className="position-absolute top-0 end-0 m-2 d-flex gap-1">
