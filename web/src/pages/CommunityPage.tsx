@@ -263,7 +263,7 @@ export function CommunityPage() {
               className={`nav-link ${activeTab === 'modlogs' ? 'active' : ''}`}
               onClick={() => setActiveTab('modlogs')}
             >
-              <i className="bi bi-journal-text me-1"></i>Log
+              Log
             </button>
           </li>
         )}
@@ -273,7 +273,7 @@ export function CommunityPage() {
               className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`}
               onClick={() => setActiveTab('settings')}
             >
-              <i className="bi bi-gear-fill me-1"></i>Settings
+              Settings
             </button>
           </li>
         )}

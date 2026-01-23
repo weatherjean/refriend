@@ -9,18 +9,45 @@ interface ModLogsTabProps {
   communityName: string;
 }
 
-const ACTION_LABELS: Record<string, { label: string; icon: string; color: string }> = {
-  post_approved: { label: 'Approved post', icon: 'bi-check-circle', color: 'text-success' },
-  post_rejected: { label: 'Rejected post', icon: 'bi-x-circle', color: 'text-danger' },
-  post_pinned: { label: 'Pinned post', icon: 'bi-pin-fill', color: 'text-warning' },
-  post_unpinned: { label: 'Unpinned post', icon: 'bi-pin-angle', color: 'text-muted' },
-  post_removed: { label: 'Removed post', icon: 'bi-trash', color: 'text-danger' },
-  community_updated: { label: 'Updated community', icon: 'bi-pencil', color: 'text-info' },
-  admin_added: { label: 'Added moderator', icon: 'bi-person-plus', color: 'text-success' },
-  admin_removed: { label: 'Removed moderator', icon: 'bi-person-dash', color: 'text-danger' },
-  user_banned: { label: 'Banned user', icon: 'bi-ban', color: 'text-danger' },
-  user_unbanned: { label: 'Unbanned user', icon: 'bi-unlock', color: 'text-success' },
-};
+function formatLogMessage(log: ModLogEntry): string {
+  switch (log.action) {
+    case 'post_approved':
+      return 'Approved a post';
+    case 'post_rejected':
+      return 'Rejected a post';
+    case 'post_pinned':
+      return 'Pinned a post';
+    case 'post_unpinned':
+      return 'Unpinned a post';
+    case 'post_removed':
+      return 'Removed a post';
+    case 'community_updated':
+      return log.details || 'Updated community settings';
+    case 'admin_added':
+      return log.details || 'Added a moderator';
+    case 'admin_removed':
+      return log.details || 'Removed a moderator';
+    case 'user_banned':
+      return log.details || 'Banned a user';
+    case 'user_unbanned':
+      return log.details || 'Unbanned a user';
+    default:
+      return log.details || log.action;
+  }
+}
+
+function formatTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+
+  if (diff < 60000) return 'Just now';
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 604800000) return `${Math.floor(diff / 86400000)}d ago`;
+
+  return date.toLocaleDateString();
+}
 
 export function ModLogsTab({ communityName }: ModLogsTabProps) {
   const [logs, setLogs] = useState<ModLogEntry[]>([]);
@@ -68,41 +95,25 @@ export function ModLogsTab({ communityName }: ModLogsTabProps) {
 
   return (
     <div className="mod-logs">
-      <div className="list-group">
-        {logs.map(log => {
-          const actionInfo = ACTION_LABELS[log.action] || { label: log.action, icon: 'bi-circle', color: 'text-muted' };
-
-          return (
-            <div key={log.id} className="list-group-item mod-log-item">
-              <div className="mod-log-icon">
-                <i className={`bi ${actionInfo.icon} ${actionInfo.color}`}></i>
-              </div>
-              <div className="mod-log-content">
-                <div className="mod-log-action">
-                  <span className={actionInfo.color}>{actionInfo.label}</span>
-                  {log.target_type === 'post' && log.target_id && (
-                    <Link to={`/posts/${log.target_id}`} className="mod-log-link" onClick={(e) => e.stopPropagation()}>
-                      View post
-                    </Link>
-                  )}
-                </div>
-                {log.details && (
-                  <div className="mod-log-details">{log.details}</div>
-                )}
-                <div className="mod-log-meta">
-                  {log.actor && (
-                    <Link to={`/u/${log.actor.handle}`} className="mod-log-actor">
-                      <Avatar src={log.actor.avatar_url} name={log.actor.name || log.actor.handle} size="xs" />
-                      <span>{log.actor.name || log.actor.handle}</span>
-                    </Link>
-                  )}
-                  <span className="mod-log-time">{new Date(log.created_at).toLocaleString()}</span>
-                </div>
-              </div>
+      {logs.map(log => (
+        <div key={log.id} className="mod-log-item">
+          {log.target_type === 'post' && log.target_id ? (
+            <Link to={`/posts/${log.target_id}`} className="mod-log-message mod-log-message-link">
+              {formatLogMessage(log)}
+              <i className="bi bi-box-arrow-up-right"></i>
+            </Link>
+          ) : (
+            <div className="mod-log-message">{formatLogMessage(log)}</div>
+          )}
+          <div className="mod-log-time">{formatTime(log.created_at)}</div>
+          {log.actor && (
+            <div className="mod-log-actor">
+              <Avatar src={log.actor.avatar_url} name={log.actor.name || log.actor.handle} size="xs" />
+              <span>{log.actor.name || log.actor.handle}</span>
             </div>
-          );
-        })}
-      </div>
+          )}
+        </div>
+      ))}
 
       {nextCursor && (
         <div className="text-center mt-3">
