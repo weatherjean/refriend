@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS posts (
   content TEXT NOT NULL,
   url TEXT,
   in_reply_to_id INTEGER REFERENCES posts(id) ON DELETE SET NULL,
+  addressed_to TEXT[] NOT NULL DEFAULT '{}',  -- ActivityPub to/cc recipients (actor URIs)
   likes_count INTEGER NOT NULL DEFAULT 0,
   boosts_count INTEGER NOT NULL DEFAULT 0,
   replies_count INTEGER NOT NULL DEFAULT 0,
@@ -198,12 +199,16 @@ CREATE TABLE IF NOT EXISTS community_posts (
   community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
   post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  is_announcement BOOLEAN NOT NULL DEFAULT false,  -- true = community boosted this post, false = post addressed TO community
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   reviewed_at TIMESTAMPTZ,
   reviewed_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
   suggested_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
   UNIQUE (community_id, post_id)
 );
+
+-- Migration: Add is_announcement column
+ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS is_announcement BOOLEAN NOT NULL DEFAULT false;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_actors_public_id ON actors(public_id);
@@ -255,6 +260,9 @@ CREATE INDEX IF NOT EXISTS idx_posts_content_trgm ON posts USING GIN (content gi
 
 -- Migration: Add suggested_by column to community_posts
 ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS suggested_by INTEGER REFERENCES actors(id) ON DELETE SET NULL;
+
+-- Migration: Add addressed_to column to posts for ActivityPub to/cc recipients
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS addressed_to TEXT[] NOT NULL DEFAULT '{}';
 
 -- Pinned community posts
 CREATE TABLE IF NOT EXISTS community_pinned_posts (

@@ -150,6 +150,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       shared_inbox_url: `https://${domain}/inbox`,
       url: `https://${domain}/@${username}`,
       user_id: user.id,
+      actor_type: "Person",
     });
 
     const token = await db.createSession(user.id);
@@ -299,6 +300,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     const db = c.get("db");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
+    const communityDb = c.get("communityDb");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
     const actor = await db.getActorByUsername(username);
@@ -326,8 +328,33 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       ? resultPosts[resultPosts.length - 1].id
       : null;
 
+    const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActor?.id, domain);
+
+    // Add community info to posts that belong to communities
+    let postsWithCommunities = enrichedPosts;
+    if (communityDb) {
+      const postIds = resultPosts.map(p => p.id);
+      const communitiesMap = await communityDb.getCommunitiesForPosts(postIds);
+
+      postsWithCommunities = enrichedPosts.map((post, index) => {
+        const community = communitiesMap.get(resultPosts[index].id);
+        if (community) {
+          return {
+            ...post,
+            community: {
+              id: community.public_id,
+              name: community.name,
+              handle: community.handle,
+              avatar_url: community.avatar_url,
+            },
+          };
+        }
+        return post;
+      });
+    }
+
     const result = {
-      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id, domain),
+      posts: postsWithCommunities,
       next_cursor: nextCursor,
     };
 
@@ -370,6 +397,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     const db = c.get("db");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
+    const communityDb = c.get("communityDb");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
     const actor = await db.getActorByPublicId(publicId);
@@ -397,8 +425,33 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       ? resultPosts[resultPosts.length - 1].id
       : null;
 
+    const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActor?.id, domain);
+
+    // Add community info to posts that belong to communities
+    let postsWithCommunities = enrichedPosts;
+    if (communityDb) {
+      const postIds = resultPosts.map(p => p.id);
+      const communitiesMap = await communityDb.getCommunitiesForPosts(postIds);
+
+      postsWithCommunities = enrichedPosts.map((post, index) => {
+        const community = communitiesMap.get(resultPosts[index].id);
+        if (community) {
+          return {
+            ...post,
+            community: {
+              id: community.public_id,
+              name: community.name,
+              handle: community.handle,
+              avatar_url: community.avatar_url,
+            },
+          };
+        }
+        return post;
+      });
+    }
+
     const result = {
-      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id, domain),
+      posts: postsWithCommunities,
       next_cursor: nextCursor,
     };
 
@@ -603,8 +656,21 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       ? resultPosts[resultPosts.length - 1].id
       : null;
 
+    const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActor?.id, domain);
+
+    // Add boosted_by info since these are all posts boosted by this actor
+    const postsWithBooster = enrichedPosts.map(post => ({
+      ...post,
+      boosted_by: {
+        id: actor.public_id,
+        handle: actor.handle,
+        name: actor.name,
+        avatar_url: actor.avatar_url,
+      },
+    }));
+
     return c.json({
-      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id, domain),
+      posts: postsWithBooster,
       next_cursor: nextCursor,
     });
   });
@@ -1220,8 +1286,21 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       ? resultPosts[resultPosts.length - 1].id
       : null;
 
+    const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActor?.id, domain);
+
+    // Add boosted_by info since these are all posts boosted by this actor
+    const postsWithBooster = enrichedPosts.map(post => ({
+      ...post,
+      boosted_by: {
+        id: actor.public_id,
+        handle: actor.handle,
+        name: actor.name,
+        avatar_url: actor.avatar_url,
+      },
+    }));
+
     return c.json({
-      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id, domain),
+      posts: postsWithBooster,
       next_cursor: nextCursor,
     });
   });

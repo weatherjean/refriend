@@ -128,6 +128,17 @@ export function CommunityPage() {
     }
   };
 
+  const handleUnboost = async (postId: string) => {
+    if (!name) return;
+    try {
+      await communities.unboostPost(name, postId);
+      setPinnedPosts(prev => prev.filter(p => p.id !== postId));
+      setPosts(prev => prev.filter(p => p.id !== postId));
+    } catch {
+      // Error handled by global toast
+    }
+  };
+
   if (loading) {
     return <LoadingSpinner />;
   }
@@ -304,6 +315,8 @@ export function CommunityPage() {
                   pinnedInCommunity
                   canPinInCommunity={moderation?.isAdmin}
                   onCommunityPin={() => handleUnpin(post.id)}
+                  canUnboost={moderation?.isAdmin && post.is_announcement}
+                  onUnboost={() => handleUnboost(post.id)}
                 />
               ))}
               {/* Regular posts (excluding pinned) */}
@@ -313,6 +326,8 @@ export function CommunityPage() {
                   post={post}
                   canPinInCommunity={moderation?.isAdmin}
                   onCommunityPin={() => handlePin(post.id)}
+                  canUnboost={moderation?.isAdmin && post.is_announcement}
+                  onUnboost={() => handleUnboost(post.id)}
                 />
               ))}
             </div>

@@ -1029,6 +1029,29 @@ body {
   }
 }
 
+// Boosted post indicator (above avatar)
+.post-boosted-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+  padding-left: 0.25rem;
+  font-size: 0.75rem;
+  color: #22c55e;
+
+  i {
+    font-size: 0.8125rem;
+  }
+
+  a {
+    color: inherit;
+
+    &:hover {
+      text-decoration: underline !important;
+    }
+  }
+}
+
 // Pending posts moderation
 .pending-post-wrapper {
   border: 1px solid var(--bs-border-color);

@@ -30,6 +30,7 @@ export interface CommunityPost {
   community_id: number;
   post_id: number;
   status: "pending" | "approved" | "rejected";
+  is_announcement: boolean;  // true = community boosted/announced this post, false = post addressed TO community
   submitted_at: string;
   reviewed_at: string | null;
   reviewed_by: number | null;
@@ -41,7 +42,8 @@ export type ModLogAction =
   | "post_rejected"
   | "post_pinned"
   | "post_unpinned"
-  | "post_removed"
+  | "post_deleted"
+  | "post_unboosted"
   | "community_updated"
   | "admin_added"
   | "admin_removed"
@@ -564,9 +566,10 @@ export class CommunityDB {
   async submitCommunityPost(communityId: number, postId: number, autoApprove: boolean): Promise<CommunityPost> {
     return this.query(async (client) => {
       const status = autoApprove ? "approved" : "pending";
+      // is_announcement = false because this is a direct post TO the community
       const result = await client.queryObject<CommunityPost>`
-        INSERT INTO community_posts (community_id, post_id, status)
-        VALUES (${communityId}, ${postId}, ${status})
+        INSERT INTO community_posts (community_id, post_id, status, is_announcement)
+        VALUES (${communityId}, ${postId}, ${status}, false)
         ON CONFLICT (community_id, post_id) DO UPDATE SET status = ${status}
         RETURNING *
       `;
@@ -577,9 +580,10 @@ export class CommunityDB {
   async suggestCommunityPost(communityId: number, postId: number, suggesterId: number): Promise<CommunityPost> {
     return this.query(async (client) => {
       // Suggestions always go to pending (never auto-approve)
+      // is_announcement = true because this is an external post being boosted/announced by the community
       const result = await client.queryObject<CommunityPost>`
-        INSERT INTO community_posts (community_id, post_id, status, suggested_by)
-        VALUES (${communityId}, ${postId}, 'pending', ${suggesterId})
+        INSERT INTO community_posts (community_id, post_id, status, is_announcement, suggested_by)
+        VALUES (${communityId}, ${postId}, 'pending', true, ${suggesterId})
         ON CONFLICT (community_id, post_id) DO NOTHING
         RETURNING *
       `;
@@ -623,16 +627,15 @@ export class CommunityDB {
     this.logModAction(communityId, reviewerId, "post_rejected", "post", postPublicId);
   }
 
-  async removePost(communityId: number, postId: number, removedBy?: number, postPublicId?: string): Promise<void> {
+  // Remove a post from community (unboost) without deleting the actual post
+  async unboostPost(communityId: number, postId: number, unboostedBy: number, postPublicId?: string): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`
         DELETE FROM community_posts WHERE community_id = ${communityId} AND post_id = ${postId}
       `;
     });
     // Log as side effect
-    if (removedBy) {
-      this.logModAction(communityId, removedBy, "post_removed", "post", postPublicId);
-    }
+    this.logModAction(communityId, unboostedBy, "post_unboosted", "post", postPublicId);
   }
 
   async getCommunityPosts(
@@ -647,7 +650,7 @@ export class CommunityDB {
       let params: unknown[];
 
       const selectColumns = `
-        cp.id as cp_id, cp.community_id, cp.post_id, cp.status, cp.submitted_at, cp.reviewed_at, cp.reviewed_by, cp.suggested_by,
+        cp.id as cp_id, cp.community_id, cp.post_id, cp.status, cp.is_announcement, cp.submitted_at, cp.reviewed_at, cp.reviewed_by, cp.suggested_by,
         p.id as p_id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.sensitive, p.created_at, p.hot_score
       `;
       const orderBy = sort === "hot" ? "p.hot_score DESC, p.id DESC" : "p.id DESC";
@@ -682,6 +685,7 @@ export class CommunityDB {
         community_id: row.community_id as number,
         post_id: row.post_id as number,
         status: row.status as "pending" | "approved" | "rejected",
+        is_announcement: row.is_announcement as boolean,
         submitted_at: String(row.submitted_at),
         reviewed_at: row.reviewed_at ? String(row.reviewed_at) : null,
         reviewed_by: row.reviewed_by as number | null,
@@ -792,7 +796,7 @@ export class CommunityDB {
     return this.query(async (client) => {
       const result = await client.queryObject`
         SELECT
-          cp.id as cp_id, cp.community_id, cp.post_id, cp.status, cp.submitted_at, cp.reviewed_at, cp.reviewed_by, cp.suggested_by,
+          cp.id as cp_id, cp.community_id, cp.post_id, cp.status, cp.is_announcement, cp.submitted_at, cp.reviewed_at, cp.reviewed_by, cp.suggested_by,
           p.id as p_id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.sensitive, p.created_at, p.hot_score,
           cpp.pinned_at
         FROM community_pinned_posts cpp
@@ -806,6 +810,7 @@ export class CommunityDB {
         community_id: row.community_id as number,
         post_id: row.post_id as number,
         status: row.status as "pending" | "approved" | "rejected",
+        is_announcement: row.is_announcement as boolean,
         submitted_at: String(row.submitted_at),
         reviewed_at: row.reviewed_at ? String(row.reviewed_at) : null,
         reviewed_by: row.reviewed_by as number | null,

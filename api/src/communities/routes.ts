@@ -1,10 +1,13 @@
 import { Hono } from "@hono/hono";
 import type { DB, Actor, User, PostWithActor } from "../db.ts";
 import type { Federation, Context } from "@fedify/fedify";
+import { Delete, Tombstone, PUBLIC_COLLECTION } from "@fedify/fedify";
 import { CommunityDB, type Community } from "./db.ts";
 import { CommunityModeration } from "./moderation.ts";
 import { announcePost, getCommunityActorUri } from "./federation.ts";
 import { enrichPostsBatch, sanitizeActor as sanitizeActorApi } from "../api.ts";
+import { processActivity } from "../activities.ts";
+import { deleteMedia } from "../storage.ts";
 
 type Env = {
   Variables: {
@@ -605,17 +608,34 @@ export function createCommunityRoutes(
     // Enrich posts with all the data PostCard needs
     const enrichedPosts = await enrichPostsBatch(db, postsWithActors, currentActor?.id, domain);
 
-    // Add community info and pinned status to each post
-    const posts = enrichedPosts.map((post, index) => ({
-      ...post,
-      pinned_in_community: pinnedIds.has(result[index].post.id),
-      community: {
-        id: community.public_id,
-        name: community.name,
-        handle: community.handle,
-        avatar_url: community.avatar_url,
-      },
-    }));
+    // Add community info, pinned status, and boost info to each post
+    // A post is a "boost" (announcement) if is_announcement = true
+    // A post is a "community post" if is_announcement = false (post addressed TO the community)
+    const posts = enrichedPosts.map((post, index) => {
+      const cp = result[index];
+      const isBoost = cp.is_announcement;
+
+      return {
+        ...post,
+        pinned_in_community: pinnedIds.has(cp.post.id),
+        is_announcement: isBoost,
+        community: {
+          id: community.public_id,
+          name: community.name,
+          handle: community.handle,
+          avatar_url: community.avatar_url,
+        },
+        // Only show boosted_by for announcements (boosts), not direct community posts
+        ...(isBoost ? {
+          boosted_by: {
+            id: community.public_id,
+            handle: community.handle,
+            name: community.name,
+            avatar_url: community.avatar_url,
+          },
+        } : {}),
+      };
+    });
 
     return c.json({
       posts,
@@ -655,17 +675,32 @@ export function createCommunityRoutes(
     // Enrich posts with all the data PostCard needs
     const enrichedPosts = await enrichPostsBatch(db, postsWithActors, currentActor?.id, domain);
 
-    // Add community info and pinned status
-    const posts = enrichedPosts.map((post) => ({
-      ...post,
-      pinned_in_community: true,
-      community: {
-        id: community.public_id,
-        name: community.name,
-        handle: community.handle,
-        avatar_url: community.avatar_url,
-      },
-    }));
+    // Add community info, pinned status, and boost info
+    const posts = enrichedPosts.map((post, index) => {
+      const cp = pinnedPosts[index];
+      const isBoost = cp.is_announcement;
+
+      return {
+        ...post,
+        pinned_in_community: true,
+        is_announcement: isBoost,
+        community: {
+          id: community.public_id,
+          name: community.name,
+          handle: community.handle,
+          avatar_url: community.avatar_url,
+        },
+        // Only show boosted_by for announcements (boosts), not direct community posts
+        ...(isBoost ? {
+          boosted_by: {
+            id: community.public_id,
+            handle: community.handle,
+            name: community.name,
+            avatar_url: community.avatar_url,
+          },
+        } : {}),
+      };
+    });
 
     return c.json({ posts });
   });
@@ -719,6 +754,7 @@ export function createCommunityRoutes(
       return {
         ...post,
         submitted_at: formatDate(cp.submitted_at),
+        is_announcement: cp.is_announcement,
         suggested_by: cp.suggested_by ? sanitizeActor(suggesters.get(cp.suggested_by)!, domain) : null,
       };
     });
@@ -944,8 +980,8 @@ export function createCommunityRoutes(
     return c.json({ ok: true, status: "rejected" });
   });
 
-  // Remove an approved post
-  routes.delete("/:name/posts/:postId", async (c) => {
+  // Unboost a post from the community (remove from feed without deleting)
+  routes.post("/:name/posts/:postId/unboost", async (c) => {
     const name = c.req.param("name");
     const postId = c.req.param("postId");
     const user = c.get("user");
@@ -972,8 +1008,97 @@ export function createCommunityRoutes(
       return c.json({ error: "Post not found" }, 404);
     }
 
-    await communityDb.removePost(community.id, post.id, actor.id, post.public_id);
+    // Check post is in this community
+    const communityPost = await communityDb.getCommunityPostStatus(community.id, post.id);
+    if (!communityPost) {
+      return c.json({ error: "Post not in this community" }, 404);
+    }
+
+    // Can only unboost posts that were boosted (announcements), not direct community posts
+    // Direct community posts (is_announcement = false) should be deleted, not unboosted
+    if (!communityPost.is_announcement) {
+      return c.json({ error: "Cannot unboost a direct community post. Use delete instead." }, 400);
+    }
+
+    await communityDb.unboostPost(community.id, post.id, actor.id, post.public_id);
     return c.json({ ok: true });
+  });
+
+  // Delete a community post and all its replies (admin only)
+  routes.delete("/:name/posts/:postId", async (c) => {
+    const name = c.req.param("name");
+    const postId = c.req.param("postId");
+    const user = c.get("user");
+    const actor = c.get("actor");
+    if (!user || !actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const communityDb = c.get("communityDb");
+    const db = c.get("db");
+    const moderation = c.get("moderation");
+    const federation = c.get("federation");
+    const domain = c.get("domain");
+
+    const community = await communityDb.getCommunityByName(name);
+    if (!community) {
+      return c.json({ error: "Community not found" }, 404);
+    }
+
+    const post = await db.getPostByPublicId(postId);
+    if (!post) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    // Check if actor can delete this post in this community
+    const permission = await moderation.canDeletePost(community.id, post.id, actor.id);
+    if (!permission.allowed) {
+      return c.json({ error: permission.reason }, 403);
+    }
+
+    // Get all posts that will be deleted (for ActivityPub and cache invalidation)
+    const { deletedUris, deletedCount, mediaUrls } = await db.cascadeDeletePost(post.id);
+
+    // Send Delete activities for each deleted post using their proper URIs
+    const ctx = federation.createContext(c.req.raw, undefined);
+    // Extract slug from handle (@slug@domain -> slug)
+    const communitySlug = community.handle.replace(/^@/, '').split('@')[0];
+    const communityActorUri = getCommunityActorUri(communitySlug);
+    for (const postUri of deletedUris) {
+      try {
+        const deleteActivity = new Delete({
+          id: new URL(`https://${domain}/#deletes/${crypto.randomUUID()}`),
+          actor: communityActorUri,
+          object: new Tombstone({
+            id: new URL(postUri),
+          }),
+          to: PUBLIC_COLLECTION,
+        });
+        await processActivity(ctx, db, domain, deleteActivity, "outbound", communitySlug);
+      } catch (e) {
+        console.error(`[Community] Failed to send Delete activity for post ${postUri}:`, e);
+      }
+    }
+
+    // Clean up local media files from disk
+    for (const url of mediaUrls) {
+      if (url.startsWith("/uploads/media/")) {
+        const filename = url.replace("/uploads/media/", "");
+        await deleteMedia(filename);
+      }
+    }
+
+    // Log moderation action
+    communityDb.logModAction(
+      community.id,
+      actor.id,
+      "post_deleted",
+      "post",
+      post.public_id,
+      deletedCount > 1 ? `Deleted post and ${deletedCount - 1} replies` : undefined
+    );
+
+    return c.json({ ok: true, deleted_count: deletedCount });
   });
 
   // Pin a post in the community (admin only)

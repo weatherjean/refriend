@@ -24,9 +24,11 @@ interface PostCardProps {
   pinnedInCommunity?: boolean;
   canPinInCommunity?: boolean;
   onCommunityPin?: () => void;
+  canUnboost?: boolean;
+  onUnboost?: () => void;
 }
 
-export function PostCard({ post, linkToPost = true, community: communityProp, isOP, pinnedInCommunity, canPinInCommunity, onCommunityPin }: PostCardProps) {
+export function PostCard({ post, linkToPost = true, community: communityProp, isOP, pinnedInCommunity, canPinInCommunity, onCommunityPin, canUnboost, onUnboost }: PostCardProps) {
   const navigate = useNavigate();
   const { user, actor } = useAuth();
   const [liked, setLiked] = useState(post.liked ?? false);
@@ -142,6 +144,20 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
           <div className="post-pinned-indicator">
             <i className="bi bi-pin-fill"></i>
             <span>Pinned</span>
+          </div>
+        )}
+
+        {/* Boosted by indicator */}
+        {post.boosted_by && (
+          <div className="post-boosted-indicator">
+            <i className="bi bi-arrow-repeat"></i>
+            <Link
+              to={`/u/${post.boosted_by.handle}`}
+              onClick={(e) => e.stopPropagation()}
+              className="text-decoration-none"
+            >
+              {post.boosted_by.name || post.boosted_by.handle} boosted
+            </Link>
           </div>
         )}
 
@@ -342,6 +358,19 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
               title={pinnedInCommunity ? 'Unpin from community' : 'Pin in community'}
             >
               <i className={`bi ${pinnedInCommunity ? 'bi-pin-fill' : 'bi-pin'}`}></i>
+            </button>
+          )}
+
+          {canUnboost && onUnboost && (
+            <button
+              className="post-action-btn text-danger"
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnboost();
+              }}
+              title="Remove from community"
+            >
+              <i className="bi bi-x-circle"></i>
             </button>
           )}
 

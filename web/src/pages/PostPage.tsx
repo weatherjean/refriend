@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { posts as postsApi, Post, AttachmentInput } from '../api';
+import { posts as postsApi, communities as communitiesApi, Post, AttachmentInput } from '../api';
 import { PostCard } from '../components/PostCard';
 import { PostThread } from '../components/PostThread';
 import { PostComposer } from '../components/PostComposer';
@@ -26,6 +26,7 @@ export function PostPage() {
   const [replySort, setReplySort] = useState<'new' | 'hot'>('hot');
   const [opAuthorId, setOpAuthorId] = useState<string | null>(null);
   const [showReplyComposer, setShowReplyComposer] = useState(false);
+  const [isCommunityAdmin, setIsCommunityAdmin] = useState(false);
 
   const fetchReplies = useCallback(async (cursor?: number) => {
     const data = await postsApi.getReplies(id!, replySort, cursor);
@@ -47,10 +48,24 @@ export function PostPage() {
     const load = async () => {
       setLoading(true);
       setPost(null); // Clear post to trigger reply reload
+      setIsCommunityAdmin(false);
       try {
         const postData = await postsApi.get(id!);
         setPost(postData.post);
         setAncestors(postData.ancestors || []);
+
+        // Check if user is admin of the post's community
+        const community = postData.post.community;
+        if (community && user) {
+          try {
+            // Handle format: @name@domain - extract the name part
+            const communityName = community.handle.replace(/^@/, '').split('@')[0];
+            const { moderation } = await communitiesApi.get(communityName);
+            setIsCommunityAdmin(moderation?.isAdmin || false);
+          } catch {
+            // Ignore - user is not admin
+          }
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load post');
       } finally {
@@ -58,7 +73,7 @@ export function PostPage() {
       }
     };
     load();
-  }, [id]);
+  }, [id, user]);
 
   // Load replies when post loads or sort changes
   useEffect(() => {
@@ -72,10 +87,18 @@ export function PostPage() {
     if (!post) return;
     setDeleting(true);
     try {
-      await postsApi.delete(post.id);
-      navigate('/');
+      // Use community delete endpoint if admin, otherwise regular delete
+      if (isCommunityAdmin && post.community) {
+        const communityName = post.community.handle.replace(/^@/, '').split('@')[0];
+        await communitiesApi.deletePost(communityName, post.id);
+      } else {
+        await postsApi.delete(post.id);
+      }
+      setShowDeleteConfirm(false);
+      navigate(-1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete post');
+    } finally {
       setDeleting(false);
       setShowDeleteConfirm(false);
     }
@@ -98,12 +121,13 @@ export function PostPage() {
   }
 
   const isOwner = actor && post.author && actor.id === post.author.id;
+  const canDelete = isOwner || isCommunityAdmin;
 
   return (
     <div>
       <PostThread post={post} ancestors={ancestors} />
 
-      {isOwner && (
+      {canDelete && (
         <div className="mt-3">
           <LoadingButton
             variant="danger"

@@ -66,6 +66,12 @@ export interface Post {
     handle: string;
     avatar_url: string | null;
   };
+  boosted_by?: {
+    id: string;
+    handle: string;
+    name: string | null;
+    avatar_url: string | null;
+  };
 }
 
 interface FetchOptions extends RequestInit {
@@ -386,6 +392,7 @@ export interface CommunityPost extends Post {
   internal_id?: number;
   submitted_at?: string;
   pinned_in_community?: boolean;
+  is_announcement?: boolean;  // true = community boosted this post, false = post addressed TO community
   community?: {
     id: string;
     name: string;
@@ -501,8 +508,10 @@ export const communities = {
     fetchJson<{ ok: boolean; status: 'approved' }>(`/communities/${name}/posts/${postId}/approve`, { method: 'POST' }),
   rejectPost: (name: string, postId: string) =>
     fetchJson<{ ok: boolean; status: 'rejected' }>(`/communities/${name}/posts/${postId}/reject`, { method: 'POST' }),
-  removePost: (name: string, postId: string) =>
-    fetchJson<{ ok: boolean }>(`/communities/${name}/posts/${postId}`, { method: 'DELETE' }),
+  deletePost: (name: string, postId: string) =>
+    fetchJson<{ ok: boolean; deleted_count: number }>(`/communities/${name}/posts/${postId}`, { method: 'DELETE' }),
+  unboostPost: (name: string, postId: string) =>
+    fetchJson<{ ok: boolean }>(`/communities/${name}/posts/${postId}/unboost`, { method: 'POST' }),
   getPinnedPosts: (name: string) =>
     fetchJson<{ posts: CommunityPost[] }>(`/communities/${name}/posts/pinned`),
   pinPost: (name: string, postId: string) =>

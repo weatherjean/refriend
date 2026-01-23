@@ -47,6 +47,7 @@ export interface Post {
   content: string;
   url: string | null;
   in_reply_to_id: number | null;
+  addressed_to: string[];  // ActivityPub to/cc recipients (actor URIs)
   likes_count: number;
   sensitive: boolean;
   created_at: string;
@@ -511,21 +512,22 @@ export class DB {
 
   // ============ Posts ============
 
-  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score"> & { created_at?: string }): Promise<Post> {
+  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score" | "addressed_to"> & { created_at?: string; addressed_to?: string[] }): Promise<Post> {
     return this.query(async (client) => {
       await client.queryArray`BEGIN`;
       try {
+        const addressedTo = post.addressed_to || [];
         let result;
         if (post.created_at) {
           result = await client.queryObject<Post>`
-            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, created_at)
-            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${post.created_at})
+            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, created_at)
+            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${post.created_at})
             RETURNING *
           `;
         } else {
           result = await client.queryObject<Post>`
-            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive)
-            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive})
+            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to)
+            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo})
             RETURNING *
           `;
         }
@@ -650,6 +652,7 @@ export class DB {
       content: row.content as string,
       url: row.url as string | null,
       in_reply_to_id: row.in_reply_to_id as number | null,
+      addressed_to: (row.addressed_to as string[]) || [],
       likes_count: row.likes_count as number,
       sensitive: row.sensitive as boolean,
       created_at: String(row.created_at),
@@ -672,7 +675,7 @@ export class DB {
   }
 
   private readonly postWithActorSelect = `
-    p.id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.sensitive, p.created_at,
+    p.id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.addressed_to, p.likes_count, p.sensitive, p.created_at,
     a.id as author_id, a.public_id as author_public_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
     a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
     a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,
@@ -924,6 +927,67 @@ export class DB {
           await client.queryArray`UPDATE posts SET replies_count = GREATEST(0, replies_count - 1) WHERE id = ${post.in_reply_to_id}`;
         }
         await client.queryArray`COMMIT`;
+      } catch (e) {
+        await client.queryArray`ROLLBACK`;
+        throw e;
+      }
+    });
+  }
+
+  /**
+   * Delete a post and ALL its replies recursively (cascade delete).
+   * Returns the URIs of all deleted posts (for ActivityPub) and their media URLs.
+   */
+  async cascadeDeletePost(id: number): Promise<{ deletedUris: string[]; deletedCount: number; mediaUrls: string[] }> {
+    return this.query(async (client) => {
+      await client.queryArray`BEGIN`;
+      try {
+        // Get the post to find its parent (for updating replies_count)
+        const parentResult = await client.queryObject<{ in_reply_to_id: number | null }>`
+          SELECT in_reply_to_id FROM posts WHERE id = ${id}
+        `;
+        const parentId = parentResult.rows[0]?.in_reply_to_id;
+
+        // Find all descendant posts using recursive CTE - get id and uri for ActivityPub
+        const descendantsResult = await client.queryObject<{ id: number; uri: string }>`
+          WITH RECURSIVE descendants AS (
+            SELECT id, uri FROM posts WHERE id = ${id}
+            UNION ALL
+            SELECT p.id, p.uri FROM posts p
+            JOIN descendants d ON p.in_reply_to_id = d.id
+          )
+          SELECT id, uri FROM descendants
+        `;
+        const allPosts = descendantsResult.rows;
+
+        if (allPosts.length === 0) {
+          await client.queryArray`ROLLBACK`;
+          return { deletedUris: [], deletedCount: 0, mediaUrls: [] };
+        }
+
+        const allPostIds = allPosts.map(r => r.id);
+        const deletedUris = allPosts.map(r => r.uri);
+
+        // Collect media URLs before deleting
+        const mediaResult = await client.queryObject<{ url: string }>`
+          SELECT url FROM media WHERE post_id = ANY(${allPostIds})
+        `;
+        const mediaUrls = mediaResult.rows.map(r => r.url);
+
+        // Delete posts in reverse order (leaf nodes first) to satisfy FK constraints
+        // The recursive CTE returns them in traversal order, so we reverse
+        const reversedIds = [...allPostIds].reverse();
+        for (const postId of reversedIds) {
+          await client.queryArray`DELETE FROM posts WHERE id = ${postId}`;
+        }
+
+        // Update parent's replies_count if the root post was a reply
+        if (parentId) {
+          await client.queryArray`UPDATE posts SET replies_count = GREATEST(0, replies_count - 1) WHERE id = ${parentId}`;
+        }
+
+        await client.queryArray`COMMIT`;
+        return { deletedUris, deletedCount: allPosts.length, mediaUrls };
       } catch (e) {
         await client.queryArray`ROLLBACK`;
         throw e;

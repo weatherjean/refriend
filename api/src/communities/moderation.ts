@@ -80,6 +80,34 @@ export class CommunityModeration {
   }
 
   /**
+   * Check if an actor can delete a post in a community
+   * Post must be addressed to the community (directly or via parent chain)
+   * and actor must be admin/owner of the community
+   */
+  async canDeletePost(
+    communityId: number,
+    postId: number,
+    actorId: number
+  ): Promise<{ allowed: boolean; reason?: string }> {
+    // Check if post is in this community (directly or via parent chain)
+    const community = await this.communityDb.getCommunityForPost(postId);
+    if (!community || community.id !== communityId) {
+      return {
+        allowed: false,
+        reason: "Post is not addressed to this community",
+      };
+    }
+
+    // Check if actor is admin/owner
+    const isAdmin = await this.communityDb.isAdmin(communityId, actorId);
+    if (!isAdmin) {
+      return { allowed: false, reason: "Admin access required" };
+    }
+
+    return { allowed: true };
+  }
+
+  /**
    * Check if a post should be auto-approved
    * Auto-approve if: community doesn't require approval, or poster is admin
    */
