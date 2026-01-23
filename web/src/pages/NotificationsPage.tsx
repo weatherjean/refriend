@@ -26,8 +26,8 @@ export function NotificationsPage() {
       if (notifications.some(n => !n.read)) {
         await notificationsApi.markAsRead();
       }
-    } catch (err) {
-      console.error('Failed to load notifications:', err);
+    } catch {
+      // Error handled by global toast
     } finally {
       setLoading(false);
     }
@@ -70,8 +70,8 @@ export function NotificationsPage() {
       await notificationsApi.delete();
       setNotifications([]);
       setShowClearConfirm(false);
-    } catch (err) {
-      console.error('Failed to clear notifications:', err);
+    } catch {
+      // Error handled by global toast
     } finally {
       setClearing(false);
     }

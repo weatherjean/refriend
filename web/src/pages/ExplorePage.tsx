@@ -1,54 +1,36 @@
-import { useState, useEffect } from 'react';
+import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { tags } from '../api';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
 import { SearchForm } from '../components/SearchForm';
+import { useSearch } from '../hooks';
+
+type TagItem = { name: string; count: number };
 
 export function ExplorePage() {
-  const [tagInput, setTagInput] = useState('');
-  const [searchResults, setSearchResults] = useState<{ name: string; count: number }[] | null>(null);
-  const [trending, setTrending] = useState<{ name: string; count: number }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchLoading, setSearchLoading] = useState(false);
-
-  useEffect(() => {
-    const loadTrending = async () => {
-      try {
-        const { tags: trendingTags } = await tags.getTrending();
-        setTrending(trendingTags);
-      } catch (err) {
-        console.error('Failed to load trending tags:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadTrending();
+  const initialFetch = useCallback(async () => {
+    const { tags: trendingTags } = await tags.getTrending();
+    return trendingTags;
   }, []);
 
-  const handleSearch = async () => {
-    const query = tagInput.trim().replace(/^#/, '');
-    if (!query) return;
+  const searchFn = useCallback(async (query: string) => {
+    const cleanQuery = query.replace(/^#/, '');
+    const { tags: results } = await tags.search(cleanQuery);
+    return results;
+  }, []);
 
-    setSearchLoading(true);
-    try {
-      const { tags: results } = await tags.search(query);
-      setSearchResults(results);
-    } catch (err) {
-      console.error('Failed to search tags:', err);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const handleClear = () => {
-    setTagInput('');
-    setSearchResults(null);
-  };
-
-  const displayTags = searchResults !== null ? searchResults : trending;
-  const isSearching = searchResults !== null;
+  const {
+    query: tagInput,
+    setQuery: setTagInput,
+    displayItems: displayTags,
+    loading,
+    searchLoading,
+    isSearching,
+    search: handleSearch,
+    clear: handleClear,
+  } = useSearch<TagItem>({ initialFetch, searchFn });
 
   return (
     <div>

@@ -44,7 +44,9 @@ export function NewPostPage() {
     if (user) {
       communities.getJoined().then(({ communities: c }) => {
         setJoinedCommunities(c);
-      }).catch(console.error);
+      }).catch(() => {
+        // Error handled by global toast
+      });
     }
   }, [user]);
 
@@ -194,8 +196,8 @@ export function NewPostPage() {
       if (selectedCommunity) {
         try {
           await communities.submitPost(selectedCommunity.name!, post.id);
-        } catch (err) {
-          console.error('Failed to submit to community:', err);
+        } catch {
+          // Error handled by global toast
         }
       }
 

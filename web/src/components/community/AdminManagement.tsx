@@ -29,8 +29,8 @@ export function AdminManagement({ communityName, isOwner }: { communityName: str
     try {
       const { admins: a } = await communities.getAdmins(communityName);
       setAdmins(a);
-    } catch (err) {
-      console.error('Failed to load admins:', err);
+    } catch {
+      // Error handled by global toast
     } finally {
       setLoading(false);
     }
@@ -66,8 +66,8 @@ export function AdminManagement({ communityName, isOwner }: { communityName: str
     try {
       await communities.removeAdmin(communityName, actorId);
       setAdmins(prev => prev.filter(a => a.actor.id !== actorId));
-    } catch (err) {
-      console.error('Failed to remove admin:', err);
+    } catch {
+      // Error handled by global toast
     }
     setConfirmAction(null);
   };
@@ -78,8 +78,8 @@ export function AdminManagement({ communityName, isOwner }: { communityName: str
       setAdmins(prev => prev.map(a =>
         a.actor.id === actorId ? { ...a, role: newRole } : a
       ));
-    } catch (err) {
-      console.error('Failed to change role:', err);
+    } catch {
+      // Error handled by global toast
     }
     setConfirmAction(null);
   };

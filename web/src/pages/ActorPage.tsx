@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { users, follows, search, actors, Actor, Post } from '../api';
 import { PostCard } from '../components/PostCard';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { getUsername } from '../utils';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { LoadMoreButton } from '../components/LoadMoreButton';
@@ -11,9 +12,9 @@ import { ProfileHeader } from '../components/ProfileHeader';
 import { ProfileTabs } from '../components/ProfileTabs';
 import { ProfileSettingsTab } from '../components/ProfileSettingsTab';
 import { TabContent } from '../components/TabContent';
-import { AlertMessage } from '../components/AlertMessage';
+import { SortToggle } from '../components/SortToggle';
 import { ReplyThread } from '../components/PostThread';
-import { usePagination, useMessage } from '../hooks';
+import { usePagination } from '../hooks';
 
 export function ActorPage() {
   const location = useLocation();
@@ -40,7 +41,7 @@ export function ActorPage() {
   const [followersLoaded, setFollowersLoaded] = useState(false);
   const [followingLoaded, setFollowingLoaded] = useState(false);
 
-  const { message, showInfo, clear: clearMessage } = useMessage();
+  const { toast } = useToast();
 
   // Extract handle from URL
   const fullHandle = location.pathname.replace(/^\/u\//, '');
@@ -104,7 +105,6 @@ export function ActorPage() {
 
     setLoading(true);
     setError('');
-    clearMessage();
     setRepliesLoaded(false);
     setBoostsLoaded(false);
     setPinnedPosts([]);
@@ -162,7 +162,7 @@ export function ActorPage() {
     } finally {
       setLoading(false);
     }
-  }, [fullHandle, username, clearMessage]);
+  }, [fullHandle, username]);
 
   useEffect(() => {
     loadProfile();
@@ -213,21 +213,20 @@ export function ActorPage() {
     if (!actor || !user) return;
 
     setFollowLoading(true);
-    clearMessage();
     try {
       if (isFollowing) {
         await follows.unfollow(actor.id);
         setIsFollowing(false);
         setStats(s => ({ ...s, followers: Math.max(0, s.followers - 1) }));
-        showInfo('Unfollowed');
+        toast.info('Unfollowed');
       } else {
         const response = await follows.follow(actor.handle);
         setIsFollowing(true);
         setStats(s => ({ ...s, followers: s.followers + 1 }));
-        showInfo(response.message || 'Now following!');
+        toast.info(response.message || 'Now following!');
       }
-    } catch (err) {
-      showInfo(err instanceof Error ? err.message : 'Action failed');
+    } catch {
+      // Error handled by global toast
     } finally {
       setFollowLoading(false);
     }
@@ -258,8 +257,6 @@ export function ActorPage() {
         onShowFollowing={() => setShowFollowing(true)}
       />
 
-      <AlertMessage message={message} onDismiss={clearMessage} />
-
       {!actor.is_local && actor.url && (
         <p>
           <a href={actor.url} target="_blank" rel="noopener noreferrer" className="btn btn-outline-secondary btn-sm">
@@ -287,20 +284,7 @@ export function ActorPage() {
         >
           {(posts.length > 0 || pinnedPosts.length > 0) && (
             <div className="d-flex justify-content-end mb-3">
-              <div className="btn-group btn-group-sm">
-                <button
-                  className={`btn ${postSort === 'new' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                  onClick={() => setPostSort('new')}
-                >
-                  New
-                </button>
-                <button
-                  className={`btn ${postSort === 'hot' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                  onClick={() => setPostSort('hot')}
-                >
-                  Hot
-                </button>
-              </div>
+              <SortToggle value={postSort} onChange={setPostSort} />
             </div>
           )}
           {pinnedPosts.map((post) => (

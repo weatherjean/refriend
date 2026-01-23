@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { communities, type Community } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -6,59 +6,36 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
 import { SearchForm } from '../components/SearchForm';
+import { useSearch } from '../hooks';
 
 export function CommunitiesPage() {
   const { user } = useAuth();
-  const [searchInput, setSearchInput] = useState('');
-  const [searchResults, setSearchResults] = useState<Community[] | null>(null);
-  const [communityList, setCommunityList] = useState<Community[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchLoading, setSearchLoading] = useState(false);
 
-  useEffect(() => {
-    const loadCommunities = async () => {
-      try {
-        if (user) {
-          const { communities: list } = await communities.getJoined();
-          setCommunityList(list);
-        } else {
-          const { communities: list } = await communities.list({ limit: 20 });
-          setCommunityList(list);
-        }
-      } catch (err) {
-        console.error('Failed to load communities:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadCommunities();
+  const initialFetch = useCallback(async () => {
+    if (user) {
+      const { communities: list } = await communities.getJoined();
+      return list;
+    } else {
+      const { communities: list } = await communities.list({ limit: 20 });
+      return list;
+    }
   }, [user]);
 
-  const handleSearch = async () => {
-    const query = searchInput.trim();
-    if (!query) {
-      setSearchResults(null);
-      return;
-    }
+  const searchFn = useCallback(async (query: string) => {
+    const { communities: results } = await communities.search(query);
+    return results;
+  }, []);
 
-    setSearchLoading(true);
-    try {
-      const { communities: results } = await communities.search(query);
-      setSearchResults(results);
-    } catch (err) {
-      console.error('Failed to search communities:', err);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const handleClear = () => {
-    setSearchInput('');
-    setSearchResults(null);
-  };
-
-  const displayCommunities = searchResults !== null ? searchResults : communityList;
-  const isSearching = searchResults !== null;
+  const {
+    query: searchInput,
+    setQuery: setSearchInput,
+    displayItems: displayCommunities,
+    loading,
+    searchLoading,
+    isSearching,
+    search: handleSearch,
+    clear: handleClear,
+  } = useSearch<Community>({ initialFetch, searchFn });
 
   return (
     <div>

@@ -7,6 +7,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { LoadMoreButton } from '../components/LoadMoreButton';
 import { LoadingButton } from '../components/LoadingButton';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { SortToggle } from '../components/SortToggle';
 import { useAuth } from '../context/AuthContext';
 import { usePagination } from '../hooks';
 
@@ -169,20 +170,7 @@ export function PostPage() {
               <i className="bi bi-chat-dots-fill me-2"></i>
               Replies ({post.replies_count})
             </h5>
-            <div className="btn-group btn-group-sm">
-              <button
-                className={`btn ${replySort === 'new' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                onClick={() => setReplySort('new')}
-              >
-                New
-              </button>
-              <button
-                className={`btn ${replySort === 'hot' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                onClick={() => setReplySort('hot')}
-              >
-                Hot
-              </button>
-            </div>
+            <SortToggle value={replySort} onChange={setReplySort} />
           </div>
           {replies.map((reply) => (
             <PostCard

@@ -6,6 +6,7 @@ import { getUsername } from '../utils';
 import { tags, notifications as notificationsApi } from '../api';
 import { TagBadge } from './TagBadge';
 import { Avatar } from './Avatar';
+import { ToastContainer } from './ToastContainer';
 
 interface LayoutProps {
   children: ReactNode;
@@ -239,6 +240,8 @@ export function Layout({ children }: LayoutProps) {
           {unreadCount > 0 && <span className="mobile-nav-badge"></span>}
         </button>
       </nav>
+
+      <ToastContainer />
     </div>
   );
 }

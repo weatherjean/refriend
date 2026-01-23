@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { search, follows, users, Actor, Post } from '../api';
+import { search, Actor, Post } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
 import { Avatar } from '../components/Avatar';
@@ -8,10 +8,9 @@ import { EmptyState } from '../components/EmptyState';
 import { PostCard } from '../components/PostCard';
 import { PageHeader } from '../components/PageHeader';
 import { SearchForm } from '../components/SearchForm';
-import { AlertMessage } from '../components/AlertMessage';
 import { TabContent } from '../components/TabContent';
 import { LoadingButton } from '../components/LoadingButton';
-import { useMessage } from '../hooks';
+import { useFollowMultiActor } from '../hooks';
 
 export function SearchPage() {
   const { user, actor: currentActor } = useAuth();
@@ -24,30 +23,18 @@ export function SearchPage() {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [activeTab, setActiveTab] = useState<'users' | 'posts'>('users');
-  const [followingInProgress, setFollowingInProgress] = useState<Set<string>>(new Set());
-  const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
-  const { message, showInfo, clear: clearMessage } = useMessage();
+
+  const { followingSet, loadingSet: followingInProgress, toggleActorFollow, initFollowingSet } = useFollowMultiActor();
 
   useEffect(() => {
-    const loadFollowing = async () => {
-      if (!currentActor) return;
-      try {
-        const username = getUsername(currentActor.handle);
-        const { following } = await users.getFollowing(username);
-        setFollowingSet(new Set(following.map(a => a.id)));
-      } catch {
-        // Ignore
-      }
-    };
-    loadFollowing();
-  }, [currentActor]);
+    initFollowingSet();
+  }, [initFollowingSet]);
 
   const performSearch = async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
 
     setSearching(true);
     setSearched(true);
-    clearMessage();
     try {
       const { users: userRes, posts: postRes, postsLowConfidence: lowConf } = await search.query(searchQuery.trim());
       setUserResults(userRes || []);
@@ -58,8 +45,8 @@ export function SearchPage() {
       } else {
         setActiveTab('users');
       }
-    } catch (err) {
-      console.error('Search failed:', err);
+    } catch {
+      // Error handled by global toast
       setUserResults([]);
       setPostResults([]);
     } finally {
@@ -72,38 +59,6 @@ export function SearchPage() {
       performSearch(initialQuery);
     }
   }, [initialQuery]);
-
-  const handleFollow = async (actor: Actor) => {
-    if (!user) return;
-
-    setFollowingInProgress(prev => new Set(prev).add(actor.id));
-    clearMessage();
-    try {
-      const isCurrentlyFollowing = followingSet.has(actor.id);
-      if (isCurrentlyFollowing) {
-        await follows.unfollow(actor.id);
-        setFollowingSet(prev => {
-          const next = new Set(prev);
-          next.delete(actor.id);
-          return next;
-        });
-        showInfo('Unfollowed');
-      } else {
-        const response = await follows.follow(actor.handle);
-        setFollowingSet(prev => new Set(prev).add(actor.id));
-        showInfo(response.message || 'Now following!');
-      }
-    } catch (err) {
-      console.error('Follow/unfollow failed:', err);
-      showInfo('Failed');
-    } finally {
-      setFollowingInProgress(prev => {
-        const next = new Set(prev);
-        next.delete(actor.id);
-        return next;
-      });
-    }
-  };
 
   const handleClear = () => {
     setQuery('');
@@ -127,8 +82,6 @@ export function SearchPage() {
         loading={searching}
         showClear={searched}
       />
-
-      <AlertMessage message={message} onDismiss={clearMessage} />
 
       {!searched && (
         <div className="text-muted">
@@ -210,7 +163,7 @@ export function SearchPage() {
                                 variant={isFollowing ? 'outline-secondary' : 'outline-primary'}
                                 size="sm"
                                 loading={followingInProgress.has(actor.id)}
-                                onClick={() => handleFollow(actor)}
+                                onClick={() => toggleActorFollow(actor)}
                               >
                                 {isFollowing ? (isCommunity ? 'Joined' : 'Following') : (isCommunity ? 'Join' : 'Follow')}
                               </LoadingButton>

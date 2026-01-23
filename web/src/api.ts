@@ -1,5 +1,13 @@
 const API_BASE = '/api';
 
+// Global error handler for toast notifications
+type ErrorHandler = (error: Error) => void;
+let globalErrorHandler: ErrorHandler | null = null;
+
+export function setGlobalErrorHandler(handler: ErrorHandler | null) {
+  globalErrorHandler = handler;
+}
+
 export interface User {
   id: number;
   username: string;
@@ -71,7 +79,11 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   });
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.error || 'Request failed');
+    const error = new Error(data.error || 'Request failed');
+    if (globalErrorHandler) {
+      globalErrorHandler(error);
+    }
+    throw error;
   }
   return data;
 }

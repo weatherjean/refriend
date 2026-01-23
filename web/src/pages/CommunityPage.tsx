@@ -7,6 +7,7 @@ import { PostCard } from '../components/PostCard';
 import { Avatar } from '../components/Avatar';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
+import { SortToggle } from '../components/SortToggle';
 
 export function CommunityPage() {
   const { name } = useParams<{ name: string }>();
@@ -43,7 +44,7 @@ export function CommunityPage() {
           setPendingPosts(pending);
         }
       } catch (err) {
-        console.error('Failed to load community:', err);
+        // Error handled by global toast
         setError(err instanceof Error ? err.message : 'Failed to load community');
       } finally {
         setLoading(false);
@@ -65,8 +66,8 @@ export function CommunityPage() {
         setCommunity({ ...community, member_count: community.member_count + 1 });
         setModeration(mod => mod ? { ...mod, isMember: true } : null);
       }
-    } catch (err) {
-      console.error('Failed to join/leave:', err);
+    } catch {
+      // Error handled by global toast
     } finally {
       setJoining(false);
     }
@@ -81,8 +82,8 @@ export function CommunityPage() {
       if (approved) {
         setPosts(prev => [approved, ...prev]);
       }
-    } catch (err) {
-      console.error('Failed to approve post:', err);
+    } catch {
+      // Error handled by global toast
     }
   };
 
@@ -91,8 +92,8 @@ export function CommunityPage() {
     try {
       await communities.rejectPost(name, postId);
       setPendingPosts(prev => prev.filter(p => p.id !== postId));
-    } catch (err) {
-      console.error('Failed to reject post:', err);
+    } catch {
+      // Error handled by global toast
     }
   };
 
@@ -212,20 +213,7 @@ export function CommunityPage() {
         <div>
           {posts.length > 0 && (
             <div className="d-flex justify-content-end mb-3">
-              <div className="btn-group btn-group-sm">
-                <button
-                  className={`btn ${postSort === 'hot' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                  onClick={() => setPostSort('hot')}
-                >
-                  Hot
-                </button>
-                <button
-                  className={`btn ${postSort === 'new' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                  onClick={() => setPostSort('new')}
-                >
-                  New
-                </button>
-              </div>
+              <SortToggle value={postSort} onChange={setPostSort} hotFirst />
             </div>
           )}
           {posts.length === 0 ? (

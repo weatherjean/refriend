@@ -44,8 +44,8 @@ export function BanManagement({ communityName }: { communityName: string }) {
         // Filter out already banned users
         const bannedIds = new Set(bans.map(b => b.actor.id));
         setSearchResults((results || []).filter((r: Actor) => !bannedIds.has(r.id)));
-      } catch (err) {
-        console.error('Search failed:', err);
+      } catch {
+        // Error handled by global toast
       } finally {
         setSearching(false);
       }
@@ -60,8 +60,8 @@ export function BanManagement({ communityName }: { communityName: string }) {
       setBans(b);
       setTotalCount(total_count);
       setNextCursor(next_cursor);
-    } catch (err) {
-      console.error('Failed to load bans:', err);
+    } catch {
+      // Error handled by global toast
     } finally {
       setLoading(false);
     }
@@ -74,8 +74,8 @@ export function BanManagement({ communityName }: { communityName: string }) {
       const { bans: b, next_cursor } = await communities.getBans(communityName, { before: nextCursor });
       setBans(prev => [...prev, ...b]);
       setNextCursor(next_cursor);
-    } catch (err) {
-      console.error('Failed to load more bans:', err);
+    } catch {
+      // Error handled by global toast
     } finally {
       setLoadingMore(false);
     }
@@ -88,8 +88,8 @@ export function BanManagement({ communityName }: { communityName: string }) {
       await communities.ban(communityName, selectedUser.id, banReason || undefined);
       await loadBans();
       closeBanModal();
-    } catch (err) {
-      console.error('Failed to ban user:', err);
+    } catch {
+      // Error handled by global toast
     } finally {
       setBanning(false);
     }
@@ -100,8 +100,8 @@ export function BanManagement({ communityName }: { communityName: string }) {
       await communities.unban(communityName, actorId);
       setBans(prev => prev.filter(b => b.actor.id !== actorId));
       setTotalCount(prev => prev - 1);
-    } catch (err) {
-      console.error('Failed to unban user:', err);
+    } catch {
+      // Error handled by global toast
     }
     setConfirmUnban(null);
   };

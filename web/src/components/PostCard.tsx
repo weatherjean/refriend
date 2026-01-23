@@ -77,8 +77,8 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
         setLiked(result.liked);
         setLikesCount(result.likes_count);
       }
-    } catch (err) {
-      console.error('Like/unlike failed:', err);
+    } catch {
+      // Error handled by global toast
     } finally {
       setLikeLoading(false);
     }
@@ -99,8 +99,8 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
         setBoosted(result.boosted);
         setBoostsCount(result.boosts_count);
       }
-    } catch (err) {
-      console.error('Boost/unboost failed:', err);
+    } catch {
+      // Error handled by global toast
     } finally {
       setBoostLoading(false);
     }
@@ -119,8 +119,8 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
         const result = await postsApi.pin(post.id);
         setPinned(result.pinned);
       }
-    } catch (err) {
-      console.error('Pin/unpin failed:', err);
+    } catch {
+      // Error handled by global toast
     } finally {
       setPinLoading(false);
     }

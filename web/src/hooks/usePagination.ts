@@ -58,8 +58,8 @@ export function usePagination<T>({
       const { items: newItems, next_cursor } = await fetchFnRef.current(nextCursor);
       setItems(prev => [...prev, ...newItems]);
       setNextCursor(next_cursor);
-    } catch (err) {
-      console.error('Failed to load more:', err);
+    } catch {
+      // Error handled by global toast
     } finally {
       setLoadingMore(false);
     }
