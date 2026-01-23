@@ -4,6 +4,7 @@ import { tags } from '../api';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
+import { SearchForm } from '../components/SearchForm';
 
 export function ExplorePage() {
   const [tagInput, setTagInput] = useState('');
@@ -26,8 +27,7 @@ export function ExplorePage() {
     loadTrending();
   }, []);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async () => {
     const query = tagInput.trim().replace(/^#/, '');
     if (!query) return;
 
@@ -54,38 +54,17 @@ export function ExplorePage() {
     <div>
       <PageHeader title="Tags" icon="hash" />
 
-      <div className="card mb-4">
-        <div className="card-body">
-          <form onSubmit={handleSearch}>
-            <label htmlFor="tagInput" className="form-label">
-              Search for a hashtag
-            </label>
-            <div className="input-group">
-              <span className="input-group-text">#</span>
-              <input
-                type="text"
-                className="form-control"
-                id="tagInput"
-                placeholder="Enter a tag name..."
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-              />
-              <button type="submit" className="btn btn-primary" disabled={!tagInput.trim() || searchLoading}>
-                {searchLoading ? (
-                  <span className="spinner-border spinner-border-sm"></span>
-                ) : (
-                  <><i className="bi bi-search me-1"></i> Search</>
-                )}
-              </button>
-              {isSearching && (
-                <button type="button" className="btn btn-outline-secondary" onClick={handleClear}>
-                  <i className="bi bi-x-lg"></i>
-                </button>
-              )}
-            </div>
-          </form>
-        </div>
-      </div>
+      <SearchForm
+        placeholder="Enter a tag name..."
+        label="Search for a hashtag"
+        icon="hash"
+        value={tagInput}
+        onChange={setTagInput}
+        onSubmit={handleSearch}
+        onClear={handleClear}
+        loading={searchLoading}
+        showClear={isSearching}
+      />
 
       <h5 className="mb-3">
         {isSearching ? `Results for "#${tagInput.trim().replace(/^#/, '')}"` : 'Trending Tags'}

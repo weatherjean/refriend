@@ -7,6 +7,11 @@ import { Avatar } from '../components/Avatar';
 import { EmptyState } from '../components/EmptyState';
 import { PostCard } from '../components/PostCard';
 import { PageHeader } from '../components/PageHeader';
+import { SearchForm } from '../components/SearchForm';
+import { AlertMessage } from '../components/AlertMessage';
+import { TabContent } from '../components/TabContent';
+import { LoadingButton } from '../components/LoadingButton';
+import { useMessage } from '../hooks';
 
 export function SearchPage() {
   const { user, actor: currentActor } = useAuth();
@@ -21,9 +26,8 @@ export function SearchPage() {
   const [activeTab, setActiveTab] = useState<'users' | 'posts'>('users');
   const [followingInProgress, setFollowingInProgress] = useState<Set<string>>(new Set());
   const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
-  const [message, setMessage] = useState('');
+  const { message, showInfo, clear: clearMessage } = useMessage();
 
-  // Load who the current user is following
   useEffect(() => {
     const loadFollowing = async () => {
       if (!currentActor) return;
@@ -43,13 +47,12 @@ export function SearchPage() {
 
     setSearching(true);
     setSearched(true);
-    setMessage('');
+    clearMessage();
     try {
       const { users: userRes, posts: postRes, postsLowConfidence: lowConf } = await search.query(searchQuery.trim());
       setUserResults(userRes || []);
       setPostResults(postRes || []);
       setPostsLowConfidence(lowConf || false);
-      // Switch to posts tab if we have post results but no user results
       if (postRes?.length > 0 && (!userRes || userRes.length === 0)) {
         setActiveTab('posts');
       } else {
@@ -64,23 +67,17 @@ export function SearchPage() {
     }
   };
 
-  // Auto-search if query param is provided
   useEffect(() => {
     if (initialQuery) {
       performSearch(initialQuery);
     }
   }, [initialQuery]);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    performSearch(query);
-  };
-
   const handleFollow = async (actor: Actor) => {
     if (!user) return;
 
     setFollowingInProgress(prev => new Set(prev).add(actor.id));
-    setMessage('');
+    clearMessage();
     try {
       const isCurrentlyFollowing = followingSet.has(actor.id);
       if (isCurrentlyFollowing) {
@@ -90,15 +87,15 @@ export function SearchPage() {
           next.delete(actor.id);
           return next;
         });
-        setMessage('Unfollowed');
+        showInfo('Unfollowed');
       } else {
         const response = await follows.follow(actor.handle);
         setFollowingSet(prev => new Set(prev).add(actor.id));
-        setMessage(response.message || 'Now following!');
+        showInfo(response.message || 'Now following!');
       }
     } catch (err) {
       console.error('Follow/unfollow failed:', err);
-      setMessage('Failed');
+      showInfo('Failed');
     } finally {
       setFollowingInProgress(prev => {
         const next = new Set(prev);
@@ -120,45 +117,18 @@ export function SearchPage() {
     <div>
       <PageHeader title="Search" icon="search" />
 
-      <div className="card mb-4">
-        <div className="card-body">
-          <form onSubmit={handleSearch}>
-            <label htmlFor="searchInput" className="form-label">
-              Search users, communities, and posts
-            </label>
-            <div className="input-group">
-              <span className="input-group-text"><i className="bi bi-search"></i></span>
-              <input
-                type="text"
-                className="form-control"
-                id="searchInput"
-                placeholder="Enter a name, @user@domain, or keywords..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              <button type="submit" className="btn btn-primary" disabled={!query.trim() || searching}>
-                {searching ? (
-                  <span className="spinner-border spinner-border-sm"></span>
-                ) : (
-                  'Search'
-                )}
-              </button>
-              {searched && (
-                <button type="button" className="btn btn-outline-secondary" onClick={handleClear}>
-                  <i className="bi bi-x-lg"></i>
-                </button>
-              )}
-            </div>
-          </form>
-        </div>
-      </div>
+      <SearchForm
+        placeholder="Enter a name, @user@domain, or keywords..."
+        label="Search users, communities, and posts"
+        value={query}
+        onChange={setQuery}
+        onSubmit={() => performSearch(query)}
+        onClear={handleClear}
+        loading={searching}
+        showClear={searched}
+      />
 
-      {message && (
-        <div className="alert alert-info alert-dismissible">
-          {message}
-          <button type="button" className="btn-close" onClick={() => setMessage('')}></button>
-        </div>
-      )}
+      <AlertMessage message={message} onDismiss={clearMessage} />
 
       {!searched && (
         <div className="text-muted">
@@ -181,7 +151,6 @@ export function SearchPage() {
             <EmptyState icon="search" title={`No results found for "${query}"`} />
           ) : (
             <>
-              {/* Tabs */}
               <ul className="nav nav-tabs mb-3">
                 <li className="nav-item">
                   <button
@@ -201,11 +170,13 @@ export function SearchPage() {
                 </li>
               </ul>
 
-              {/* Users & Communities tab */}
-              {activeTab === 'users' && (
-                userResults.length === 0 ? (
-                  <EmptyState icon="person" title="No users or communities found" />
-                ) : (
+              <TabContent
+                loading={false}
+                empty={activeTab === 'users' && userResults.length === 0}
+                emptyIcon="person"
+                emptyTitle="No users or communities found"
+              >
+                {activeTab === 'users' && (
                   <div className="list-group">
                     {userResults.map((actor) => {
                       const username = getUsername(actor.handle);
@@ -218,12 +189,7 @@ export function SearchPage() {
                         <div key={actor.id} className="list-group-item">
                           <div className="d-flex align-items-center">
                             <Link to={profileLink} className="text-decoration-none text-reset d-flex align-items-center flex-grow-1">
-                              <Avatar
-                                src={actor.avatar_url}
-                                name={username}
-                                size="md"
-                                className="me-3"
-                              />
+                              <Avatar src={actor.avatar_url} name={username} size="md" className="me-3" />
                               <div className="flex-grow-1">
                                 <div className="fw-semibold">
                                   {actor.name || username}
@@ -240,33 +206,31 @@ export function SearchPage() {
                               )}
                             </Link>
                             {user && !isSelf && (
-                              <button
-                                className={`btn btn-sm ${isFollowing ? 'btn-outline-secondary' : 'btn-outline-primary'}`}
+                              <LoadingButton
+                                variant={isFollowing ? 'outline-secondary' : 'outline-primary'}
+                                size="sm"
+                                loading={followingInProgress.has(actor.id)}
                                 onClick={() => handleFollow(actor)}
-                                disabled={followingInProgress.has(actor.id)}
                               >
-                                {followingInProgress.has(actor.id) ? (
-                                  <span className="spinner-border spinner-border-sm"></span>
-                                ) : isFollowing ? (
-                                  isCommunity ? 'Joined' : 'Following'
-                                ) : (
-                                  isCommunity ? 'Join' : 'Follow'
-                                )}
-                              </button>
+                                {isFollowing ? (isCommunity ? 'Joined' : 'Following') : (isCommunity ? 'Join' : 'Follow')}
+                              </LoadingButton>
                             )}
                           </div>
                         </div>
                       );
                     })}
                   </div>
-                )
-              )}
+                )}
+              </TabContent>
 
-              {/* Posts tab */}
-              {activeTab === 'posts' && (
-                postResults.length === 0 ? (
-                  <EmptyState icon="file-text" title="No posts found" description="Post search requires at least 3 characters" />
-                ) : (
+              <TabContent
+                loading={false}
+                empty={activeTab === 'posts' && postResults.length === 0}
+                emptyIcon="file-text"
+                emptyTitle="No posts found"
+                emptyDescription="Post search requires at least 3 characters"
+              >
+                {activeTab === 'posts' && (
                   <div>
                     {postsLowConfidence && (
                       <div className="alert alert-secondary small py-2 mb-3">
@@ -278,8 +242,8 @@ export function SearchPage() {
                       <PostCard key={post.id} post={post} />
                     ))}
                   </div>
-                )
-              )}
+                )}
+              </TabContent>
             </>
           )}
         </>

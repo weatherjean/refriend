@@ -1,10 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { communities, media, type Community, type CommunityModerationInfo } from '../../api';
 import { AdminManagement } from './AdminManagement';
 import { BanManagement } from './BanManagement';
 import { ConfirmModal } from '../ConfirmModal';
-import { resizeAndConvertToWebP } from '../../utils/imageUtils';
+import { AlertMessage } from '../AlertMessage';
+import { LoadingButton } from '../LoadingButton';
+import { useAvatarUpload, useMessage } from '../../hooks';
 
 export function SettingsTab({
   community,
@@ -18,33 +20,19 @@ export function SettingsTab({
   const navigate = useNavigate();
   const [bio, setBio] = useState(community.bio || '');
   const [requireApproval, setRequireApproval] = useState(community.require_approval);
-  const [avatarPreview, setAvatarPreview] = useState(community.avatar_url || '');
-  const [avatarData, setAvatarData] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { message, showSuccess, showError, clear: clearMessage } = useMessage();
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setMessage({ type: 'error', text: 'Please select an image file' });
-      return;
-    }
-
-    try {
-      setMessage(null);
-      const webpData = await resizeAndConvertToWebP(file, 100);
-      setAvatarPreview(webpData);
-      setAvatarData(webpData);
-    } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to process image' });
-      console.error(err);
-    }
-  };
+  const {
+    preview: avatarPreview,
+    data: avatarData,
+    error: avatarError,
+    triggerSelect,
+    inputProps,
+    reset: resetAvatar,
+  } = useAvatarUpload({ initialPreview: community.avatar_url });
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -52,7 +40,7 @@ export function SettingsTab({
       await communities.delete(community.name!);
       navigate('/communities');
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to delete' });
+      showError(err instanceof Error ? err.message : 'Failed to delete');
       setShowDeleteConfirm(false);
     } finally {
       setDeleting(false);
@@ -61,11 +49,10 @@ export function SettingsTab({
 
   const handleSave = async () => {
     setSaving(true);
-    setMessage(null);
+    clearMessage();
     try {
       let avatarUrl = community.avatar_url;
 
-      // Upload avatar if changed
       if (avatarData) {
         const { url } = await media.upload(avatarData);
         avatarUrl = url;
@@ -77,10 +64,10 @@ export function SettingsTab({
         require_approval: requireApproval,
       });
       onUpdate(updated);
-      setAvatarData(null);
-      setMessage({ type: 'success', text: 'Settings saved!' });
+      resetAvatar();
+      showSuccess('Settings saved!');
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save' });
+      showError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setSaving(false);
     }
@@ -93,10 +80,9 @@ export function SettingsTab({
           <h6 className="mb-0">Community Settings</h6>
         </div>
         <div className="card-body">
-          {message && (
-            <div className={`alert alert-${message.type === 'success' ? 'success' : 'danger'} py-2`}>
-              {message.text}
-            </div>
+          <AlertMessage message={message} onDismiss={clearMessage} />
+          {avatarError && (
+            <div className="alert alert-danger py-2">{avatarError}</div>
           )}
 
           {/* Avatar */}
@@ -111,7 +97,7 @@ export function SettingsTab({
                   backgroundColor: '#e9ecef',
                   cursor: 'pointer',
                 }}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={triggerSelect}
               >
                 {avatarPreview ? (
                   <img
@@ -129,19 +115,13 @@ export function SettingsTab({
                 <button
                   type="button"
                   className="btn btn-outline-secondary btn-sm"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={triggerSelect}
                 >
                   <i className="bi bi-upload me-1"></i> Upload Photo
                 </button>
                 <div className="form-text">Image will be resized to 100x100</div>
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileSelect}
-                style={{ display: 'none' }}
-              />
+              <input {...inputProps} />
             </div>
           </div>
 
@@ -176,20 +156,13 @@ export function SettingsTab({
             </div>
           </div>
 
-          <button
-            className="btn btn-primary"
+          <LoadingButton
+            loading={saving}
+            loadingText="Saving..."
             onClick={handleSave}
-            disabled={saving}
           >
-            {saving ? (
-              <>
-                <span className="spinner-border spinner-border-sm me-2"></span>
-                Saving...
-              </>
-            ) : (
-              'Save Changes'
-            )}
-          </button>
+            Save Changes
+          </LoadingButton>
         </div>
       </div>
 

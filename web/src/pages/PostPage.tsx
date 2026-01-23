@@ -1,19 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { posts as postsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
+import { PostThread } from '../components/PostThread';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { LoadMoreButton } from '../components/LoadMoreButton';
+import { LoadingButton } from '../components/LoadingButton';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { useAuth } from '../context/AuthContext';
+import { usePagination } from '../hooks';
 
 export function PostPage() {
   const { id } = useParams<{ id: string }>();
   const { user, actor } = useAuth();
   const navigate = useNavigate();
+
   const [post, setPost] = useState<Post | null>(null);
   const [ancestors, setAncestors] = useState<Post[]>([]);
-  const [replies, setReplies] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -22,24 +25,30 @@ export function PostPage() {
   const [replying, setReplying] = useState(false);
   const [replySort, setReplySort] = useState<'new' | 'hot'>('hot');
   const [opAuthorId, setOpAuthorId] = useState<string | null>(null);
-  const [nextCursor, setNextCursor] = useState<number | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
 
+  const fetchReplies = useCallback(async (cursor?: number) => {
+    const data = await postsApi.getReplies(id!, replySort, cursor);
+    setOpAuthorId(data.op_author_id);
+    return { items: data.replies, next_cursor: data.next_cursor };
+  }, [id, replySort]);
+
+  const {
+    items: replies,
+    setItems: setReplies,
+    loading: loadingReplies,
+    loadingMore,
+    hasMore,
+    loadMore,
+  } = usePagination<Post>({ fetchFn: fetchReplies, key: `${id}-${replySort}`, autoLoad: false });
+
+  // Load post and ancestors, then load replies
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      setReplies([]);
-      setNextCursor(null);
       try {
-        const [postData, repliesData] = await Promise.all([
-          postsApi.get(id!),
-          postsApi.getReplies(id!, replySort),
-        ]);
+        const postData = await postsApi.get(id!);
         setPost(postData.post);
         setAncestors(postData.ancestors || []);
-        setOpAuthorId(repliesData.op_author_id);
-        setNextCursor(repliesData.next_cursor);
-        setReplies(repliesData.replies); // OP sorting handled by backend
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load post');
       } finally {
@@ -47,11 +56,17 @@ export function PostPage() {
       }
     };
     load();
-  }, [id, replySort]);
+  }, [id]);
+
+  // Load replies after post loads
+  useEffect(() => {
+    if (post && !loadingReplies && replies.length === 0) {
+      fetchReplies().then(({ items }) => setReplies(items));
+    }
+  }, [post, replySort]);
 
   const handleDelete = async () => {
     if (!post) return;
-
     setDeleting(true);
     try {
       await postsApi.delete(post.id);
@@ -70,26 +85,12 @@ export function PostPage() {
     setReplying(true);
     try {
       const { post: newReply } = await postsApi.create(replyContent, post.id);
-      setReplies([...replies, newReply]);
+      setReplies(prev => [...prev, newReply]);
       setReplyContent('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to post reply');
     } finally {
       setReplying(false);
-    }
-  };
-
-  const loadMoreReplies = async () => {
-    if (!nextCursor || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const repliesData = await postsApi.getReplies(id!, replySort, nextCursor);
-      setReplies(prev => [...prev, ...repliesData.replies]);
-      setNextCursor(repliesData.next_cursor);
-    } catch (err) {
-      console.error('Failed to load more replies:', err);
-    } finally {
-      setLoadingMore(false);
     }
   };
 
@@ -105,74 +106,24 @@ export function PostPage() {
 
   const isOwner = actor && post.author && actor.id === post.author.id;
 
-  // Rainbow colors for thread lines (starts with logo colors)
-  const threadColors = [
-    '#f87171', // red (logo)
-    '#fbbf24', // yellow (logo)
-    '#4ade80', // green (logo)
-    '#38bdf8', // sky
-    '#818cf8', // indigo
-    '#e879f9', // fuchsia
-  ];
-
-  // Build nested thread structure
-  const renderThread = () => {
-    if (ancestors.length === 0) {
-      return <PostCard post={post} linkToPost={false} />;
-    }
-
-    // Build from inside out - start with current post, wrap with ancestors' lines
-    let content = <PostCard post={post} linkToPost={false} />;
-
-    // Wrap from last ancestor to first (reverse order for nesting)
-    // Each ancestor's PostCard is OUTSIDE the wrapper, line wraps what comes after
-    for (let i = ancestors.length - 1; i >= 0; i--) {
-      const ancestor = ancestors[i];
-      const color = threadColors[i % threadColors.length];
-      content = (
-        <div key={ancestor.id}>
-          <PostCard post={ancestor} />
-          <div
-            style={{
-              borderLeft: `3px solid ${color}`,
-              paddingLeft: 16,
-              marginLeft: 8,
-            }}
-          >
-            {content}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="thread-container">
-        <div className="text-muted small mb-2">
-          <i className="bi bi-arrow-up me-1"></i>
-          Conversation thread
-        </div>
-        {content}
-      </div>
-    );
-  };
-
   return (
     <div>
-      {renderThread()}
+      <PostThread post={post} ancestors={ancestors} />
 
       {isOwner && (
         <div className="mt-3">
-          <button
-            className="btn btn-danger btn-sm"
+          <LoadingButton
+            variant="danger"
+            size="sm"
+            loading={deleting}
+            loadingText="Deleting..."
             onClick={() => setShowDeleteConfirm(true)}
-            disabled={deleting}
           >
-            {deleting ? 'Deleting...' : 'Delete Post'}
-          </button>
+            Delete Post
+          </LoadingButton>
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
       <ConfirmModal
         show={showDeleteConfirm}
         title="Delete Post"
@@ -183,7 +134,6 @@ export function PostPage() {
         onCancel={() => setShowDeleteConfirm(false)}
       />
 
-      {/* Reply form */}
       {user && (
         <div className="card mt-4">
           <div className="card-body">
@@ -198,19 +148,20 @@ export function PostPage() {
                   disabled={replying}
                 />
               </div>
-              <button
+              <LoadingButton
                 type="submit"
-                className="btn btn-primary btn-sm"
-                disabled={replying || !replyContent.trim()}
+                size="sm"
+                loading={replying}
+                loadingText="Posting..."
+                disabled={!replyContent.trim()}
               >
-                {replying ? 'Posting...' : 'Reply'}
-              </button>
+                Reply
+              </LoadingButton>
             </form>
           </div>
         </div>
       )}
 
-      {/* Replies section */}
       {replies.length > 0 && (
         <div className="mt-4">
           <div className="d-flex justify-content-between align-items-center mb-3">
@@ -240,8 +191,8 @@ export function PostPage() {
               isOP={reply.author?.id === opAuthorId}
             />
           ))}
-          {nextCursor && (
-            <LoadMoreButton loading={loadingMore} onClick={loadMoreReplies} />
+          {hasMore && (
+            <LoadMoreButton loading={loadingMore} onClick={loadMore} />
           )}
         </div>
       )}

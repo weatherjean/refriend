@@ -1,8 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Actor, profile, auth } from '../api';
-import { resizeAndConvertToWebP } from '../utils/imageUtils';
 import { ConfirmModal } from './ConfirmModal';
 import { Avatar } from './Avatar';
+import { AlertMessage } from './AlertMessage';
+import { LoadingButton } from './LoadingButton';
+import { useAvatarUpload, useMessage } from '../hooks';
 
 interface ProfileSettingsTabProps {
   actor: Actor;
@@ -13,45 +15,31 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
   // Profile state
   const [name, setName] = useState(actor.name || '');
   const [bio, setBio] = useState(actor.bio || '');
-  const [avatarPreview, setAvatarPreview] = useState(actor.avatar_url || '');
-  const [avatarData, setAvatarData] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
-  const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { message: profileMessage, showSuccess: showProfileSuccess, showError: showProfileError, clear: clearProfileMessage } = useMessage();
+
+  // Avatar upload
+  const {
+    preview: avatarPreview,
+    data: avatarData,
+    error: avatarError,
+    triggerSelect,
+    inputProps,
+  } = useAvatarUpload({ initialPreview: actor.avatar_url });
 
   // Password state
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
-  const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const { message: passwordMessage, showSuccess: showPasswordSuccess, showError: showPasswordError, clear: clearPasswordMessage } = useMessage();
 
   // Delete account state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      setProfileMessage({ type: 'error', text: 'Please select an image file' });
-      return;
-    }
-
-    try {
-      setProfileMessage(null);
-      const webpData = await resizeAndConvertToWebP(file, 100);
-      setAvatarPreview(webpData);
-      setAvatarData(webpData);
-    } catch (err) {
-      setProfileMessage({ type: 'error', text: 'Failed to process image' });
-      console.error(err);
-    }
-  };
-
   const handleSaveProfile = async () => {
     setSavingProfile(true);
-    setProfileMessage(null);
+    clearProfileMessage();
 
     try {
       let updatedActor = actor;
@@ -65,37 +53,36 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
       updatedActor = result.actor;
 
       onUpdate(updatedActor);
-      setProfileMessage({ type: 'success', text: 'Profile updated successfully' });
-      setAvatarData(null);
+      showProfileSuccess('Profile updated successfully');
     } catch (err) {
-      setProfileMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save profile' });
+      showProfileError(err instanceof Error ? err.message : 'Failed to save profile');
     } finally {
       setSavingProfile(false);
     }
   };
 
   const handleChangePassword = async () => {
-    setPasswordMessage(null);
+    clearPasswordMessage();
 
     if (newPassword !== confirmPassword) {
-      setPasswordMessage({ type: 'error', text: 'New passwords do not match' });
+      showPasswordError('New passwords do not match');
       return;
     }
 
     if (newPassword.length < 8) {
-      setPasswordMessage({ type: 'error', text: 'Password must be at least 8 characters' });
+      showPasswordError('Password must be at least 8 characters');
       return;
     }
 
     setSavingPassword(true);
     try {
       await auth.changePassword(currentPassword, newPassword);
-      setPasswordMessage({ type: 'success', text: 'Password changed successfully' });
+      showPasswordSuccess('Password changed successfully');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err) {
-      setPasswordMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to change password' });
+      showPasswordError(err instanceof Error ? err.message : 'Failed to change password');
     } finally {
       setSavingPassword(false);
     }
@@ -114,10 +101,9 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
           <h6 className="mb-0">Profile Settings</h6>
         </div>
         <div className="card-body">
-          {profileMessage && (
-            <div className={`alert alert-${profileMessage.type === 'success' ? 'success' : 'danger'} py-2`}>
-              {profileMessage.text}
-            </div>
+          <AlertMessage message={profileMessage} onDismiss={clearProfileMessage} />
+          {avatarError && (
+            <div className="alert alert-danger py-2">{avatarError}</div>
           )}
 
           {/* Avatar */}
@@ -132,7 +118,7 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
                   backgroundColor: '#e9ecef',
                   cursor: 'pointer',
                 }}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={triggerSelect}
               >
                 {avatarPreview ? (
                   <img
@@ -148,19 +134,13 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
                 <button
                   type="button"
                   className="btn btn-outline-secondary btn-sm"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={triggerSelect}
                 >
                   <i className="bi bi-upload me-1"></i> Upload Photo
                 </button>
                 <div className="form-text">Image will be resized to 100x100</div>
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileSelect}
-                style={{ display: 'none' }}
-              />
+              <input {...inputProps} />
             </div>
           </div>
 
@@ -192,21 +172,13 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
             <div className="form-text">{bio.length}/500 characters</div>
           </div>
 
-          <button
-            type="button"
-            className="btn btn-primary"
+          <LoadingButton
+            loading={savingProfile}
+            loadingText="Saving..."
             onClick={handleSaveProfile}
-            disabled={savingProfile}
           >
-            {savingProfile ? (
-              <>
-                <span className="spinner-border spinner-border-sm me-2"></span>
-                Saving...
-              </>
-            ) : (
-              'Save Profile'
-            )}
-          </button>
+            Save Profile
+          </LoadingButton>
         </div>
       </div>
 
@@ -216,11 +188,7 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
           <h6 className="mb-0">Change Password</h6>
         </div>
         <div className="card-body">
-          {passwordMessage && (
-            <div className={`alert alert-${passwordMessage.type === 'success' ? 'success' : 'danger'} py-2`}>
-              {passwordMessage.text}
-            </div>
-          )}
+          <AlertMessage message={passwordMessage} onDismiss={clearPasswordMessage} />
 
           <div className="mb-3">
             <label htmlFor="currentPassword" className="form-label">Current Password</label>
@@ -256,21 +224,14 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
             />
           </div>
 
-          <button
-            type="button"
-            className="btn btn-primary"
+          <LoadingButton
+            loading={savingPassword}
+            loadingText="Changing..."
+            disabled={!currentPassword || !newPassword || !confirmPassword}
             onClick={handleChangePassword}
-            disabled={savingPassword || !currentPassword || !newPassword || !confirmPassword}
           >
-            {savingPassword ? (
-              <>
-                <span className="spinner-border spinner-border-sm me-2"></span>
-                Changing...
-              </>
-            ) : (
-              'Change Password'
-            )}
-          </button>
+            Change Password
+          </LoadingButton>
         </div>
       </div>
 

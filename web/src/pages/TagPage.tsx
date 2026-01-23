@@ -1,78 +1,47 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { tags, Post } from '../api';
-import { PostCard } from '../components/PostCard';
 import { PageHeader } from '../components/PageHeader';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { EmptyState } from '../components/EmptyState';
-import { LoadMoreButton } from '../components/LoadMoreButton';
+import { PostList } from '../components/PostList';
+import { usePagination } from '../hooks';
 
 export function TagPage() {
   const { tag } = useParams<{ tag: string }>();
-  const [postList, setPostList] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [nextCursor, setNextCursor] = useState<number | null>(null);
-  const [error, setError] = useState('');
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setPostList([]);
-      setNextCursor(null);
-      try {
-        const { posts, next_cursor } = await tags.get(tag!);
-        setPostList(posts);
-        setNextCursor(next_cursor);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load posts');
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+  const fetchPosts = useCallback(async (cursor?: number) => {
+    const { posts, next_cursor } = await tags.get(tag!, cursor ? { before: cursor } : undefined);
+    return { items: posts, next_cursor };
   }, [tag]);
 
-  const loadMore = useCallback(async () => {
-    if (!nextCursor || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const { posts, next_cursor } = await tags.get(tag!, { before: nextCursor });
-      setPostList(prev => [...prev, ...posts]);
-      setNextCursor(next_cursor);
-    } catch (err) {
-      console.error('Failed to load more posts:', err);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [tag, nextCursor, loadingMore]);
+  const {
+    items: posts,
+    loading,
+    loadingMore,
+    hasMore,
+    error,
+    loadMore,
+  } = usePagination<Post>({ fetchFn: fetchPosts, key: tag });
 
   if (loading) {
     return <LoadingSpinner />;
   }
 
   if (error) {
-    return (
-      <div className="alert alert-danger">{error}</div>
-    );
+    return <div className="alert alert-danger">{error}</div>;
   }
 
   return (
     <div>
       <PageHeader title={`#${tag}`} icon="hash" />
-
-      {postList.length === 0 ? (
-        <EmptyState icon="hash" title="No posts with this hashtag yet." />
-      ) : (
-        <>
-          {postList.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-          {nextCursor && (
-            <LoadMoreButton loading={loadingMore} onClick={loadMore} />
-          )}
-        </>
-      )}
+      <PostList
+        posts={posts}
+        emptyIcon="hash"
+        emptyTitle="No posts with this hashtag yet."
+        hasMore={hasMore}
+        loadingMore={loadingMore}
+        onLoadMore={loadMore}
+      />
     </div>
   );
 }

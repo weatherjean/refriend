@@ -76,6 +76,15 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   return data;
 }
 
+function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, val]) => {
+    if (val !== undefined) query.set(key, String(val));
+  });
+  const str = query.toString();
+  return str ? `?${str}` : '';
+}
+
 // Profile
 export const profile = {
   update: (data: { name?: string; bio?: string }) =>
@@ -158,14 +167,8 @@ export const users = {
       is_following: boolean;
       is_own_profile: boolean;
     }>(`/users/${username}`),
-  getPosts: (username: string, params?: PaginationParams) => {
-    const query = new URLSearchParams();
-    if (params?.limit) query.set('limit', params.limit.toString());
-    if (params?.before) query.set('before', params.before.toString());
-    if (params?.sort) query.set('sort', params.sort);
-    const queryStr = query.toString();
-    return fetchJson<PaginatedPosts>(`/users/${username}/posts${queryStr ? '?' + queryStr : ''}`);
-  },
+  getPosts: (username: string, params?: PaginationParams) =>
+    fetchJson<PaginatedPosts>(`/users/${username}/posts${buildQuery({ limit: params?.limit, before: params?.before, sort: params?.sort })}`),
   getReplies: (username: string, params?: PaginationParams) => {
     const query = new URLSearchParams({ filter: 'replies' });
     if (params?.limit) query.set('limit', params.limit.toString());
@@ -174,13 +177,8 @@ export const users = {
   },
   getPinned: (username: string) =>
     fetchJson<{ posts: Post[] }>(`/users/${username}/pinned`),
-  getBoosts: (username: string, params?: PaginationParams) => {
-    const query = new URLSearchParams();
-    if (params?.limit) query.set('limit', params.limit.toString());
-    if (params?.before) query.set('before', params.before.toString());
-    const queryStr = query.toString();
-    return fetchJson<PaginatedPosts>(`/users/${username}/boosts${queryStr ? '?' + queryStr : ''}`);
-  },
+  getBoosts: (username: string, params?: PaginationParams) =>
+    fetchJson<PaginatedPosts>(`/users/${username}/boosts${buildQuery({ limit: params?.limit, before: params?.before })}`),
   getFollowers: (username: string) =>
     fetchJson<{ followers: Actor[] }>(`/users/${username}/followers`),
   getFollowing: (username: string) =>
@@ -191,14 +189,8 @@ export const users = {
 export const actors = {
   get: (actorId: string) =>
     fetchJson<{ actor: Actor; is_following: boolean; is_own_profile: boolean }>(`/actors/${actorId}`),
-  getPosts: (actorId: string, params?: PaginationParams) => {
-    const query = new URLSearchParams();
-    if (params?.limit) query.set('limit', params.limit.toString());
-    if (params?.before) query.set('before', params.before.toString());
-    if (params?.sort) query.set('sort', params.sort);
-    const queryStr = query.toString();
-    return fetchJson<PaginatedPosts>(`/actors/${actorId}/posts${queryStr ? '?' + queryStr : ''}`);
-  },
+  getPosts: (actorId: string, params?: PaginationParams) =>
+    fetchJson<PaginatedPosts>(`/actors/${actorId}/posts${buildQuery({ limit: params?.limit, before: params?.before, sort: params?.sort })}`),
   getReplies: (actorId: string, params?: PaginationParams) => {
     const query = new URLSearchParams({ filter: 'replies' });
     if (params?.limit) query.set('limit', params.limit.toString());
@@ -207,13 +199,8 @@ export const actors = {
   },
   getPinned: (actorId: string) =>
     fetchJson<{ posts: Post[] }>(`/actors/${actorId}/pinned`),
-  getBoosts: (actorId: string, params?: PaginationParams) => {
-    const query = new URLSearchParams();
-    if (params?.limit) query.set('limit', params.limit.toString());
-    if (params?.before) query.set('before', params.before.toString());
-    const queryStr = query.toString();
-    return fetchJson<PaginatedPosts>(`/actors/${actorId}/boosts${queryStr ? '?' + queryStr : ''}`);
-  },
+  getBoosts: (actorId: string, params?: PaginationParams) =>
+    fetchJson<PaginatedPosts>(`/actors/${actorId}/boosts${buildQuery({ limit: params?.limit, before: params?.before })}`),
 };
 
 // Posts

@@ -5,81 +5,120 @@ import { PostCard } from '../components/PostCard';
 import { useAuth } from '../context/AuthContext';
 import { getUsername } from '../utils';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { EmptyState } from '../components/EmptyState';
 import { LoadMoreButton } from '../components/LoadMoreButton';
 import { ActorListModal } from '../components/ActorListModal';
 import { ProfileHeader } from '../components/ProfileHeader';
 import { ProfileTabs } from '../components/ProfileTabs';
 import { ProfileSettingsTab } from '../components/ProfileSettingsTab';
+import { TabContent } from '../components/TabContent';
+import { AlertMessage } from '../components/AlertMessage';
+import { ReplyThread } from '../components/PostThread';
+import { usePagination, useMessage } from '../hooks';
 
 export function ActorPage() {
   const location = useLocation();
   const { user } = useAuth();
 
-  // State
+  // Core profile state
   const [actor, setActor] = useState<Actor | null>(null);
   const [stats, setStats] = useState({ followers: 0, following: 0 });
-  const [posts, setPosts] = useState<Post[]>([]);
   const [pinnedPosts, setPinnedPosts] = useState<Post[]>([]);
-  const [postsWithReplies, setPostsWithReplies] = useState<Post[]>([]);
-  const [boosts, setBoosts] = useState<Post[]>([]);
-  const [repliesLoaded, setRepliesLoaded] = useState(false);
-  const [boostsLoaded, setBoostsLoaded] = useState(false);
-
-  // Pagination cursors
-  const [postsCursor, setPostsCursor] = useState<number | null>(null);
-  const [repliesCursor, setRepliesCursor] = useState<number | null>(null);
-  const [boostsCursor, setBoostsCursor] = useState<number | null>(null);
-  const [loadingMorePosts, setLoadingMorePosts] = useState(false);
-  const [loadingMoreReplies, setLoadingMoreReplies] = useState(false);
-  const [loadingMoreBoosts, setLoadingMoreBoosts] = useState(false);
-  const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'boosts' | 'settings'>('posts');
-  const [postSort, setPostSort] = useState<'new' | 'hot'>('new');
-  const [followers, setFollowers] = useState<Actor[]>([]);
-  const [following, setFollowing] = useState<Actor[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const [isLocalUser, setIsLocalUser] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [followLoading, setFollowLoading] = useState(false);
-  const [message, setMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'boosts' | 'settings'>('posts');
+  const [postSort, setPostSort] = useState<'new' | 'hot'>('new');
+
+  // Follower/following state
+  const [followers, setFollowers] = useState<Actor[]>([]);
+  const [following, setFollowing] = useState<Actor[]>([]);
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
-  const [isLocalUser, setIsLocalUser] = useState(false);
   const [followersLoaded, setFollowersLoaded] = useState(false);
   const [followingLoaded, setFollowingLoaded] = useState(false);
 
-  // Extract handle from URL: /u/@user@domain -> @user@domain
+  const { message, showInfo, clear: clearMessage } = useMessage();
+
+  // Extract handle from URL
   const fullHandle = location.pathname.replace(/^\/u\//, '');
   const username = getUsername(fullHandle);
 
+  // Posts pagination
+  const fetchPosts = useCallback(async (cursor?: number) => {
+    if (!actor) return { items: [], next_cursor: null };
+    const data = isLocalUser
+      ? await users.getPosts(username, { before: cursor, sort: postSort })
+      : await actors.getPosts(actor.id, { before: cursor, sort: postSort });
+    return { items: data.posts, next_cursor: data.next_cursor };
+  }, [actor, isLocalUser, username, postSort]);
+
+  const {
+    items: posts,
+    loading: postsLoading,
+    loadingMore: loadingMorePosts,
+    hasMore: hasMorePosts,
+    loadMore: loadMorePosts,
+    refresh: refreshPosts,
+  } = usePagination<Post>({ fetchFn: fetchPosts, autoLoad: false });
+
+  // Replies pagination
+  const [repliesLoaded, setRepliesLoaded] = useState(false);
+  const fetchReplies = useCallback(async (cursor?: number) => {
+    if (!actor) return { items: [], next_cursor: null };
+    const data = isLocalUser
+      ? await users.getReplies(username, { before: cursor })
+      : await actors.getReplies(actor.id, { before: cursor });
+    return { items: data.posts, next_cursor: data.next_cursor };
+  }, [actor, isLocalUser, username]);
+
+  const {
+    items: replies,
+    loadingMore: loadingMoreReplies,
+    hasMore: hasMoreReplies,
+    loadMore: loadMoreReplies,
+    refresh: refreshReplies,
+  } = usePagination<Post>({ fetchFn: fetchReplies, autoLoad: false });
+
+  // Boosts pagination
+  const [boostsLoaded, setBoostsLoaded] = useState(false);
+  const fetchBoosts = useCallback(async (cursor?: number) => {
+    if (!actor) return { items: [], next_cursor: null };
+    const data = await actors.getBoosts(actor.id, { before: cursor });
+    return { items: data.posts, next_cursor: data.next_cursor };
+  }, [actor]);
+
+  const {
+    items: boosts,
+    loadingMore: loadingMoreBoosts,
+    hasMore: hasMoreBoosts,
+    loadMore: loadMoreBoosts,
+    refresh: refreshBoosts,
+  } = usePagination<Post>({ fetchFn: fetchBoosts, autoLoad: false });
+
+  // Load profile
   const loadProfile = useCallback(async () => {
     if (!fullHandle) return;
 
     setLoading(true);
     setError('');
-    setMessage('');
+    clearMessage();
     setRepliesLoaded(false);
     setBoostsLoaded(false);
-    setPostsWithReplies([]);
-    setBoosts([]);
     setPinnedPosts([]);
     setActiveTab('posts');
-    setPostsCursor(null);
-    setRepliesCursor(null);
-    setBoostsCursor(null);
     setFollowersLoaded(false);
     setFollowingLoaded(false);
     setFollowers([]);
     setFollowing([]);
 
     try {
-      // Check if the domain matches our current host (local user even with full handle)
       const handleParts = fullHandle.replace(/^@/, '').split('@');
       const handleDomain = handleParts.length > 1 ? handleParts[1] : null;
       const isLikelyLocal = !handleDomain || handleDomain === window.location.host;
 
-      // Always try local user endpoint first (it's fast and will 404 if not found)
       if (isLikelyLocal) {
         try {
           const profileData = await users.get(username);
@@ -89,23 +128,15 @@ export function ActorPage() {
           setIsOwnProfile(profileData.is_own_profile);
           setIsLocalUser(true);
 
-          // Load posts and pinned in parallel (defer followers/following until needed)
-          const [postsData, pinnedData] = await Promise.all([
-            users.getPosts(username, { sort: postSort }),
-            users.getPinned(username),
-          ]);
-
-          setPosts(postsData.posts);
-          setPostsCursor(postsData.next_cursor);
+          const pinnedData = await users.getPinned(username);
           setPinnedPosts(pinnedData.posts);
           setLoading(false);
           return;
         } catch {
-          // Not a local user, fall through to remote search
+          // Not a local user, fall through
         }
       }
 
-      // Search for remote user
       const { users: searchResults } = await search.query(fullHandle);
       if (searchResults.length > 0) {
         const remoteActor = searchResults[0];
@@ -115,18 +146,13 @@ export function ActorPage() {
         setFollowing([]);
         setIsLocalUser(false);
 
-        // Fetch follow status and posts (skip pinned for remote - too slow)
-        const [actorData, postsData] = await Promise.all([
+        const [actorData] = await Promise.all([
           actors.get(remoteActor.id).catch(() => ({ is_following: false, is_own_profile: false })),
-          actors.getPosts(remoteActor.id, { sort: postSort }).catch(() => ({ posts: [], next_cursor: null })),
         ]);
 
         setIsFollowing(actorData.is_following);
         setIsOwnProfile(actorData.is_own_profile);
-        setPosts(postsData.posts);
-        setPostsCursor(postsData.next_cursor);
 
-        // Load pinned posts in background (slow for remote actors)
         actors.getPinned(remoteActor.id).then(data => setPinnedPosts(data.posts)).catch(() => {});
       } else {
         setError('User not found');
@@ -136,100 +162,32 @@ export function ActorPage() {
     } finally {
       setLoading(false);
     }
-  }, [fullHandle, username, postSort]);
-
-  const loadReplies = useCallback(async () => {
-    if (!actor || repliesLoaded) return;
-
-    try {
-      const postsData = isLocalUser
-        ? await users.getReplies(username)
-        : await actors.getReplies(actor.id);
-      setPostsWithReplies(postsData.posts);
-      setRepliesCursor(postsData.next_cursor);
-      setRepliesLoaded(true);
-    } catch (err) {
-      console.error('Failed to load replies:', err);
-    }
-  }, [actor, repliesLoaded, isLocalUser, username]);
-
-  const loadBoosts = useCallback(async () => {
-    if (!actor || boostsLoaded) return;
-
-    try {
-      const postsData = await actors.getBoosts(actor.id);
-      setBoosts(postsData.posts);
-      setBoostsCursor(postsData.next_cursor);
-      setBoostsLoaded(true);
-    } catch (err) {
-      console.error('Failed to load boosts:', err);
-      setBoostsLoaded(true); // Prevent infinite spinner on error
-    }
-  }, [actor, boostsLoaded]);
-
-  const loadMorePosts = useCallback(async () => {
-    if (!actor || !postsCursor || loadingMorePosts) return;
-    setLoadingMorePosts(true);
-    try {
-      const postsData = isLocalUser
-        ? await users.getPosts(username, { before: postsCursor, sort: postSort })
-        : await actors.getPosts(actor.id, { before: postsCursor, sort: postSort });
-      setPosts(prev => [...prev, ...postsData.posts]);
-      setPostsCursor(postsData.next_cursor);
-    } catch (err) {
-      console.error('Failed to load more posts:', err);
-    } finally {
-      setLoadingMorePosts(false);
-    }
-  }, [actor, postsCursor, loadingMorePosts, isLocalUser, username, postSort]);
-
-  const loadMoreReplies = useCallback(async () => {
-    if (!actor || !repliesCursor || loadingMoreReplies) return;
-    setLoadingMoreReplies(true);
-    try {
-      const postsData = isLocalUser
-        ? await users.getReplies(username, { before: repliesCursor })
-        : await actors.getReplies(actor.id, { before: repliesCursor });
-      setPostsWithReplies(prev => [...prev, ...postsData.posts]);
-      setRepliesCursor(postsData.next_cursor);
-    } catch (err) {
-      console.error('Failed to load more replies:', err);
-    } finally {
-      setLoadingMoreReplies(false);
-    }
-  }, [actor, repliesCursor, loadingMoreReplies, isLocalUser, username]);
-
-  const loadMoreBoosts = useCallback(async () => {
-    if (!actor || !boostsCursor || loadingMoreBoosts) return;
-    setLoadingMoreBoosts(true);
-    try {
-      const postsData = await actors.getBoosts(actor.id, { before: boostsCursor });
-      setBoosts(prev => [...prev, ...postsData.posts]);
-      setBoostsCursor(postsData.next_cursor);
-    } catch (err) {
-      console.error('Failed to load more boosts:', err);
-    } finally {
-      setLoadingMoreBoosts(false);
-    }
-  }, [actor, boostsCursor, loadingMoreBoosts]);
+  }, [fullHandle, username, clearMessage]);
 
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
 
+  // Load posts when profile loads or sort changes
+  useEffect(() => {
+    if (actor && !loading) {
+      refreshPosts();
+    }
+  }, [actor, loading, postSort]);
+
   // Load replies when switching to replies tab
   useEffect(() => {
-    if (activeTab === 'replies' && !repliesLoaded) {
-      loadReplies();
+    if (activeTab === 'replies' && actor && !repliesLoaded) {
+      refreshReplies().then(() => setRepliesLoaded(true));
     }
-  }, [activeTab, repliesLoaded, loadReplies]);
+  }, [activeTab, actor, repliesLoaded, refreshReplies]);
 
   // Load boosts when switching to boosts tab
   useEffect(() => {
-    if (activeTab === 'boosts' && !boostsLoaded) {
-      loadBoosts();
+    if (activeTab === 'boosts' && actor && !boostsLoaded) {
+      refreshBoosts().then(() => setBoostsLoaded(true));
     }
-  }, [activeTab, boostsLoaded, loadBoosts]);
+  }, [activeTab, actor, boostsLoaded, refreshBoosts]);
 
   // Load followers when modal opens
   useEffect(() => {
@@ -255,21 +213,21 @@ export function ActorPage() {
     if (!actor || !user) return;
 
     setFollowLoading(true);
-    setMessage('');
+    clearMessage();
     try {
       if (isFollowing) {
         await follows.unfollow(actor.id);
         setIsFollowing(false);
         setStats(s => ({ ...s, followers: Math.max(0, s.followers - 1) }));
-        setMessage('Unfollowed');
+        showInfo('Unfollowed');
       } else {
         const response = await follows.follow(actor.handle);
         setIsFollowing(true);
         setStats(s => ({ ...s, followers: s.followers + 1 }));
-        setMessage(response.message || 'Now following!');
+        showInfo(response.message || 'Now following!');
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Action failed');
+      showInfo(err instanceof Error ? err.message : 'Action failed');
     } finally {
       setFollowLoading(false);
     }
@@ -287,7 +245,6 @@ export function ActorPage() {
 
   return (
     <div>
-      {/* Header */}
       <ProfileHeader
         actor={actor}
         username={username}
@@ -301,14 +258,8 @@ export function ActorPage() {
         onShowFollowing={() => setShowFollowing(true)}
       />
 
-      {message && (
-        <div className="alert alert-info alert-dismissible">
-          {message}
-          <button type="button" className="btn-close" onClick={() => setMessage('')}></button>
-        </div>
-      )}
+      <AlertMessage message={message} onDismiss={clearMessage} />
 
-      {/* External link for remote actors */}
       {!actor.is_local && actor.url && (
         <p>
           <a href={actor.url} target="_blank" rel="noopener noreferrer" className="btn btn-outline-secondary btn-sm">
@@ -318,7 +269,6 @@ export function ActorPage() {
         </p>
       )}
 
-      {/* Posts Tabs */}
       <ProfileTabs
         activeTab={activeTab}
         showBoosts={actor.is_local}
@@ -326,109 +276,97 @@ export function ActorPage() {
         onTabChange={setActiveTab}
       />
 
-      {/* Posts Content */}
+      {/* Posts Tab */}
       {activeTab === 'posts' && (
-        posts.length === 0 && pinnedPosts.length === 0 ? (
-          <EmptyState
-            icon={actor.is_local ? 'file-text' : 'globe'}
-            title={actor.is_local ? 'No posts yet.' : 'No posts from this user yet.'}
-            description={actor.is_local ? undefined : 'New posts will appear after you follow them.'}
-          />
-        ) : (
-          <>
-            {/* Sort toggle */}
-            {(posts.length > 0 || pinnedPosts.length > 0) && (
-              <div className="d-flex justify-content-end mb-3">
-                <div className="btn-group btn-group-sm">
-                  <button
-                    className={`btn ${postSort === 'new' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setPostSort('new')}
-                  >
-                    New
-                  </button>
-                  <button
-                    className={`btn ${postSort === 'hot' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setPostSort('hot')}
-                  >
-                    Hot
-                  </button>
-                </div>
+        <TabContent
+          loading={postsLoading}
+          empty={posts.length === 0 && pinnedPosts.length === 0}
+          emptyIcon={actor.is_local ? 'file-text' : 'globe'}
+          emptyTitle={actor.is_local ? 'No posts yet.' : 'No posts from this user yet.'}
+          emptyDescription={actor.is_local ? undefined : 'New posts will appear after you follow them.'}
+        >
+          {(posts.length > 0 || pinnedPosts.length > 0) && (
+            <div className="d-flex justify-content-end mb-3">
+              <div className="btn-group btn-group-sm">
+                <button
+                  className={`btn ${postSort === 'new' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                  onClick={() => setPostSort('new')}
+                >
+                  New
+                </button>
+                <button
+                  className={`btn ${postSort === 'hot' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                  onClick={() => setPostSort('hot')}
+                >
+                  Hot
+                </button>
               </div>
-            )}
-            {/* Pinned posts first */}
-            {pinnedPosts.map((post) => (
-              <div key={`pinned-${post.id}`} className="position-relative">
-                <span className="badge bg-warning text-dark position-absolute" style={{ top: 8, right: 8, zIndex: 1 }}>
-                  <i className="bi bi-pin-fill me-1"></i>Pinned
-                </span>
-                <PostCard post={post} />
-              </div>
-            ))}
-            {/* Regular posts (excluding pinned to avoid duplicates) */}
-            {posts.filter(p => !pinnedPosts.some(pp => pp.id === p.id)).map((post) => (
-              <PostCard key={post.id} post={post} />
-            ))}
-            {postsCursor && (
-              <LoadMoreButton loading={loadingMorePosts} onClick={loadMorePosts} />
-            )}
-          </>
-        )
+            </div>
+          )}
+          {pinnedPosts.map((post) => (
+            <div key={`pinned-${post.id}`} className="position-relative">
+              <span className="badge bg-warning text-dark position-absolute" style={{ top: 8, right: 8, zIndex: 1 }}>
+                <i className="bi bi-pin-fill me-1"></i>Pinned
+              </span>
+              <PostCard post={post} />
+            </div>
+          ))}
+          {posts.filter(p => !pinnedPosts.some(pp => pp.id === p.id)).map((post) => (
+            <PostCard key={post.id} post={post} />
+          ))}
+          {hasMorePosts && (
+            <LoadMoreButton loading={loadingMorePosts} onClick={loadMorePosts} />
+          )}
+        </TabContent>
       )}
 
-      {/* Replies Content */}
+      {/* Replies Tab */}
       {activeTab === 'replies' && (
-        !repliesLoaded ? (
-          <LoadingSpinner />
-        ) : postsWithReplies.length === 0 ? (
-          <EmptyState icon="chat" title="No replies yet." />
-        ) : (
-          <>
-            {postsWithReplies.map((post) => (
-              <div key={post.id} className="mb-3">
-                {post.in_reply_to && (
-                  <div>
-                    <PostCard post={post.in_reply_to as Post} />
-                    <div style={{ borderLeft: '3px solid #333', paddingLeft: 16, marginLeft: 8 }}>
-                      <PostCard post={post} />
-                    </div>
-                  </div>
-                )}
-                {!post.in_reply_to && (
-                  <PostCard post={post} />
-                )}
-              </div>
-            ))}
-            {repliesCursor && (
-              <LoadMoreButton loading={loadingMoreReplies} onClick={loadMoreReplies} />
-            )}
-          </>
-        )
+        <TabContent
+          loading={!repliesLoaded}
+          empty={replies.length === 0}
+          emptyIcon="chat"
+          emptyTitle="No replies yet."
+        >
+          {replies.map((post) => (
+            <ReplyThread key={post.id} reply={post} />
+          ))}
+          {hasMoreReplies && (
+            <LoadMoreButton loading={loadingMoreReplies} onClick={loadMoreReplies} />
+          )}
+        </TabContent>
       )}
 
-      {/* Boosts Content */}
+      {/* Boosts Tab */}
       {activeTab === 'boosts' && (
-        !boostsLoaded ? (
-          <LoadingSpinner />
-        ) : boosts.length === 0 ? (
-          <EmptyState icon="arrow-repeat" title="No boosts yet." />
-        ) : (
-          <>
-            {boosts.map((post) => (
-              <div key={post.id} className="position-relative">
-                <span className="badge bg-success position-absolute" style={{ top: 8, right: 8, zIndex: 1 }}>
-                  <i className="bi bi-arrow-repeat me-1"></i>Boosted
-                </span>
-                <PostCard post={post} />
-              </div>
-            ))}
-            {boostsCursor && (
-              <LoadMoreButton loading={loadingMoreBoosts} onClick={loadMoreBoosts} />
-            )}
-          </>
-        )
+        <TabContent
+          loading={!boostsLoaded}
+          empty={boosts.length === 0}
+          emptyIcon="arrow-repeat"
+          emptyTitle="No boosts yet."
+        >
+          {boosts.map((post) => (
+            <div key={post.id} className="position-relative">
+              <span className="badge bg-success position-absolute" style={{ top: 8, right: 8, zIndex: 1 }}>
+                <i className="bi bi-arrow-repeat me-1"></i>Boosted
+              </span>
+              <PostCard post={post} />
+            </div>
+          ))}
+          {hasMoreBoosts && (
+            <LoadMoreButton loading={loadingMoreBoosts} onClick={loadMoreBoosts} />
+          )}
+        </TabContent>
       )}
 
-      {/* Followers Modal */}
+      {/* Settings Tab */}
+      {activeTab === 'settings' && isOwnProfile && actor && (
+        <ProfileSettingsTab
+          actor={actor}
+          onUpdate={(updated) => setActor(updated)}
+        />
+      )}
+
       <ActorListModal
         show={showFollowers}
         title="Followers"
@@ -438,7 +376,6 @@ export function ActorPage() {
         emptyMessage="No followers yet"
       />
 
-      {/* Following Modal */}
       <ActorListModal
         show={showFollowing}
         title="Following"
@@ -447,14 +384,6 @@ export function ActorPage() {
         onClose={() => setShowFollowing(false)}
         emptyMessage="Not following anyone yet"
       />
-
-      {/* Settings Tab Content */}
-      {activeTab === 'settings' && isOwnProfile && actor && (
-        <ProfileSettingsTab
-          actor={actor}
-          onUpdate={(updated) => setActor(updated)}
-        />
-      )}
     </div>
   );
 }

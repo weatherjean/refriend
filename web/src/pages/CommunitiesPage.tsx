@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
+import { SearchForm } from '../components/SearchForm';
 
 export function CommunitiesPage() {
   const { user } = useAuth();
@@ -33,8 +34,7 @@ export function CommunitiesPage() {
     loadCommunities();
   }, [user]);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async () => {
     const query = searchInput.trim();
     if (!query) {
       setSearchResults(null);
@@ -72,38 +72,16 @@ export function CommunitiesPage() {
         ) : undefined}
       />
 
-      <div className="card mb-4">
-        <div className="card-body">
-          <form onSubmit={handleSearch}>
-            <label htmlFor="searchInput" className="form-label">
-              Search communities
-            </label>
-            <div className="input-group">
-              <span className="input-group-text"><i className="bi bi-search"></i></span>
-              <input
-                type="text"
-                className="form-control"
-                id="searchInput"
-                placeholder="Enter community name..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-              />
-              <button type="submit" className="btn btn-primary" disabled={!searchInput.trim() || searchLoading}>
-                {searchLoading ? (
-                  <span className="spinner-border spinner-border-sm"></span>
-                ) : (
-                  'Search'
-                )}
-              </button>
-              {isSearching && (
-                <button type="button" className="btn btn-outline-secondary" onClick={handleClear}>
-                  <i className="bi bi-x-lg"></i>
-                </button>
-              )}
-            </div>
-          </form>
-        </div>
-      </div>
+      <SearchForm
+        placeholder="Enter community name..."
+        label="Search communities"
+        value={searchInput}
+        onChange={setSearchInput}
+        onSubmit={handleSearch}
+        onClear={handleClear}
+        loading={searchLoading}
+        showClear={isSearching}
+      />
 
       <h5 className="mb-3">
         {isSearching ? `Results for "${searchInput.trim()}"` : (user ? 'Your Communities' : 'All Communities')}
