@@ -135,37 +135,49 @@ export function SearchPage() {
                       const isSelf = currentActor?.id === actor.id;
 
                       return (
-                        <div key={actor.id} className="list-group-item">
-                          <div className="d-flex align-items-center">
-                            <Link to={profileLink} className="text-decoration-none text-reset d-flex align-items-center flex-grow-1">
-                              <Avatar src={actor.avatar_url} name={username} size="md" className="me-3" />
-                              <div className="flex-grow-1">
-                                <div className="fw-semibold">
+                        <Link
+                          key={actor.id}
+                          to={profileLink}
+                          className="list-group-item list-group-item-action"
+                        >
+                          <div className="d-flex align-items-center gap-3">
+                            <Avatar src={actor.avatar_url} name={username} size="md" className="flex-shrink-0" />
+                            <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                              <div className="d-flex align-items-center gap-1">
+                                <span className="fw-semibold text-truncate">
                                   {actor.name || username}
-                                  {isCommunity && (
-                                    <span className="badge bg-info ms-2" style={{ fontSize: '0.65em', verticalAlign: 'middle' }}>
-                                      <i className="bi bi-people-fill me-1"></i>Community
-                                    </span>
-                                  )}
-                                </div>
-                                <small className="text-muted">{actor.handle}</small>
+                                </span>
+                                {!actor.is_local && (
+                                  <i className="bi bi-globe2 text-muted flex-shrink-0" style={{ fontSize: '0.8em' }}></i>
+                                )}
                               </div>
-                              {!actor.is_local && (
-                                <i className="bi bi-globe text-muted me-3"></i>
+                              {isCommunity && (
+                                <span className="badge bg-info" style={{ fontSize: '0.65em' }}>
+                                  <i className="bi bi-people-fill me-1"></i>Community
+                                </span>
                               )}
-                            </Link>
+                              <small className="text-muted d-block text-truncate">{actor.handle}</small>
+                              {actor.bio && (
+                                <small className="text-muted d-none d-md-block text-truncate mt-1">{actor.bio}</small>
+                              )}
+                            </div>
                             {user && !isSelf && (
                               <LoadingButton
                                 variant={isFollowing ? 'outline-secondary' : 'outline-primary'}
                                 size="sm"
+                                className="flex-shrink-0"
                                 loading={followingInProgress.has(actor.id)}
-                                onClick={() => toggleActorFollow(actor)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  toggleActorFollow(actor);
+                                }}
                               >
                                 {isFollowing ? (isCommunity ? 'Joined' : 'Following') : (isCommunity ? 'Join' : 'Follow')}
                               </LoadingButton>
                             )}
                           </div>
-                        </div>
+                        </Link>
                       );
                     })}
                   </div>

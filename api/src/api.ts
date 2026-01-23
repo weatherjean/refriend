@@ -161,7 +161,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       maxAge: 60 * 60 * 24 * 30,
     });
 
-    return c.json({ user: sanitizeUser(user), actor: sanitizeActor(actor) });
+    return c.json({ user: sanitizeUser(user), actor: sanitizeActor(actor, domain) });
   });
 
   api.post("/auth/login", async (c) => {
@@ -184,7 +184,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       maxAge: 60 * 60 * 24 * 30,
     });
 
-    return c.json({ user: sanitizeUser(user), actor: actor ? sanitizeActor(actor) : null });
+    return c.json({ user: sanitizeUser(user), actor: actor ? sanitizeActor(actor, domain) : null });
   });
 
   api.post("/auth/logout", async (c) => {
@@ -199,10 +199,11 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   api.get("/auth/me", (c) => {
     const user = c.get("user");
     const actor = c.get("actor");
+    const domain = c.get("domain");
     if (!user || !actor) {
       return c.json({ user: null, actor: null });
     }
-    return c.json({ user: sanitizeUser(user), actor: sanitizeActor(actor) });
+    return c.json({ user: sanitizeUser(user), actor: sanitizeActor(actor, domain) });
   });
 
   api.put("/auth/password", async (c) => {
@@ -266,6 +267,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   api.get("/users/:username", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
+    const domain = c.get("domain");
     const currentActor = c.get("actor");
     const actor = await db.getActorByUsername(username);
 
@@ -278,7 +280,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     const isOwnProfile = currentActor?.id === actor.id;
 
     return c.json({
-      actor: sanitizeActor(actor),
+      actor: sanitizeActor(actor, domain),
       stats: {
         followers: await db.getFollowersCount(actor.id),
         following: await db.getFollowingCount(actor.id),
@@ -295,6 +297,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     const filter = c.req.query("filter");
     const sort = c.req.query("sort") === "hot" ? "hot" : "new";
     const db = c.get("db");
+    const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
@@ -324,7 +327,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       : null;
 
     const result = {
-      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id),
+      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id, domain),
       next_cursor: nextCursor,
     };
 
@@ -340,6 +343,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   api.get("/actors/:id", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
+    const domain = c.get("domain");
     const currentActor = c.get("actor");
     const actor = await db.getActorByPublicId(publicId);
 
@@ -351,7 +355,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     const isOwnProfile = currentActor?.id === actor.id;
 
     return c.json({
-      actor: sanitizeActor(actor),
+      actor: sanitizeActor(actor, domain),
       is_following: isFollowing,
       is_own_profile: isOwnProfile,
     });
@@ -364,6 +368,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     const filter = c.req.query("filter");
     const sort = c.req.query("sort") === "hot" ? "hot" : "new";
     const db = c.get("db");
+    const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
@@ -393,7 +398,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       : null;
 
     const result = {
-      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id),
+      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id, domain),
       next_cursor: nextCursor,
     };
 
@@ -421,7 +426,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     if (actor.user_id !== null) {
       const posts = await db.getPinnedPostsWithActor(actor.id);
       return c.json({
-        posts: await enrichPostsBatch(db, posts, currentActor?.id),
+        posts: await enrichPostsBatch(db, posts, currentActor?.id, domain),
       });
     }
 
@@ -560,7 +565,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
           console.log(`[Featured] Stored pinned post: ${post.id}`);
         }
 
-        posts.push(await enrichPost(db, post, currentActor?.id));
+        posts.push(await enrichPost(db, post, currentActor?.id, domain));
       }
 
       console.log(`[Featured] Found ${posts.length} pinned posts for ${actor.handle}`);
@@ -575,6 +580,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   api.get("/actors/:id/boosts", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
+    const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
@@ -598,7 +604,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       : null;
 
     return c.json({
-      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id),
+      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id, domain),
       next_cursor: nextCursor,
     });
   });
@@ -607,6 +613,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
 
   api.get("/posts", async (c) => {
     const db = c.get("db");
+    const domain = c.get("domain");
     const communityDb = c.get("communityDb");
     const actor = c.get("actor");
     const timeline = c.req.query("timeline") || "public";
@@ -626,7 +633,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       : null;
 
     // Enrich posts with standard data
-    const enrichedPosts = await enrichPostsBatch(db, resultPosts, actor?.id);
+    const enrichedPosts = await enrichPostsBatch(db, resultPosts, actor?.id, domain);
 
     // For home timeline, add community info to posts
     if (timeline === "home" && communityDb) {
@@ -665,13 +672,14 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   // GET /posts/hot - Get posts sorted by hot score
   api.get("/posts/hot", async (c) => {
     const db = c.get("db");
+    const domain = c.get("domain");
     const actor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "10"), 20);
 
     const posts = await db.getHotPosts(limit);
 
     return c.json({
-      posts: await enrichPostsBatch(db, posts, actor?.id),
+      posts: await enrichPostsBatch(db, posts, actor?.id, domain),
     });
   });
 
@@ -811,12 +819,13 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       }
     }
 
-    return c.json({ post: await enrichPost(db, post, actor?.id) });
+    return c.json({ post: await enrichPost(db, post, actor?.id, domain) });
   });
 
   api.get("/posts/:id", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
+    const domain = c.get("domain");
     const actor = c.get("actor");
     const communityDb = c.get("communityDb");
     const post = await db.getPostByPublicId(publicId);
@@ -834,12 +843,12 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       const parentPost = await db.getPostById(currentPost.in_reply_to_id);
       if (!parentPost || seen.has(parentPost.id)) break;
       seen.add(parentPost.id);
-      ancestors.unshift(await enrichPost(db, parentPost, actor?.id));
+      ancestors.unshift(await enrichPost(db, parentPost, actor?.id, domain));
       currentPost = parentPost;
     }
 
     // Enrich the main post
-    const enrichedPost = await enrichPost(db, post, actor?.id);
+    const enrichedPost = await enrichPost(db, post, actor?.id, domain);
 
     // Add community info if post belongs to a community
     const community = communityDb ? await communityDb.getCommunityForPost(post.id) : null;
@@ -859,6 +868,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   api.get("/posts/:id/replies", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
+    const domain = c.get("domain");
     const actor = c.get("actor");
     const post = await db.getPostByPublicId(publicId);
     if (!post) {
@@ -881,7 +891,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       : null;
 
     return c.json({
-      replies: await enrichPostsBatch(db, resultReplies, actor?.id),
+      replies: await enrichPostsBatch(db, resultReplies, actor?.id, domain),
       next_cursor: nextCursor,
       op_author_id: parentAuthor?.public_id || null,
     });
@@ -1174,6 +1184,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   api.get("/users/:username/pinned", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
+    const domain = c.get("domain");
     const currentActor = c.get("actor");
     const actor = await db.getActorByUsername(username);
 
@@ -1183,7 +1194,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
 
     const posts = await db.getPinnedPostsWithActor(actor.id);
     return c.json({
-      posts: await enrichPostsBatch(db, posts, currentActor?.id),
+      posts: await enrichPostsBatch(db, posts, currentActor?.id, domain),
     });
   });
 
@@ -1191,6 +1202,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   api.get("/users/:username/boosts", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
+    const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
@@ -1209,7 +1221,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       : null;
 
     return c.json({
-      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id),
+      posts: await enrichPostsBatch(db, resultPosts, currentActor?.id, domain),
       next_cursor: nextCursor,
     });
   });
@@ -1364,6 +1376,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     const user = c.get("user");
     const actor = c.get("actor");
     const db = c.get("db");
+    const domain = c.get("domain");
 
     if (!user || !actor) {
       return c.json({ error: "Not authenticated" }, 401);
@@ -1385,7 +1398,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       return c.json({ error: "Failed to update profile" }, 500);
     }
 
-    return c.json({ actor: sanitizeActor(updated) });
+    return c.json({ actor: sanitizeActor(updated, domain) });
   });
 
   // Upload avatar (expects base64 WebP image)
@@ -1393,6 +1406,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     const user = c.get("user");
     const actor = c.get("actor");
     const db = c.get("db");
+    const domain = c.get("domain");
 
     if (!user || !actor) {
       return c.json({ error: "Not authenticated" }, 401);
@@ -1426,7 +1440,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       return c.json({ error: "Failed to update avatar" }, 500);
     }
 
-    return c.json({ actor: sanitizeActor(updated), avatar_url: avatarUrl });
+    return c.json({ actor: sanitizeActor(updated, domain), avatar_url: avatarUrl });
   });
 
   // ============ Media ============
@@ -1482,7 +1496,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
         if (actor && isActor(actor)) {
           const persisted = await persistActor(db, domain, actor);
           if (persisted) {
-            return c.json({ users: [sanitizeActor(persisted)], posts: [] });
+            return c.json({ users: [sanitizeActor(persisted, domain)], posts: [] });
           }
         }
       } catch (err) {
@@ -1492,7 +1506,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
 
     // Search users
     const users = (type === "all" || type === "users")
-      ? (await db.searchActors(query, 20, handleOnly)).map(sanitizeActor)
+      ? (await db.searchActors(query, 20, handleOnly)).map(a => sanitizeActor(a, domain))
       : [];
 
     // Search posts (fuzzy search with pg_trgm)
@@ -1500,7 +1514,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     let postsLowConfidence = false;
     if ((type === "all" || type === "posts") && query.length >= 3) {
       const { posts: postResults, lowConfidence } = await db.searchPosts(query, 20);
-      posts = await Promise.all(postResults.map(post => enrichPost(db, post, currentActor?.id)));
+      posts = await Promise.all(postResults.map(post => enrichPost(db, post, currentActor?.id, domain)));
       postsLowConfidence = lowConfidence;
     }
 
@@ -1557,6 +1571,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   api.get("/tags/:tag", async (c) => {
     const tag = c.req.param("tag");
     const db = c.get("db");
+    const domain = c.get("domain");
     const actor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
@@ -1579,7 +1594,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
 
     const result = {
       tag,
-      posts: await enrichPostsBatch(db, resultPosts, actor?.id),
+      posts: await enrichPostsBatch(db, resultPosts, actor?.id, domain),
       next_cursor: nextCursor,
     };
 
@@ -1686,7 +1701,11 @@ function sanitizeUser(user: User) {
   };
 }
 
-export function sanitizeActor(actor: Actor) {
+export function sanitizeActor(actor: Actor, domain?: string) {
+  // Check if local by comparing handle domain
+  const handleDomain = actor.handle?.split('@').pop();
+  const isLocal = domain ? handleDomain === domain : actor.user_id !== null;
+
   return {
     id: actor.public_id,
     uri: actor.uri,
@@ -1695,14 +1714,14 @@ export function sanitizeActor(actor: Actor) {
     bio: actor.bio,
     avatar_url: actor.avatar_url,
     url: actor.url,
-    is_local: actor.user_id !== null,
+    is_local: isLocal,
     actor_type: actor.actor_type || 'Person',
     created_at: formatDate(actor.created_at),
   };
 }
 
 // Single post enrichment (for individual post views - includes boost count)
-async function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
+async function enrichPost(db: DB, post: Post, currentActorId?: number | null, domain?: string) {
   const actor = await db.getActorById(post.actor_id);
   const hashtags = await db.getPostHashtags(post.id);
   const boostsCount = await db.getBoostsCount(post.id);
@@ -1724,7 +1743,7 @@ async function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
         content: parentPost.content,
         url: parentPost.url,
         created_at: formatDate(parentPost.created_at),
-        author: parentActor ? sanitizeActor(parentActor) : null,
+        author: parentActor ? sanitizeActor(parentActor, domain) : null,
       };
     }
   }
@@ -1735,7 +1754,7 @@ async function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
     content: post.content,
     url: post.url,
     created_at: formatDate(post.created_at),
-    author: actor ? sanitizeActor(actor) : null,
+    author: actor ? sanitizeActor(actor, domain) : null,
     hashtags: hashtags.map((h) => h.name),
     likes_count: post.likes_count, // Use denormalized count
     boosts_count: boostsCount,
@@ -1757,7 +1776,7 @@ async function enrichPost(db: DB, post: Post, currentActorId?: number | null) {
 }
 
 // Batch enrichment for feeds (optimized - no boost count)
-export async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: number | null) {
+export async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentActorId?: number | null, domain?: string) {
   if (posts.length === 0) return [];
 
   const postIds = posts.map(p => p.id);
@@ -1788,7 +1807,7 @@ export async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentAc
           content: parentPost.content,
           url: parentPost.url,
           created_at: formatDate(parentPost.created_at),
-          author: parentActor ? sanitizeActor(parentActor) : null,
+          author: parentActor ? sanitizeActor(parentActor, domain) : null,
         };
       }
     }
@@ -1801,7 +1820,7 @@ export async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentAc
       content: post.content,
       url: post.url,
       created_at: formatDate(post.created_at),
-      author: sanitizeActor(post.author),
+      author: sanitizeActor(post.author, domain),
       hashtags: hashtagsMap.get(post.id) || [],
       likes_count: post.likes_count,
       boosts_count: 0, // Skip boost count in feeds for performance

@@ -529,7 +529,7 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
 
   // Main content takes full width on mobile
   .main-content {
-    padding-bottom: 70px !important; // Space for bottom bar
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important; // Space for bottom bar + safe area
   }
 
   // Mobile bottom navigation bar (above modal at 1050)
@@ -538,15 +538,23 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
     bottom: 0;
     left: 0;
     right: 0;
-    height: 56px;
     background-color: var(--bs-body-bg);
     border-top: 1px solid var(--bs-border-color);
     display: flex;
+    flex-direction: column;
+    z-index: 1070;
+  }
+
+  .mobile-bottom-bar-icons {
+    display: flex;
     align-items: center;
     justify-content: space-around;
-    z-index: 1070;
+    height: 56px;
     padding: 0 1rem;
-    padding-bottom: env(safe-area-inset-bottom); // iOS safe area
+  }
+
+  .mobile-bottom-bar-spacer {
+    height: env(safe-area-inset-bottom, 0px);
   }
 
   .mobile-nav-item {

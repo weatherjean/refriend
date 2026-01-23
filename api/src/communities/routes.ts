@@ -52,7 +52,11 @@ function sanitizeCommunity(community: Community) {
 }
 
 // Sanitize actor for API response
-function sanitizeActor(actor: Actor) {
+function sanitizeActor(actor: Actor, domain?: string) {
+  // Check if local by comparing handle domain
+  const handleDomain = actor.handle?.split('@').pop();
+  const isLocal = domain ? handleDomain === domain : actor.user_id !== null;
+
   return {
     id: actor.public_id,
     uri: actor.uri,
@@ -61,7 +65,7 @@ function sanitizeActor(actor: Actor) {
     bio: actor.bio,
     avatar_url: actor.avatar_url,
     url: actor.url,
-    is_local: actor.user_id !== null,
+    is_local: isLocal,
     created_at: formatDate(actor.created_at),
   };
 }
@@ -309,6 +313,7 @@ export function createCommunityRoutes(
   // List members
   routes.get("/:name/members", async (c) => {
     const name = c.req.param("name");
+    const domain = c.get("domain");
     const communityDb = c.get("communityDb");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
@@ -324,7 +329,7 @@ export function createCommunityRoutes(
     const nextCursor = hasMore && result.length > 0 ? result[result.length - 1].id : null;
 
     return c.json({
-      members: result.map(sanitizeActor),
+      members: result.map(a => sanitizeActor(a, domain)),
       next_cursor: nextCursor,
     });
   });
@@ -334,6 +339,7 @@ export function createCommunityRoutes(
   // List admins
   routes.get("/:name/admins", async (c) => {
     const name = c.req.param("name");
+    const domain = c.get("domain");
     const communityDb = c.get("communityDb");
 
     const community = await communityDb.getCommunityByName(name);
@@ -346,7 +352,7 @@ export function createCommunityRoutes(
       admins: admins.map((a) => ({
         id: a.id,
         role: a.role,
-        actor: sanitizeActor(a.actor),
+        actor: sanitizeActor(a.actor, domain),
         created_at: formatDate(a.created_at),
       })),
     });
@@ -439,6 +445,7 @@ export function createCommunityRoutes(
   // List bans (admin only)
   routes.get("/:name/bans", async (c) => {
     const name = c.req.param("name");
+    const domain = c.get("domain");
     const user = c.get("user");
     const actor = c.get("actor");
     if (!user || !actor) {
@@ -470,7 +477,7 @@ export function createCommunityRoutes(
     return c.json({
       bans: result.map((b) => ({
         id: b.id,
-        actor: sanitizeActor(b.actor),
+        actor: sanitizeActor(b.actor, domain),
         reason: b.reason,
         created_at: formatDate(b.created_at),
       })),
@@ -558,6 +565,7 @@ export function createCommunityRoutes(
   // Get community posts (approved)
   routes.get("/:name/posts", async (c) => {
     const name = c.req.param("name");
+    const domain = c.get("domain");
     const communityDb = c.get("communityDb");
     const db = c.get("db");
     const currentActor = c.get("actor");
@@ -586,7 +594,7 @@ export function createCommunityRoutes(
     }));
 
     // Enrich posts with all the data PostCard needs
-    const enrichedPosts = await enrichPostsBatch(db, postsWithActors, currentActor?.id);
+    const enrichedPosts = await enrichPostsBatch(db, postsWithActors, currentActor?.id, domain);
 
     // Add community info to each post
     const posts = enrichedPosts.map((post) => ({
@@ -608,6 +616,7 @@ export function createCommunityRoutes(
   // Get pending posts (admin only)
   routes.get("/:name/posts/pending", async (c) => {
     const name = c.req.param("name");
+    const domain = c.get("domain");
     const user = c.get("user");
     const actor = c.get("actor");
     if (!user || !actor) {
@@ -641,7 +650,7 @@ export function createCommunityRoutes(
       sensitive: cp.post.sensitive,
       submitted_at: formatDate(cp.submitted_at),
       created_at: formatDate(cp.post.created_at),
-      author: sanitizeActor(actors.get(cp.post.actor_id)!),
+      author: sanitizeActor(actors.get(cp.post.actor_id)!, domain),
     }));
 
     return c.json({ posts });

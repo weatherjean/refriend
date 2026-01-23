@@ -97,6 +97,7 @@ export function MentionPicker({ query, onSelect, onClose, position }: MentionPic
         <div className="list-group list-group-flush">
           {results.map((actor, index) => {
             const username = getUsername(actor.handle);
+            const displayHandle = actor.is_local ? `@${username}` : actor.handle;
             return (
               <button
                 key={actor.id}
@@ -106,12 +107,13 @@ export function MentionPicker({ query, onSelect, onClose, position }: MentionPic
                 onMouseEnter={() => setSelectedIndex(index)}
               >
                 <Avatar src={actor.avatar_url} name={username} size="xs" className="me-2" />
-                <div className="text-truncate">
+                <div className="text-truncate flex-grow-1" style={{ minWidth: 0 }}>
                   <div className={`small fw-semibold ${index === selectedIndex ? 'text-white' : ''}`}>
                     {actor.name || username}
                   </div>
-                  <div className={`small ${index === selectedIndex ? 'text-white-50' : 'text-muted'}`}>
-                    @{username}
+                  <div className={`small text-truncate ${index === selectedIndex ? 'text-white-50' : 'text-muted'}`}>
+                    {displayHandle}
+                    {!actor.is_local && <i className="bi bi-globe2 ms-1" style={{ fontSize: '0.7em' }}></i>}
                   </div>
                 </div>
               </button>

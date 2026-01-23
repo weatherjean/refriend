@@ -1,5 +1,5 @@
 import { ReactNode, useState, useEffect, FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFeed } from '../context/FeedContext';
 import { getUsername } from '../utils';
@@ -16,6 +16,7 @@ export function Layout({ children }: LayoutProps) {
   const { user, actor, logout } = useAuth();
   const { feedType, setFeedType } = useFeed();
   const navigate = useNavigate();
+  const location = useLocation();
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,6 +56,12 @@ export function Layout({ children }: LayoutProps) {
       return;
     }
 
+    // Clear count immediately when on notifications page
+    if (location.pathname === '/notifications') {
+      setUnreadCount(0);
+      return;
+    }
+
     const fetchCount = () => {
       notificationsApi.getUnreadCount()
         .then(({ count }) => setUnreadCount(count))
@@ -64,7 +71,7 @@ export function Layout({ children }: LayoutProps) {
     fetchCount();
     const interval = setInterval(fetchCount, 30000); // Poll every 30s
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, location.pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -239,32 +246,35 @@ export function Layout({ children }: LayoutProps) {
 
       {/* Mobile Bottom Bar */}
       <nav className="mobile-bottom-bar d-lg-none">
-        <Link to="/" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
-          <img src="/icon.svg" alt="Home" height="24" />
-        </Link>
-        <Link to="/search" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
-          <i className="bi bi-search"></i>
-        </Link>
-        {user && (
-          <Link to="/new" className="mobile-nav-item mobile-nav-create" onClick={() => setMobileMenuOpen(false)}>
-            <i className="bi bi-plus-lg"></i>
+        <div className="mobile-bottom-bar-icons">
+          <Link to="/" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
+            <img src="/icon.svg" alt="Home" height="24" />
           </Link>
-        )}
-        {user && (
-          <Link to="/notifications" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
-            <i className="bi bi-bell-fill"></i>
-            {unreadCount > 0 && (
-              <span className="mobile-nav-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
-            )}
+          <Link to="/search" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
+            <i className="bi bi-search"></i>
           </Link>
-        )}
-        <button
-          className="mobile-nav-item"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-        >
-          <i className={`bi ${mobileMenuOpen ? 'bi-x-lg' : 'bi-list'}`}></i>
-        </button>
+          {user && (
+            <Link to="/new" className="mobile-nav-item mobile-nav-create" onClick={() => setMobileMenuOpen(false)}>
+              <i className="bi bi-plus-lg"></i>
+            </Link>
+          )}
+          {user && (
+            <Link to="/notifications" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
+              <i className="bi bi-bell-fill"></i>
+              {unreadCount > 0 && (
+                <span className="mobile-nav-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+              )}
+            </Link>
+          )}
+          <button
+            className="mobile-nav-item"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+          >
+            <i className={`bi ${mobileMenuOpen ? 'bi-x-lg' : 'bi-list'}`}></i>
+          </button>
+        </div>
+        <div className="mobile-bottom-bar-spacer"></div>
       </nav>
 
       <ToastContainer />

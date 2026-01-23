@@ -113,17 +113,20 @@ export function PostComposer({
   };
 
   const handleMentionSelect = (actor: Actor) => {
-    const username = getUsername(actor.handle);
+    // Use full handle for remote users, just username for local
+    const mention = actor.is_local
+      ? getUsername(actor.handle)
+      : actor.handle.replace(/^@/, ''); // Remove leading @ since we add it
     const beforeMention = content.slice(0, mentionStartIndex);
     const afterMention = content.slice(mentionStartIndex + 1 + mentionQuery.length);
 
-    const newContent = `${beforeMention}@${username} ${afterMention}`;
+    const newContent = `${beforeMention}@${mention} ${afterMention}`;
     setContent(newContent);
     setShowMentionPicker(false);
 
     setTimeout(() => {
       if (textareaRef.current) {
-        const newCursorPos = mentionStartIndex + username.length + 2;
+        const newCursorPos = mentionStartIndex + mention.length + 2;
         textareaRef.current.focus();
         textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
       }
