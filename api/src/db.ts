@@ -771,7 +771,7 @@ export class DB {
 
   async getRepliesWithActor(postId: number, limit = 20, after?: number, sort: 'new' | 'hot' = 'new', opActorId?: number): Promise<PostWithActor[]> {
     return this.query(async (client) => {
-      const secondaryOrder = sort === 'hot' ? 'p.hot_score DESC, p.id DESC' : 'p.id ASC';
+      const secondaryOrder = sort === 'hot' ? 'p.hot_score DESC, p.id DESC' : 'p.id DESC';
       // Sort OP replies first, then by selected sort
       const orderBy = opActorId
         ? `(p.actor_id = ${opActorId}) DESC, ${secondaryOrder}`

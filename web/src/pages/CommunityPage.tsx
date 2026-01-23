@@ -4,7 +4,7 @@ import { communities, type Community, type CommunityModerationInfo, type Communi
 import { useAuth } from '../context/AuthContext';
 import { SettingsTab } from '../components/community';
 import { PostCard } from '../components/PostCard';
-import { Avatar } from '../components/Avatar';
+import { Avatar, CommunityAvatar } from '../components/Avatar';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { SortToggle } from '../components/SortToggle';
@@ -118,22 +118,52 @@ export function CommunityPage() {
       {/* Community Header */}
       <div className="card mb-4">
         <div className="card-body">
-          <div className="d-flex align-items-start">
-            {community.avatar_url ? (
-              <img
-                src={community.avatar_url}
-                alt=""
-                className="rounded me-3"
-                style={{ width: 80, height: 80, objectFit: 'cover' }}
-              />
-            ) : (
-              <div
-                className="rounded me-3 bg-secondary d-flex align-items-center justify-content-center"
-                style={{ width: 80, height: 80 }}
-              >
-                <i className="bi bi-people-fill text-white fs-2"></i>
+          {/* Mobile layout: stacked and centered */}
+          <div className="d-md-none text-center">
+            <CommunityAvatar src={community.avatar_url} size={100} />
+            <h4 className="mb-0 mt-3">{community.name}</h4>
+            <div className="text-muted small" style={{ wordBreak: 'break-all' }}>{community.handle}</div>
+
+            {community.bio && <p className="mt-2 mb-0">{community.bio}</p>}
+
+            <div className="mt-3 d-flex justify-content-center gap-3 text-muted small flex-wrap">
+              <span><strong>{community.member_count}</strong> members</span>
+              {community.require_approval && (
+                <span><i className="bi bi-shield-fill-check me-1"></i>Approval required</span>
+              )}
+              {moderation?.isAdmin && (
+                <span className="text-primary"><i className="bi bi-star-fill me-1"></i>{moderation.isOwner ? 'Owner' : 'Admin'}</span>
+              )}
+            </div>
+
+            {user && !moderation?.isBanned && (
+              <div className="mt-3">
+                <button
+                  className={`btn ${moderation?.isMember ? 'btn-outline-secondary' : 'btn-primary'}`}
+                  onClick={handleJoinLeave}
+                  disabled={joining}
+                >
+                  {joining ? (
+                    <span className="spinner-border spinner-border-sm"></span>
+                  ) : moderation?.isMember ? (
+                    'Leave'
+                  ) : (
+                    'Join'
+                  )}
+                </button>
               </div>
             )}
+
+            {moderation?.isBanned && (
+              <div className="alert alert-danger mt-3 mb-0 py-2">
+                <i className="bi bi-ban me-2"></i>You are banned from this community
+              </div>
+            )}
+          </div>
+
+          {/* Desktop layout: horizontal */}
+          <div className="d-none d-md-flex align-items-start">
+            <CommunityAvatar src={community.avatar_url} size={80} className="me-3" />
             <div className="flex-grow-1">
               <div className="d-flex justify-content-between align-items-start">
                 <div>

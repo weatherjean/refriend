@@ -200,11 +200,11 @@ export function PostComposer({
             />
           )}
         </div>
-        <div className="d-flex justify-content-between align-items-center mt-1">
-          <small className="text-muted">
-            @mentions and #hashtags supported
+        <div className="d-flex justify-content-between align-items-center mt-1 gap-2">
+          <small className="text-muted text-truncate" style={{ minWidth: 0 }}>
+            Use @ and #
           </small>
-          <small className={`fw-semibold ${isOverLimit ? 'text-danger' : isNearLimit ? 'text-warning' : 'text-muted'}`}>
+          <small className={`fw-semibold flex-shrink-0 ${isOverLimit ? 'text-danger' : isNearLimit ? 'text-warning' : 'text-muted'}`}>
             {charactersRemaining}
           </small>
         </div>

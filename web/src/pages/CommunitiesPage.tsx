@@ -6,6 +6,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
 import { SearchForm } from '../components/SearchForm';
+import { CommunityAvatar } from '../components/Avatar';
 import { useSearch } from '../hooks';
 
 export function CommunitiesPage() {
@@ -50,8 +51,7 @@ export function CommunitiesPage() {
       />
 
       <SearchForm
-        placeholder="Enter community name..."
-        label="Search communities"
+        placeholder="Search communities..."
         value={searchInput}
         onChange={setSearchInput}
         onSubmit={handleSearch}
@@ -77,52 +77,37 @@ export function CommunitiesPage() {
           )}
         </div>
       ) : (
-        <div className="list-group">
+        <div className="row g-3">
           {displayCommunities.map((community) => (
-            <Link
-              key={community.id}
-              to={`/c/${community.name}`}
-              className="list-group-item list-group-item-action"
-            >
-              <div className="d-flex align-items-center">
-                {community.avatar_url ? (
-                  <img
-                    src={community.avatar_url}
-                    alt=""
-                    className="rounded me-3"
-                    style={{ width: 48, height: 48, objectFit: 'cover' }}
-                  />
-                ) : (
-                  <div
-                    className="rounded me-3 bg-secondary d-flex align-items-center justify-content-center"
-                    style={{ width: 48, height: 48 }}
-                  >
-                    <i className="bi bi-people-fill text-white fs-5"></i>
-                  </div>
-                )}
-                <div className="flex-grow-1">
-                  <div className="d-flex justify-content-between align-items-start">
-                    <div>
-                      <h6 className="mb-0 fw-bold text-white">{community.name}</h6>
-                      <small className="text-muted">{community.handle}</small>
-                    </div>
-                    <div className="d-flex gap-2 align-items-center">
-                      {user && !isSearching && (
-                        <span className="badge bg-success">Joined</span>
-                      )}
-                      <span className="badge bg-secondary">
-                        {community.member_count} {community.member_count === 1 ? 'member' : 'members'}
-                      </span>
+            <div key={community.id} className="col-12 col-sm-6">
+              <Link
+                to={`/c/${community.name}`}
+                className="card h-100 text-decoration-none"
+              >
+                <div className="card-body">
+                  <div className="d-flex align-items-center mb-2">
+                    <CommunityAvatar src={community.avatar_url} size={48} className="flex-shrink-0" />
+                    <div className="ms-3 min-width-0">
+                      <h6 className="mb-0 fw-bold text-body">{community.name}</h6>
+                      <small className="text-muted d-block text-truncate">{community.handle}</small>
                     </div>
                   </div>
                   {community.bio && (
-                    <p className="mb-0 mt-1 text-muted small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {community.bio}
+                    <p className="mb-2 text-muted small community-bio-truncate">
+                      {community.bio.replace(/<[^>]*>/g, '')}
                     </p>
                   )}
+                  <div className="d-flex gap-2 flex-wrap">
+                    {user && !isSearching && (
+                      <span className="badge bg-success">Joined</span>
+                    )}
+                    <span className="badge bg-secondary">
+                      {community.member_count} {community.member_count === 1 ? 'member' : 'members'}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </Link>
+              </Link>
+            </div>
           ))}
         </div>
       )}

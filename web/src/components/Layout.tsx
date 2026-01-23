@@ -36,6 +36,18 @@ export function Layout({ children }: LayoutProps) {
       .catch(() => {});
   }, []);
 
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
   // Fetch unread notification count
   useEffect(() => {
     if (!user) {
@@ -214,7 +226,7 @@ export function Layout({ children }: LayoutProps) {
             </div>
           )}
 
-          <div className="text-center mt-3">
+          <div className="text-center mt-3 mb-5 pb-5">
             <img src="/logo-mono.svg" alt="riff" height="24" style={{ opacity: 0.6 }} />
           </div>
         </div>
@@ -233,13 +245,25 @@ export function Layout({ children }: LayoutProps) {
         <Link to="/search" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
           <i className="bi bi-search"></i>
         </Link>
+        {user && (
+          <Link to="/new" className="mobile-nav-item mobile-nav-create" onClick={() => setMobileMenuOpen(false)}>
+            <i className="bi bi-plus-lg"></i>
+          </Link>
+        )}
+        {user && (
+          <Link to="/notifications" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
+            <i className="bi bi-bell-fill"></i>
+            {unreadCount > 0 && (
+              <span className="mobile-nav-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+            )}
+          </Link>
+        )}
         <button
           className="mobile-nav-item"
-          onClick={() => setMobileMenuOpen(true)}
-          aria-label="Open menu"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
         >
-          <i className="bi bi-list"></i>
-          {unreadCount > 0 && <span className="mobile-nav-badge"></span>}
+          <i className={`bi ${mobileMenuOpen ? 'bi-x-lg' : 'bi-list'}`}></i>
         </button>
       </nav>
 

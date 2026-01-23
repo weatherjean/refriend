@@ -6,7 +6,6 @@ import { getUsername } from '../utils';
 import { Avatar } from '../components/Avatar';
 import { EmptyState } from '../components/EmptyState';
 import { PostCard } from '../components/PostCard';
-import { PageHeader } from '../components/PageHeader';
 import { SearchForm } from '../components/SearchForm';
 import { TabContent } from '../components/TabContent';
 import { LoadingButton } from '../components/LoadingButton';
@@ -70,11 +69,8 @@ export function SearchPage() {
 
   return (
     <div>
-      <PageHeader title="Search" icon="search" />
-
       <SearchForm
-        placeholder="Enter a name, @user@domain, or keywords..."
-        label="Search users, communities, and posts"
+        placeholder="Search users, communities, posts..."
         value={query}
         onChange={setQuery}
         onSubmit={() => performSearch(query)}

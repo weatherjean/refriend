@@ -35,18 +35,17 @@ export function PostPage() {
   const {
     items: replies,
     setItems: setReplies,
-    loading: loadingReplies,
     loadingMore,
     hasMore,
     loadMore,
     reset: resetReplies,
   } = usePagination<Post>({ fetchFn: fetchReplies, key: `${id}-${replySort}`, autoLoad: false });
 
-  // Load post and ancestors, then load replies
+  // Load post and ancestors
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      resetReplies(); // Clear old replies when navigating to a new post
+      setPost(null); // Clear post to trigger reply reload
       try {
         const postData = await postsApi.get(id!);
         setPost(postData.post);
@@ -58,14 +57,15 @@ export function PostPage() {
       }
     };
     load();
-  }, [id, resetReplies]);
+  }, [id]);
 
-  // Load replies after post loads
+  // Load replies when post loads or sort changes
   useEffect(() => {
-    if (post && !loadingReplies && replies.length === 0) {
+    if (post) {
+      resetReplies();
       fetchReplies().then(({ items }) => setReplies(items));
     }
-  }, [post, replySort]);
+  }, [post, replySort, resetReplies, fetchReplies, setReplies]);
 
   const handleDelete = async () => {
     if (!post) return;

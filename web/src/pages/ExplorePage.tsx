@@ -37,9 +37,7 @@ export function ExplorePage() {
       <PageHeader title="Tags" icon="hash" />
 
       <SearchForm
-        placeholder="Enter a tag name..."
-        label="Search for a hashtag"
-        icon="hash"
+        placeholder="Search tags..."
         value={tagInput}
         onChange={setTagInput}
         onSubmit={handleSearch}
