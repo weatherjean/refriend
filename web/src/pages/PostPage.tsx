@@ -25,6 +25,7 @@ export function PostPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [replySort, setReplySort] = useState<'new' | 'hot'>('hot');
   const [opAuthorId, setOpAuthorId] = useState<string | null>(null);
+  const [showReplyComposer, setShowReplyComposer] = useState(false);
 
   const fetchReplies = useCallback(async (cursor?: number) => {
     const data = await postsApi.getReplies(id!, replySort, cursor);
@@ -127,15 +128,34 @@ export function PostPage() {
       />
 
       {user && (
-        <div className="card mt-4">
-          <div className="card-body">
-            <PostComposer
-              placeholder={`Reply to ${post.author?.handle || 'this post'}...`}
-              submitLabel="Reply"
-              onSubmit={handleReply}
-              compact
-            />
-          </div>
+        <div className="mt-4">
+          {showReplyComposer ? (
+            <div className="card">
+              <div className="card-body">
+                <PostComposer
+                  placeholder={`Reply to ${post.author?.handle || 'this post'}...`}
+                  submitLabel="Reply"
+                  onSubmit={handleReply}
+                  onSuccess={() => setShowReplyComposer(false)}
+                  compact
+                />
+                <button
+                  className="btn btn-link btn-sm text-muted p-0 mt-2"
+                  onClick={() => setShowReplyComposer(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              className="btn btn-outline-secondary w-100 text-start"
+              onClick={() => setShowReplyComposer(true)}
+            >
+              <i className="bi bi-reply me-2"></i>
+              Reply to {post.author?.name || post.author?.handle || 'this post'}...
+            </button>
+          )}
         </div>
       )}
 
