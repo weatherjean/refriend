@@ -82,6 +82,9 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="container" style={{ maxWidth: 1100 }}>
+      {/* Mobile top bar for status bar background */}
+      <div className="mobile-top-bar d-lg-none" />
+
       {/* Mobile backdrop */}
       {mobileMenuOpen && (
         <div

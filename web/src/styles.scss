@@ -487,6 +487,7 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
     transition: transform 0.3s ease-in-out;
     background-color: var(--bs-body-bg);
     border-right: 1px solid var(--bs-border-color);
+    padding-top: env(safe-area-inset-top, 0px); // Space for notch/status bar
 
     &.mobile-open {
       transform: translateX(0);
@@ -529,7 +530,25 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
 
   // Main content takes full width on mobile
   .main-content {
+    padding-top: calc(1.5rem + env(safe-area-inset-top, 0px)) !important; // Base padding + notch space
     padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important; // Space for bottom bar + safe area
+  }
+
+  // Fixed top bar to cover status bar area with background
+  .mobile-top-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: calc(env(safe-area-inset-top, 0px) + 12px); // Extra height for fade
+    background:
+      linear-gradient(to bottom, transparent 0%, var(--bs-body-bg) 100%),
+      radial-gradient(ellipse at 0% 0%, rgba(248, 113, 113, 0.2) 0%, transparent 60%),
+      radial-gradient(ellipse at 50% 0%, rgba(251, 191, 36, 0.15) 0%, transparent 60%),
+      radial-gradient(ellipse at 100% 0%, rgba(74, 222, 128, 0.2) 0%, transparent 60%),
+      var(--bs-body-bg);
+    z-index: 1070;
+    pointer-events: none; // Allow clicks through the fade area
   }
 
   // Mobile bottom navigation bar (above modal at 1050)
