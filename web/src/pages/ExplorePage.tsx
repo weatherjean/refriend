@@ -67,10 +67,10 @@ export function ExplorePage() {
               className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
             >
               <div>
-                {!isSearching && <span className="text-muted me-2">#{index + 1}</span>}
+                {!isSearching && <span className="text-muted me-2">{index + 1}</span>}
                 <span className="fw-semibold">#{tag.name}</span>
               </div>
-              <span className="badge bg-primary rounded-pill">
+              <span className="badge text-bg-secondary rounded-pill">
                 {tag.count} {tag.count === 1 ? 'post' : 'posts'}
               </span>
             </Link>

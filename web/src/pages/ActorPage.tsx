@@ -326,12 +326,7 @@ export function ActorPage() {
           emptyTitle="No boosts yet."
         >
           {boosts.map((post) => (
-            <div key={post.id} className="position-relative">
-              <span className="badge bg-success position-absolute" style={{ top: 8, right: 8, zIndex: 1 }}>
-                <i className="bi bi-arrow-repeat me-1"></i>Boosted
-              </span>
-              <PostCard post={post} />
-            </div>
+            <PostCard key={post.id} post={post} />
           ))}
           {hasMoreBoosts && (
             <LoadMoreButton loading={loadingMoreBoosts} onClick={loadMoreBoosts} />
