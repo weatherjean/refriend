@@ -39,6 +39,14 @@ export interface Follow {
   created_at: string;
 }
 
+export interface LinkPreview {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  site_name: string | null;
+}
+
 export interface Post {
   id: number;
   public_id: string;
@@ -50,6 +58,7 @@ export interface Post {
   addressed_to: string[];  // ActivityPub to/cc recipients (actor URIs)
   likes_count: number;
   sensitive: boolean;
+  link_preview: LinkPreview | null;
   created_at: string;
 }
 
@@ -512,22 +521,23 @@ export class DB {
 
   // ============ Posts ============
 
-  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score" | "addressed_to"> & { created_at?: string; addressed_to?: string[] }): Promise<Post> {
+  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score" | "addressed_to" | "link_preview"> & { created_at?: string; addressed_to?: string[]; link_preview?: LinkPreview | null }): Promise<Post> {
     return this.query(async (client) => {
       await client.queryArray`BEGIN`;
       try {
         const addressedTo = post.addressed_to || [];
+        const linkPreview = post.link_preview ? JSON.stringify(post.link_preview) : null;
         let result;
         if (post.created_at) {
           result = await client.queryObject<Post>`
-            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, created_at)
-            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${post.created_at})
+            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, created_at)
+            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${post.created_at})
             RETURNING *
           `;
         } else {
           result = await client.queryObject<Post>`
-            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to)
-            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo})
+            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview)
+            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview})
             RETURNING *
           `;
         }
@@ -553,6 +563,13 @@ export class DB {
   async updatePostSensitive(id: number, sensitive: boolean): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`UPDATE posts SET sensitive = ${sensitive} WHERE id = ${id}`;
+    });
+  }
+
+  async updatePostLinkPreview(id: number, linkPreview: LinkPreview | null): Promise<void> {
+    await this.query(async (client) => {
+      const json = linkPreview ? JSON.stringify(linkPreview) : null;
+      await client.queryArray`UPDATE posts SET link_preview = ${json} WHERE id = ${id}`;
     });
   }
 

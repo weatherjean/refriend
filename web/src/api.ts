@@ -36,6 +36,14 @@ export interface Attachment {
   height: number | null;
 }
 
+export interface LinkPreview {
+  url: string;
+  title: string | null;
+  description: string | null;
+  image: string | null;
+  site_name: string | null;
+}
+
 export interface Post {
   id: string;  // UUID
   uri: string;
@@ -52,6 +60,7 @@ export interface Post {
   replies_count: number;
   sensitive: boolean;
   attachments: Attachment[];
+  link_preview: LinkPreview | null;
   in_reply_to: {
     id: string;  // UUID
     uri: string;
@@ -245,10 +254,10 @@ export const posts = {
       `/posts/${id}/replies${query ? `?${query}` : ''}`
     );
   },
-  create: (content: string, inReplyTo?: string, attachments?: AttachmentInput[], sensitive?: boolean) =>
+  create: (content: string, inReplyTo?: string, attachments?: AttachmentInput[], sensitive?: boolean, linkUrl?: string) =>
     fetchJson<{ post: Post }>('/posts', {
       method: 'POST',
-      body: JSON.stringify({ content, in_reply_to: inReplyTo, attachments, sensitive }),
+      body: JSON.stringify({ content, in_reply_to: inReplyTo, attachments, sensitive, link_url: linkUrl }),
     }),
   delete: (id: string) =>
     fetchJson<{ ok: boolean }>(`/posts/${id}`, { method: 'DELETE' }),

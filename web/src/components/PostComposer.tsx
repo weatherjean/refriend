@@ -16,7 +16,7 @@ interface ImagePreview {
 interface PostComposerProps {
   placeholder?: string;
   submitLabel?: string;
-  onSubmit: (content: string, attachments: AttachmentInput[], sensitive: boolean) => Promise<void>;
+  onSubmit: (content: string, attachments: AttachmentInput[], sensitive: boolean, linkUrl?: string) => Promise<void>;
   onSuccess?: () => void;
   compact?: boolean;
 }
@@ -33,6 +33,9 @@ export function PostComposer({
   const [sensitive, setSensitive] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkError, setLinkError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -45,6 +48,28 @@ export function PostComposer({
   const charactersRemaining = MAX_CHARACTERS - content.length;
   const isOverLimit = charactersRemaining < 0;
   const isNearLimit = charactersRemaining <= 50 && charactersRemaining >= 0;
+
+  const hasImages = images.length > 0;
+
+  const validateUrl = (url: string): boolean => {
+    if (!url.trim()) return true; // Empty is valid (no link)
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  const handleLinkChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const url = e.target.value;
+    setLinkUrl(url);
+    if (url.trim() && !validateUrl(url)) {
+      setLinkError('Please enter a valid URL (http:// or https://)');
+    } else {
+      setLinkError('');
+    }
+  };
 
   const handleImageSelect = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -146,7 +171,14 @@ export function PostComposer({
       return;
     }
 
+    const trimmedLink = linkUrl.trim();
+    if (trimmedLink && !validateUrl(trimmedLink)) {
+      setLinkError('Please enter a valid URL');
+      return;
+    }
+
     setError('');
+    setLinkError('');
     setLoading(true);
 
     try {
@@ -161,12 +193,14 @@ export function PostComposer({
         });
       }
 
-      await onSubmit(trimmedContent, uploadedAttachments, sensitive);
+      await onSubmit(trimmedContent, uploadedAttachments, sensitive, trimmedLink || undefined);
 
       // Reset form on success
       setContent('');
       setImages([]);
       setSensitive(false);
+      setLinkUrl('');
+      setShowLinkInput(false);
       onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to post');
@@ -175,7 +209,7 @@ export function PostComposer({
     }
   };
 
-  const canSubmit = content.trim().length > 0 && !isOverLimit && !loading;
+  const canSubmit = content.trim().length > 0 && !isOverLimit && !loading && !linkError;
 
   return (
     <form onSubmit={handleSubmit}>
@@ -239,6 +273,40 @@ export function PostComposer({
         </div>
       )}
 
+      {/* Link URL input */}
+      {showLinkInput && (
+        <div className="mb-2">
+          <div className="input-group input-group-sm">
+            <span className="input-group-text">
+              <i className="bi bi-link-45deg"></i>
+            </span>
+            <input
+              type="url"
+              className={`form-control ${linkError ? 'is-invalid' : ''}`}
+              placeholder="https://example.com"
+              value={linkUrl}
+              onChange={handleLinkChange}
+              disabled={loading}
+            />
+            <button
+              type="button"
+              className="btn btn-outline-secondary"
+              onClick={() => {
+                setShowLinkInput(false);
+                setLinkUrl('');
+                setLinkError('');
+              }}
+              title="Remove link"
+            >
+              <i className="bi bi-x"></i>
+            </button>
+          </div>
+          {linkError && (
+            <small className="text-danger">{linkError}</small>
+          )}
+        </div>
+      )}
+
       {/* Actions row */}
       <div className="d-flex justify-content-between align-items-center pt-2 border-top">
         <div className="d-flex gap-2">
@@ -254,11 +322,21 @@ export function PostComposer({
             type="button"
             className="btn btn-outline-secondary btn-sm"
             onClick={() => fileInputRef.current?.click()}
-            disabled={images.length >= MAX_IMAGES || loading}
-            title={`Add images (${images.length}/${MAX_IMAGES})`}
+            disabled={images.length >= MAX_IMAGES || loading || showLinkInput}
+            title={showLinkInput ? 'Cannot add images with a link' : `Add images (${images.length}/${MAX_IMAGES})`}
           >
             <i className="bi bi-image me-1"></i>
             {images.length}/{MAX_IMAGES}
+          </button>
+
+          <button
+            type="button"
+            className={`btn btn-sm ${showLinkInput ? 'btn-primary' : 'btn-outline-secondary'}`}
+            onClick={() => setShowLinkInput(!showLinkInput)}
+            disabled={loading || hasImages}
+            title={hasImages ? 'Cannot add link with images' : 'Add link'}
+          >
+            <i className="bi bi-link-45deg"></i>
           </button>
 
           <button

@@ -273,6 +273,35 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
                 onClose={() => setLightboxOpen(false)}
               />
             )}
+
+            {/* Link Preview Card */}
+            {post.link_preview && (
+              <a
+                href={post.link_preview.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="link-preview-card"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {post.link_preview.image && (
+                  <div className="link-preview-image">
+                    <img src={post.link_preview.image} alt="" />
+                  </div>
+                )}
+                <div className="link-preview-content">
+                  {post.link_preview.title && (
+                    <div className="link-preview-title">{post.link_preview.title}</div>
+                  )}
+                  {post.link_preview.description && (
+                    <div className="link-preview-description">{post.link_preview.description}</div>
+                  )}
+                  <div className="link-preview-domain">
+                    <i className="bi bi-link-45deg me-1"></i>
+                    {new URL(post.link_preview.url).hostname}
+                  </div>
+                </div>
+              </a>
+            )}
           </>
         )}
 

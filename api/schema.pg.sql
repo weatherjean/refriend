@@ -264,6 +264,9 @@ ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS suggested_by INTEGER REFERE
 -- Migration: Add addressed_to column to posts for ActivityPub to/cc recipients
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS addressed_to TEXT[] NOT NULL DEFAULT '{}';
 
+-- Migration: Add link_preview column for OpenGraph card data
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS link_preview JSONB;
+
 -- Pinned community posts
 CREATE TABLE IF NOT EXISTS community_pinned_posts (
   community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,

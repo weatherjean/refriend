@@ -17,7 +17,7 @@ import {
   PUBLIC_COLLECTION,
 } from "@fedify/fedify";
 import type { Federation } from "@fedify/fedify";
-import type { DB, Actor, Post, PostWithActor, User } from "./db.ts";
+import type { DB, Actor, Post, PostWithActor, User, LinkPreview } from "./db.ts";
 import type { CommunityDB } from "./communities/db.ts";
 import { processActivity, persistActor } from "./activities.ts";
 import { saveAvatar, saveMedia, deleteMedia } from "./storage.ts";
@@ -767,11 +767,12 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       height: number;
     }
 
-    const { content, in_reply_to, attachments, sensitive } = await c.req.json<{
+    const { content, in_reply_to, attachments, sensitive, link_url } = await c.req.json<{
       content: string;
       in_reply_to?: string;  // UUID/public_id
       attachments?: AttachmentInput[];
       sensitive?: boolean;
+      link_url?: string;
     }>();
 
     if (!content?.trim()) {
@@ -786,6 +787,27 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     // Validate attachments (max 4)
     if (attachments && attachments.length > 4) {
       return c.json({ error: "Maximum 4 attachments allowed" }, 400);
+    }
+
+    // Link and attachments are mutually exclusive
+    if (link_url && attachments && attachments.length > 0) {
+      return c.json({ error: "Cannot have both link and attachments" }, 400);
+    }
+
+    // Validate and fetch OpenGraph data for link
+    let linkPreview: LinkPreview | null = null;
+    if (link_url) {
+      try {
+        new URL(link_url); // Validate URL format
+      } catch {
+        return c.json({ error: "Invalid link URL" }, 400);
+      }
+      // Fetch OG data (3s timeout, returns null on failure)
+      linkPreview = await fetchOpenGraph(link_url);
+      // If OG fetch fails, still allow the post - just won't have preview metadata
+      if (!linkPreview) {
+        linkPreview = { url: link_url, title: null, description: null, image: null, site_name: null };
+      }
     }
 
     // Check if replying to a valid post (in_reply_to is a UUID/public_id)
@@ -809,7 +831,11 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
 
     // Process content: escape HTML, linkify mentions and hashtags
     const { html: processedContent, mentions } = processContent(content, domain);
-    const safeContent = `<p>${processedContent}</p>`;
+    // If there's a link, append it to content for federation (so other servers can generate their own cards)
+    let safeContent = `<p>${processedContent}</p>`;
+    if (link_url) {
+      safeContent += `<p><a href="${escapeHtml(link_url)}">${escapeHtml(link_url)}</a></p>`;
+    }
 
     const ctx = federation.createContext(c.req.raw, undefined);
 
@@ -860,6 +886,12 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     const post = await db.getPostByUri(noteUri);
     if (!post) {
       return c.json({ error: "Post not found after creation" }, 500);
+    }
+
+    // Store link preview if we have one
+    if (linkPreview) {
+      await db.updatePostLinkPreview(post.id, linkPreview);
+      post.link_preview = linkPreview;
     }
 
     // Note: Media records are created by processCreate from the Note attachments
@@ -1851,6 +1883,7 @@ async function enrichPost(db: DB, post: Post, currentActorId?: number | null, do
       width: a.width,
       height: a.height,
     })),
+    link_preview: post.link_preview,
   };
 }
 
@@ -1917,6 +1950,7 @@ export async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentAc
         width: a.width,
         height: a.height,
       })),
+      link_preview: post.link_preview,
     };
   });
 }
@@ -1954,6 +1988,141 @@ function processContent(text: string, domain: string): { html: string; mentions:
   html = html.replace(/\n/g, "<br>");
 
   return { html, mentions };
+}
+
+// Check if a URL points to a private/internal IP address
+function isPrivateUrl(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+
+  // Block localhost
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    return true;
+  }
+
+  // Block private IP ranges
+  const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (ipv4Match) {
+    const [, a, b] = ipv4Match.map(Number);
+    // 10.x.x.x
+    if (a === 10) return true;
+    // 172.16.x.x - 172.31.x.x
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    // 192.168.x.x
+    if (a === 192 && b === 168) return true;
+    // 169.254.x.x (link-local)
+    if (a === 169 && b === 254) return true;
+  }
+
+  return false;
+}
+
+// Fetch and parse OpenGraph metadata from a URL
+async function fetchOpenGraph(url: string, timeoutMs: number = 3000): Promise<LinkPreview | null> {
+  try {
+    const parsedUrl = new URL(url);
+
+    // Only allow http/https
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return null;
+    }
+
+    // Block private/internal URLs
+    if (isPrivateUrl(parsedUrl)) {
+      return null;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Riff/1.0 (OpenGraph fetcher)',
+          'Accept': 'text/html',
+        },
+        redirect: 'follow',
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('text/html')) {
+        return null;
+      }
+
+      const html = await response.text();
+
+      // Parse OpenGraph tags using regex (simple approach, no external deps)
+      const getMetaContent = (property: string): string | null => {
+        // Try og:property first
+        const ogMatch = html.match(new RegExp(`<meta[^>]*property=["']og:${property}["'][^>]*content=["']([^"']+)["']`, 'i'))
+          || html.match(new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:${property}["']`, 'i'));
+        if (ogMatch) return ogMatch[1];
+
+        // Fallback to twitter:property
+        const twitterMatch = html.match(new RegExp(`<meta[^>]*name=["']twitter:${property}["'][^>]*content=["']([^"']+)["']`, 'i'))
+          || html.match(new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*name=["']twitter:${property}["']`, 'i'));
+        if (twitterMatch) return twitterMatch[1];
+
+        return null;
+      };
+
+      // Get title (og:title, twitter:title, or <title>)
+      let title = getMetaContent('title');
+      if (!title) {
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        title = titleMatch ? titleMatch[1].trim() : null;
+      }
+
+      const description = getMetaContent('description');
+      let image = getMetaContent('image');
+      const siteName = getMetaContent('site_name');
+
+      // Make image URL absolute if relative
+      if (image && !image.startsWith('http')) {
+        try {
+          image = new URL(image, url).href;
+        } catch {
+          image = null;
+        }
+      }
+
+      // Must have at least a title to be useful
+      if (!title) {
+        return null;
+      }
+
+      return {
+        url,
+        title: decodeHtmlEntities(title),
+        description: description ? decodeHtmlEntities(description) : null,
+        image,
+        site_name: siteName ? decodeHtmlEntities(siteName) : null,
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch {
+    // Timeout, network error, or parsing error - fail gracefully
+    return null;
+  }
+}
+
+// Decode common HTML entities
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'");
 }
 
 async function hashPassword(password: string): Promise<string> {
