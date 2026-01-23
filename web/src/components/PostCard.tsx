@@ -7,6 +7,7 @@ import { TagBadge } from './TagBadge';
 import { Avatar } from './Avatar';
 import { ImageSlider } from './ImageSlider';
 import { ImageLightbox } from './ImageLightbox';
+import { PostMenu } from './PostMenu';
 
 interface CommunityInfo {
   id: string;
@@ -20,9 +21,12 @@ interface PostCardProps {
   linkToPost?: boolean;
   community?: CommunityInfo;
   isOP?: boolean;
+  pinnedInCommunity?: boolean;
+  canPinInCommunity?: boolean;
+  onCommunityPin?: () => void;
 }
 
-export function PostCard({ post, linkToPost = true, community: communityProp, isOP }: PostCardProps) {
+export function PostCard({ post, linkToPost = true, community: communityProp, isOP, pinnedInCommunity, canPinInCommunity, onCommunityPin }: PostCardProps) {
   const navigate = useNavigate();
   const { user, actor } = useAuth();
   const [liked, setLiked] = useState(post.liked ?? false);
@@ -133,6 +137,14 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
       style={{ cursor: linkToPost ? 'pointer' : 'default' }}
     >
       <div className="card-body">
+        {/* Pinned indicator */}
+        {pinnedInCommunity && (
+          <div className="post-pinned-indicator">
+            <i className="bi bi-pin-fill"></i>
+            <span>Pinned</span>
+          </div>
+        )}
+
         {/* Header: Avatar + Meta + Community */}
         <div className="post-header">
           <Link to={authorLink} onClick={(e) => e.stopPropagation()} className="post-avatar-link">
@@ -305,7 +317,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
             </button>
           )}
 
-          {isOwnPost && (
+          {isOwnPost && !community && (
             <button
               className={`post-action-btn ${pinned ? 'pinned' : ''}`}
               onClick={handlePin}
@@ -319,6 +331,21 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
               )}
             </button>
           )}
+
+          {canPinInCommunity && onCommunityPin && (
+            <button
+              className={`post-action-btn ${pinnedInCommunity ? 'pinned' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCommunityPin();
+              }}
+              title={pinnedInCommunity ? 'Unpin from community' : 'Pin in community'}
+            >
+              <i className={`bi ${pinnedInCommunity ? 'bi-pin-fill' : 'bi-pin'}`}></i>
+            </button>
+          )}
+
+          {user && <PostMenu postId={post.id} />}
         </div>
       </div>
     </div>

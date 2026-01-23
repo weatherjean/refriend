@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { communities, type Community, type CommunityModerationInfo, type CommunityPost } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { SettingsTab } from '../components/community';
+import { SettingsTab, ModLogsTab } from '../components/community';
 import { PostCard } from '../components/PostCard';
 import { Avatar, CommunityAvatar } from '../components/Avatar';
 import { LoadingSpinner } from '../components/LoadingSpinner';
@@ -15,11 +15,12 @@ export function CommunityPage() {
   const [community, setCommunity] = useState<Community | null>(null);
   const [moderation, setModeration] = useState<CommunityModerationInfo | null>(null);
   const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [pinnedPosts, setPinnedPosts] = useState<CommunityPost[]>([]);
   const [pendingPosts, setPendingPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
-  const [activeTab, setActiveTab] = useState<'posts' | 'pending' | 'settings'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'pending' | 'modlogs' | 'settings'>('posts');
   const [_nextCursor, setNextCursor] = useState<number | null>(null);
   const [postSort, setPostSort] = useState<'new' | 'hot'>('hot');
 
@@ -32,6 +33,10 @@ export function CommunityPage() {
         const { community: c, moderation: mod } = await communities.get(name);
         setCommunity(c);
         setModeration(mod);
+
+        // Load pinned posts
+        const { posts: pinned } = await communities.getPinnedPosts(name);
+        setPinnedPosts(pinned);
 
         // Load posts
         const { posts: p, next_cursor } = await communities.getPosts(name, { limit: 20, sort: postSort });
@@ -92,6 +97,32 @@ export function CommunityPage() {
     try {
       await communities.rejectPost(name, postId);
       setPendingPosts(prev => prev.filter(p => p.id !== postId));
+    } catch {
+      // Error handled by global toast
+    }
+  };
+
+  const handlePin = async (postId: string) => {
+    if (!name) return;
+    try {
+      await communities.pinPost(name, postId);
+      // Find the post and move it to pinned
+      const post = posts.find(p => p.id === postId);
+      if (post) {
+        setPinnedPosts(prev => [{ ...post, pinned_in_community: true }, ...prev]);
+        setPosts(prev => prev.map(p => p.id === postId ? { ...p, pinned_in_community: true } : p));
+      }
+    } catch {
+      // Error handled by global toast
+    }
+  };
+
+  const handleUnpin = async (postId: string) => {
+    if (!name) return;
+    try {
+      await communities.unpinPost(name, postId);
+      setPinnedPosts(prev => prev.filter(p => p.id !== postId));
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, pinned_in_community: false } : p));
     } catch {
       // Error handled by global toast
     }
@@ -229,6 +260,16 @@ export function CommunityPage() {
         {moderation?.isAdmin && (
           <li className="nav-item">
             <button
+              className={`nav-link ${activeTab === 'modlogs' ? 'active' : ''}`}
+              onClick={() => setActiveTab('modlogs')}
+            >
+              <i className="bi bi-journal-text me-1"></i>Log
+            </button>
+          </li>
+        )}
+        {moderation?.isAdmin && (
+          <li className="nav-item">
+            <button
               className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`}
               onClick={() => setActiveTab('settings')}
             >
@@ -241,12 +282,13 @@ export function CommunityPage() {
       {/* Tab Content */}
       {activeTab === 'posts' && (
         <div>
-          {posts.length > 0 && (
+          {(posts.length > 0 || pinnedPosts.length > 0) && (
             <div className="d-flex justify-content-end mb-3">
               <SortToggle value={postSort} onChange={setPostSort} hotFirst />
             </div>
           )}
-          {posts.length === 0 ? (
+
+          {posts.length === 0 && pinnedPosts.length === 0 ? (
             <EmptyState
               icon="chat-square-text"
               title="No posts yet."
@@ -254,8 +296,24 @@ export function CommunityPage() {
             />
           ) : (
             <div>
-              {posts.map((post) => (
-                <PostCard key={post.id} post={post} />
+              {/* Pinned posts first */}
+              {pinnedPosts.map((post) => (
+                <PostCard
+                  key={`pinned-${post.id}`}
+                  post={post}
+                  pinnedInCommunity
+                  canPinInCommunity={moderation?.isAdmin}
+                  onCommunityPin={() => handleUnpin(post.id)}
+                />
+              ))}
+              {/* Regular posts (excluding pinned) */}
+              {posts.filter(p => !pinnedPosts.some(pp => pp.id === p.id)).map((post) => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  canPinInCommunity={moderation?.isAdmin}
+                  onCommunityPin={() => handlePin(post.id)}
+                />
               ))}
             </div>
           )}
@@ -267,50 +325,71 @@ export function CommunityPage() {
           {pendingPosts.length === 0 ? (
             <EmptyState icon="check-circle" title="No pending posts" />
           ) : (
-            <div className="list-group">
-              {pendingPosts.map((post) => (
-                <div key={post.id} className="list-group-item">
-                  <div className="d-flex align-items-start">
-                    <Avatar
-                      src={post.author?.avatar_url}
-                      name={post.author?.name || post.author?.handle || '?'}
-                      size="sm"
-                      className="me-2"
-                    />
-                    <div className="flex-grow-1">
-                      <div className="d-flex justify-content-between align-items-start">
-                        <div>
-                          <small className="fw-semibold">{post.author?.name || post.author?.handle}</small>
-                          <small className="text-muted ms-2">{post.submitted_at && new Date(post.submitted_at).toLocaleString()}</small>
+            <div className="pending-posts-list">
+              {pendingPosts.map((post) => {
+                const isSuggestion = post.suggested_by && post.suggested_by.id !== post.author?.id;
+                return (
+                  <div key={post.id} className="pending-post-wrapper mb-4">
+                    {/* Submission info header */}
+                    <div className="pending-post-header">
+                      {isSuggestion ? (
+                        <div className="pending-post-suggestion">
+                          <i className="bi bi-send-plus me-2"></i>
+                          <span>Suggested by </span>
+                          <Link to={`/u/${post.suggested_by!.handle}`} onClick={(e) => e.stopPropagation()}>
+                            <Avatar
+                              src={post.suggested_by!.avatar_url}
+                              name={post.suggested_by!.name || post.suggested_by!.handle}
+                              size="xs"
+                              className="mx-1"
+                            />
+                            <strong>{post.suggested_by!.name || post.suggested_by!.handle}</strong>
+                          </Link>
+                          <span className="text-muted ms-2">
+                            {post.submitted_at && new Date(post.submitted_at).toLocaleString()}
+                          </span>
                         </div>
-                        <div className="btn-group btn-group-sm">
-                          <button
-                            className="btn btn-success"
-                            onClick={() => handleApprove(post.id)}
-                            title="Approve"
-                          >
-                            <i className="bi bi-check-lg"></i>
-                          </button>
-                          <button
-                            className="btn btn-danger"
-                            onClick={() => handleReject(post.id)}
-                            title="Reject"
-                          >
-                            <i className="bi bi-x-lg"></i>
-                          </button>
+                      ) : (
+                        <div className="pending-post-submission">
+                          <i className="bi bi-plus-circle me-2"></i>
+                          <span>Submitted by author</span>
+                          <span className="text-muted ms-2">
+                            {post.submitted_at && new Date(post.submitted_at).toLocaleString()}
+                          </span>
                         </div>
-                      </div>
-                      <div
-                        className="mt-1"
-                        dangerouslySetInnerHTML={{ __html: post.content }}
-                      />
+                      )}
+                    </div>
+
+                    {/* Full post card */}
+                    <PostCard post={post} linkToPost={true} />
+
+                    {/* Moderation actions */}
+                    <div className="pending-post-actions">
+                      <button
+                        className="btn btn-success"
+                        onClick={() => handleApprove(post.id)}
+                      >
+                        <i className="bi bi-check-lg me-2"></i>
+                        Approve
+                      </button>
+                      <button
+                        className="btn btn-outline-danger"
+                        onClick={() => handleReject(post.id)}
+                      >
+                        <i className="bi bi-x-lg me-2"></i>
+                        Reject
+                      </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === 'modlogs' && moderation?.isAdmin && name && (
+        <ModLogsTab communityName={name} />
       )}
 
       {activeTab === 'settings' && moderation?.isAdmin && (

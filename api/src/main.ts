@@ -15,6 +15,15 @@ const PORT = parseInt(Deno.env.get("PORT") || "8000");
 const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://riff:riff@localhost:5432/riff";
 const STATIC_DIR = Deno.env.get("STATIC_DIR") || "../web/dist";
 
+// Log unhandled rejections (but let them crash in production - restart policy handles recovery)
+globalThis.addEventListener("unhandledrejection", (e) => {
+  console.error("[Unhandled Rejection]", e.reason);
+  // In dev, prevent crash for convenience; in prod, let it crash + auto-restart
+  if (Deno.env.get("ENV") !== "production") {
+    e.preventDefault();
+  }
+});
+
 // Initialize database
 const db = new DB(DATABASE_URL);
 await db.init(new URL("../schema.pg.sql", import.meta.url).pathname);
@@ -27,6 +36,12 @@ await initCache();
 
 // Create Hono app
 const app = new Hono();
+
+// Global error handler - prevents crashes from unhandled errors
+app.onError((err, c) => {
+  console.error("[Error]", err);
+  return c.json({ error: "Internal server error" }, 500);
+});
 
 // Dynamic domain detection middleware - extracts domain from request
 app.use("*", async (c, next) => {

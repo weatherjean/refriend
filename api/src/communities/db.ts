@@ -33,6 +33,30 @@ export interface CommunityPost {
   submitted_at: string;
   reviewed_at: string | null;
   reviewed_by: number | null;
+  suggested_by: number | null;
+}
+
+export type ModLogAction =
+  | "post_approved"
+  | "post_rejected"
+  | "post_pinned"
+  | "post_unpinned"
+  | "post_removed"
+  | "community_updated"
+  | "admin_added"
+  | "admin_removed"
+  | "user_banned"
+  | "user_unbanned";
+
+export interface ModLogEntry {
+  id: number;
+  community_id: number;
+  actor_id: number | null;
+  action: ModLogAction;
+  target_type: string | null;
+  target_id: string | null;
+  details: string | null;
+  created_at: string;
 }
 
 export interface Community extends Actor {
@@ -164,7 +188,8 @@ export class CommunityDB {
 
   async updateCommunity(
     communityId: number,
-    updates: { name?: string; bio?: string; avatar_url?: string; require_approval?: boolean }
+    updates: { name?: string; bio?: string; avatar_url?: string; require_approval?: boolean },
+    updatedBy?: number
   ): Promise<Community | null> {
     return this.query(async (client) => {
       await client.queryArray`BEGIN`;
@@ -206,7 +231,17 @@ export class CommunityDB {
         }
 
         await client.queryArray`COMMIT`;
-        return this.getCommunityByActorId(communityId);
+        const result = await this.getCommunityByActorId(communityId);
+
+        // Log as side effect
+        if (updatedBy) {
+          const changedFields = Object.keys(updates).filter(k => updates[k as keyof typeof updates] !== undefined);
+          if (changedFields.length > 0) {
+            this.logModAction(communityId, updatedBy, "community_updated", "community", result?.public_id, `Updated: ${changedFields.join(", ")}`);
+          }
+        }
+
+        return result;
       } catch (e) {
         await client.queryArray`ROLLBACK`;
         throw e;
@@ -302,7 +337,7 @@ export class CommunityDB {
     });
   }
 
-  async addCommunityAdmin(communityId: number, actorId: number, role: "owner" | "admin"): Promise<void> {
+  async addCommunityAdmin(communityId: number, actorId: number, role: "owner" | "admin", addedBy?: number, actorHandle?: string): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`
         INSERT INTO community_admins (community_id, actor_id, role)
@@ -310,15 +345,23 @@ export class CommunityDB {
         ON CONFLICT (community_id, actor_id) DO UPDATE SET role = ${role}
       `;
     });
+    // Log as side effect
+    if (addedBy) {
+      this.logModAction(communityId, addedBy, "admin_added", "actor", undefined, actorHandle ? `Added ${actorHandle} as ${role}` : `Added as ${role}`);
+    }
   }
 
-  async removeCommunityAdmin(communityId: number, actorId: number): Promise<void> {
+  async removeCommunityAdmin(communityId: number, actorId: number, removedBy?: number, actorHandle?: string): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`
         DELETE FROM community_admins
         WHERE community_id = ${communityId} AND actor_id = ${actorId} AND role != 'owner'
       `;
     });
+    // Log as side effect
+    if (removedBy) {
+      this.logModAction(communityId, removedBy, "admin_removed", "actor", undefined, actorHandle ? `Removed ${actorHandle} from admins` : undefined);
+    }
   }
 
   async isAdmin(communityId: number, actorId: number): Promise<boolean> {
@@ -395,7 +438,7 @@ export class CommunityDB {
     });
   }
 
-  async banActor(communityId: number, actorId: number, reason: string | null, bannedBy: number): Promise<void> {
+  async banActor(communityId: number, actorId: number, reason: string | null, bannedBy: number, actorHandle?: string): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`
         INSERT INTO community_bans (community_id, actor_id, reason, banned_by)
@@ -407,14 +450,20 @@ export class CommunityDB {
         DELETE FROM follows WHERE follower_id = ${actorId} AND following_id = ${communityId}
       `;
     });
+    // Log as side effect
+    this.logModAction(communityId, bannedBy, "user_banned", "actor", undefined, actorHandle ? `Banned ${actorHandle}${reason ? `: ${reason}` : ""}` : undefined);
   }
 
-  async unbanActor(communityId: number, actorId: number): Promise<void> {
+  async unbanActor(communityId: number, actorId: number, unbannedBy?: number, actorHandle?: string): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`
         DELETE FROM community_bans WHERE community_id = ${communityId} AND actor_id = ${actorId}
       `;
     });
+    // Log as side effect
+    if (unbannedBy) {
+      this.logModAction(communityId, unbannedBy, "user_unbanned", "actor", undefined, actorHandle ? `Unbanned ${actorHandle}` : undefined);
+    }
   }
 
   async isBanned(communityId: number, actorId: number): Promise<boolean> {
@@ -525,6 +574,22 @@ export class CommunityDB {
     });
   }
 
+  async suggestCommunityPost(communityId: number, postId: number, suggesterId: number): Promise<CommunityPost> {
+    return this.query(async (client) => {
+      // Suggestions always go to pending (never auto-approve)
+      const result = await client.queryObject<CommunityPost>`
+        INSERT INTO community_posts (community_id, post_id, status, suggested_by)
+        VALUES (${communityId}, ${postId}, 'pending', ${suggesterId})
+        ON CONFLICT (community_id, post_id) DO NOTHING
+        RETURNING *
+      `;
+      if (!result.rows[0]) {
+        throw new Error("Post already submitted to this community");
+      }
+      return result.rows[0];
+    });
+  }
+
   async getCommunityPostStatus(communityId: number, postId: number): Promise<CommunityPost | null> {
     return this.query(async (client) => {
       const result = await client.queryObject<CommunityPost>`
@@ -534,7 +599,7 @@ export class CommunityDB {
     });
   }
 
-  async approvePost(communityId: number, postId: number, reviewerId: number): Promise<void> {
+  async approvePost(communityId: number, postId: number, reviewerId: number, postPublicId?: string): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`
         UPDATE community_posts
@@ -542,9 +607,11 @@ export class CommunityDB {
         WHERE community_id = ${communityId} AND post_id = ${postId}
       `;
     });
+    // Log as side effect
+    this.logModAction(communityId, reviewerId, "post_approved", "post", postPublicId);
   }
 
-  async rejectPost(communityId: number, postId: number, reviewerId: number): Promise<void> {
+  async rejectPost(communityId: number, postId: number, reviewerId: number, postPublicId?: string): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`
         UPDATE community_posts
@@ -552,14 +619,20 @@ export class CommunityDB {
         WHERE community_id = ${communityId} AND post_id = ${postId}
       `;
     });
+    // Log as side effect
+    this.logModAction(communityId, reviewerId, "post_rejected", "post", postPublicId);
   }
 
-  async removePost(communityId: number, postId: number): Promise<void> {
+  async removePost(communityId: number, postId: number, removedBy?: number, postPublicId?: string): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`
         DELETE FROM community_posts WHERE community_id = ${communityId} AND post_id = ${postId}
       `;
     });
+    // Log as side effect
+    if (removedBy) {
+      this.logModAction(communityId, removedBy, "post_removed", "post", postPublicId);
+    }
   }
 
   async getCommunityPosts(
@@ -574,7 +647,7 @@ export class CommunityDB {
       let params: unknown[];
 
       const selectColumns = `
-        cp.id as cp_id, cp.community_id, cp.post_id, cp.status, cp.submitted_at, cp.reviewed_at, cp.reviewed_by,
+        cp.id as cp_id, cp.community_id, cp.post_id, cp.status, cp.submitted_at, cp.reviewed_at, cp.reviewed_by, cp.suggested_by,
         p.id as p_id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.sensitive, p.created_at, p.hot_score
       `;
       const orderBy = sort === "hot" ? "p.hot_score DESC, p.id DESC" : "p.id DESC";
@@ -612,6 +685,7 @@ export class CommunityDB {
         submitted_at: String(row.submitted_at),
         reviewed_at: row.reviewed_at ? String(row.reviewed_at) : null,
         reviewed_by: row.reviewed_by as number | null,
+        suggested_by: row.suggested_by as number | null,
         post: {
           id: row.p_id as number,
           public_id: row.public_id as string,
@@ -667,6 +741,120 @@ export class CommunityDB {
       }
 
       return null;
+    });
+  }
+
+  // ============ Pinned Posts ============
+
+  async pinPost(communityId: number, postId: number, pinnedBy: number, postPublicId?: string): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        INSERT INTO community_pinned_posts (community_id, post_id, pinned_by)
+        VALUES (${communityId}, ${postId}, ${pinnedBy})
+        ON CONFLICT (community_id, post_id) DO NOTHING
+      `;
+    });
+    // Log as side effect
+    this.logModAction(communityId, pinnedBy, "post_pinned", "post", postPublicId);
+  }
+
+  async unpinPost(communityId: number, postId: number, unpinnedBy?: number, postPublicId?: string): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        DELETE FROM community_pinned_posts WHERE community_id = ${communityId} AND post_id = ${postId}
+      `;
+    });
+    // Log as side effect
+    if (unpinnedBy) {
+      this.logModAction(communityId, unpinnedBy, "post_unpinned", "post", postPublicId);
+    }
+  }
+
+  async isPinned(communityId: number, postId: number): Promise<boolean> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        SELECT 1 FROM community_pinned_posts WHERE community_id = ${communityId} AND post_id = ${postId}
+      `;
+      return result.rows.length > 0;
+    });
+  }
+
+  async getPinnedPostIds(communityId: number): Promise<Set<number>> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ post_id: number }>`
+        SELECT post_id FROM community_pinned_posts WHERE community_id = ${communityId}
+      `;
+      return new Set(result.rows.map(r => r.post_id));
+    });
+  }
+
+  async getPinnedPosts(communityId: number): Promise<(CommunityPost & { post: Post })[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject`
+        SELECT
+          cp.id as cp_id, cp.community_id, cp.post_id, cp.status, cp.submitted_at, cp.reviewed_at, cp.reviewed_by, cp.suggested_by,
+          p.id as p_id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.likes_count, p.sensitive, p.created_at, p.hot_score,
+          cpp.pinned_at
+        FROM community_pinned_posts cpp
+        JOIN community_posts cp ON cpp.community_id = cp.community_id AND cpp.post_id = cp.post_id
+        JOIN posts p ON cp.post_id = p.id
+        WHERE cpp.community_id = ${communityId} AND cp.status = 'approved'
+        ORDER BY cpp.pinned_at DESC
+      `;
+      return result.rows.map((row: Record<string, unknown>) => ({
+        id: row.cp_id as number,
+        community_id: row.community_id as number,
+        post_id: row.post_id as number,
+        status: row.status as "pending" | "approved" | "rejected",
+        submitted_at: String(row.submitted_at),
+        reviewed_at: row.reviewed_at ? String(row.reviewed_at) : null,
+        reviewed_by: row.reviewed_by as number | null,
+        suggested_by: row.suggested_by as number | null,
+        post: {
+          id: row.p_id as number,
+          public_id: row.public_id as string,
+          uri: row.uri as string,
+          actor_id: row.actor_id as number,
+          content: row.content as string,
+          url: row.url as string | null,
+          in_reply_to_id: row.in_reply_to_id as number | null,
+          likes_count: row.likes_count as number,
+          sensitive: row.sensitive as boolean,
+          created_at: String(row.created_at),
+        } as Post,
+      }));
+    });
+  }
+
+  // ============ Moderation Logs ============
+
+  logModAction(
+    communityId: number,
+    actorId: number,
+    action: ModLogAction,
+    targetType?: string,
+    targetId?: string,
+    details?: string
+  ): void {
+    // Fire and forget - don't await, don't let failures affect the main operation
+    this.query(async (client) => {
+      await client.queryArray`
+        INSERT INTO community_mod_logs (community_id, actor_id, action, target_type, target_id, details)
+        VALUES (${communityId}, ${actorId}, ${action}, ${targetType || null}, ${targetId || null}, ${details || null})
+      `;
+    }).catch((e) => {
+      console.error(`[ModLog] Failed to log action ${action}:`, e);
+    });
+  }
+
+  async getModLogs(communityId: number, limit = 50, before?: number): Promise<ModLogEntry[]> {
+    return this.query(async (client) => {
+      const query = before
+        ? `SELECT * FROM community_mod_logs WHERE community_id = $1 AND id < $2 ORDER BY id DESC LIMIT $3`
+        : `SELECT * FROM community_mod_logs WHERE community_id = $1 ORDER BY id DESC LIMIT $2`;
+      const params = before ? [communityId, before, limit] : [communityId, limit];
+      const result = await client.queryObject<ModLogEntry>(query, params);
+      return result.rows;
     });
   }
 

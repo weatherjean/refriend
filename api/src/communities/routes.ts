@@ -229,7 +229,7 @@ export function createCommunityRoutes(
       require_approval?: boolean;
     }>();
 
-    const updated = await communityDb.updateCommunity(community.id, updates);
+    const updated = await communityDb.updateCommunity(community.id, updates, actor.id);
     return c.json({ community: updated ? sanitizeCommunity(updated) : null });
   });
 
@@ -303,6 +303,12 @@ export function createCommunityRoutes(
     const community = await communityDb.getCommunityByName(name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
+    }
+
+    // Owners cannot leave their community
+    const isOwner = await communityDb.isOwner(community.id, actor.id);
+    if (isOwner) {
+      return c.json({ error: "Owners cannot leave. Transfer ownership first." }, 403);
     }
 
     // Remove follow (membership)
@@ -403,7 +409,7 @@ export function createCommunityRoutes(
       }
     }
 
-    await communityDb.addCommunityAdmin(community.id, targetActor.id, targetRole);
+    await communityDb.addCommunityAdmin(community.id, targetActor.id, targetRole, actor.id, targetActor.handle);
     return c.json({ ok: true });
   });
 
@@ -436,7 +442,7 @@ export function createCommunityRoutes(
       return c.json({ error: "Actor not found" }, 404);
     }
 
-    await communityDb.removeCommunityAdmin(community.id, targetActor.id);
+    await communityDb.removeCommunityAdmin(community.id, targetActor.id, actor.id, targetActor.handle);
     return c.json({ ok: true });
   });
 
@@ -524,7 +530,7 @@ export function createCommunityRoutes(
       return c.json({ error: "Cannot ban an admin" }, 400);
     }
 
-    await communityDb.banActor(community.id, targetActor.id, reason || null, actor.id);
+    await communityDb.banActor(community.id, targetActor.id, reason || null, actor.id, targetActor.handle);
     return c.json({ ok: true });
   });
 
@@ -556,7 +562,7 @@ export function createCommunityRoutes(
       return c.json({ error: "Actor not found" }, 404);
     }
 
-    await communityDb.unbanActor(community.id, targetActor.id);
+    await communityDb.unbanActor(community.id, targetActor.id, actor.id, targetActor.handle);
     return c.json({ ok: true });
   });
 
@@ -583,6 +589,9 @@ export function createCommunityRoutes(
     const result = hasMore ? communityPosts.slice(0, limit) : communityPosts;
     const nextCursor = hasMore && result.length > 0 ? result[result.length - 1].post.id : null;
 
+    // Get pinned post IDs
+    const pinnedIds = await communityDb.getPinnedPostIds(community.id);
+
     // Get actors for posts
     const actorIds = [...new Set(result.map((cp) => cp.post.actor_id))];
     const actors = await db.getActorsByIds(actorIds);
@@ -596,9 +605,10 @@ export function createCommunityRoutes(
     // Enrich posts with all the data PostCard needs
     const enrichedPosts = await enrichPostsBatch(db, postsWithActors, currentActor?.id, domain);
 
-    // Add community info to each post
-    const posts = enrichedPosts.map((post) => ({
+    // Add community info and pinned status to each post
+    const posts = enrichedPosts.map((post, index) => ({
       ...post,
+      pinned_in_community: pinnedIds.has(result[index].post.id),
       community: {
         id: community.public_id,
         name: community.name,
@@ -611,6 +621,53 @@ export function createCommunityRoutes(
       posts,
       next_cursor: nextCursor,
     });
+  });
+
+  // Get pinned posts for a community
+  routes.get("/:name/posts/pinned", async (c) => {
+    const name = c.req.param("name");
+    const domain = c.get("domain");
+    const communityDb = c.get("communityDb");
+    const db = c.get("db");
+    const currentActor = c.get("actor");
+
+    const community = await communityDb.getCommunityByName(name);
+    if (!community) {
+      return c.json({ error: "Community not found" }, 404);
+    }
+
+    const pinnedPosts = await communityDb.getPinnedPosts(community.id);
+
+    if (pinnedPosts.length === 0) {
+      return c.json({ posts: [] });
+    }
+
+    // Get actors for posts
+    const actorIds = [...new Set(pinnedPosts.map((cp) => cp.post.actor_id))];
+    const actors = await db.getActorsByIds(actorIds);
+
+    // Build PostWithActor array for enrichment
+    const postsWithActors: PostWithActor[] = pinnedPosts.map((cp) => ({
+      ...cp.post,
+      author: actors.get(cp.post.actor_id)!,
+    }));
+
+    // Enrich posts with all the data PostCard needs
+    const enrichedPosts = await enrichPostsBatch(db, postsWithActors, currentActor?.id, domain);
+
+    // Add community info and pinned status
+    const posts = enrichedPosts.map((post) => ({
+      ...post,
+      pinned_in_community: true,
+      community: {
+        id: community.public_id,
+        name: community.name,
+        handle: community.handle,
+        avatar_url: community.avatar_url,
+      },
+    }));
+
+    return c.json({ posts });
   });
 
   // Get pending posts (admin only)
@@ -638,22 +695,93 @@ export function createCommunityRoutes(
     }
 
     const pendingPosts = await communityDb.getCommunityPosts(community.id, "pending", limit);
+
+    // Get actors for posts
     const actorIds = [...new Set(pendingPosts.map((cp) => cp.post.actor_id))];
     const actors = await db.getActorsByIds(actorIds);
 
-    const posts = pendingPosts.map((cp) => ({
-      id: cp.post.public_id,
-      internal_id: cp.post.id,
-      uri: cp.post.uri,
-      content: cp.post.content,
-      url: cp.post.url,
-      sensitive: cp.post.sensitive,
-      submitted_at: formatDate(cp.submitted_at),
-      created_at: formatDate(cp.post.created_at),
-      author: sanitizeActor(actors.get(cp.post.actor_id)!, domain),
+    // Build PostWithActor array for enrichment
+    const postsWithActors: PostWithActor[] = pendingPosts.map((cp) => ({
+      ...cp.post,
+      author: actors.get(cp.post.actor_id)!,
     }));
 
+    // Enrich posts with all the data PostCard needs
+    const enrichedPosts = await enrichPostsBatch(db, postsWithActors, actor.id, domain);
+
+    // Get suggester info separately
+    const suggesterIds = pendingPosts.filter((cp) => cp.suggested_by).map((cp) => cp.suggested_by!);
+    const suggesters = suggesterIds.length > 0 ? await db.getActorsByIds(suggesterIds) : new Map();
+
+    // Combine enriched posts with pending metadata
+    const posts = enrichedPosts.map((post, index) => {
+      const cp = pendingPosts[index];
+      return {
+        ...post,
+        submitted_at: formatDate(cp.submitted_at),
+        suggested_by: cp.suggested_by ? sanitizeActor(suggesters.get(cp.suggested_by)!, domain) : null,
+      };
+    });
+
     return c.json({ posts });
+  });
+
+  // Suggest a post to the community (any member can suggest any post)
+  routes.post("/:name/suggest/:postId", async (c) => {
+    const name = c.req.param("name");
+    const postId = c.req.param("postId");
+    const user = c.get("user");
+    const actor = c.get("actor");
+    if (!user || !actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const communityDb = c.get("communityDb");
+    const db = c.get("db");
+
+    const community = await communityDb.getCommunityByName(name);
+    if (!community) {
+      return c.json({ error: "Community not found" }, 404);
+    }
+
+    // Check if user is a member
+    const isMember = await communityDb.isMember(community.id, actor.id);
+    if (!isMember) {
+      return c.json({ error: "You must be a member to suggest posts" }, 403);
+    }
+
+    // Check if banned
+    const isBanned = await communityDb.isBanned(community.id, actor.id);
+    if (isBanned) {
+      return c.json({ error: "You are banned from this community" }, 403);
+    }
+
+    // Get the post
+    const post = await db.getPostByPublicId(postId);
+    if (!post) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    // Check if already submitted
+    const existing = await communityDb.getCommunityPostStatus(community.id, post.id);
+    if (existing) {
+      return c.json({ error: "Post already submitted to this community", status: existing.status }, 400);
+    }
+
+    // Suggest the post (always goes to pending)
+    try {
+      await communityDb.suggestCommunityPost(community.id, post.id, actor.id);
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("already submitted")) {
+        return c.json({ error: e.message }, 400);
+      }
+      throw e;
+    }
+
+    return c.json({
+      ok: true,
+      status: "pending",
+    });
   });
 
   // Submit a post to the community
@@ -762,7 +890,7 @@ export function createCommunityRoutes(
       return c.json({ error: `Post is already ${communityPost.status}` }, 400);
     }
 
-    await communityDb.approvePost(community.id, post.id, actor.id);
+    await communityDb.approvePost(community.id, post.id, actor.id, post.public_id);
 
     // Send Announce
     try {
@@ -812,7 +940,7 @@ export function createCommunityRoutes(
       return c.json({ error: `Post is already ${communityPost.status}` }, 400);
     }
 
-    await communityDb.rejectPost(community.id, post.id, actor.id);
+    await communityDb.rejectPost(community.id, post.id, actor.id, post.public_id);
     return c.json({ ok: true, status: "rejected" });
   });
 
@@ -844,8 +972,127 @@ export function createCommunityRoutes(
       return c.json({ error: "Post not found" }, 404);
     }
 
-    await communityDb.removePost(community.id, post.id);
+    await communityDb.removePost(community.id, post.id, actor.id, post.public_id);
     return c.json({ ok: true });
+  });
+
+  // Pin a post in the community (admin only)
+  routes.post("/:name/posts/:postId/pin", async (c) => {
+    const name = c.req.param("name");
+    const postId = c.req.param("postId");
+    const user = c.get("user");
+    const actor = c.get("actor");
+    if (!user || !actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const communityDb = c.get("communityDb");
+    const db = c.get("db");
+
+    const community = await communityDb.getCommunityByName(name);
+    if (!community) {
+      return c.json({ error: "Community not found" }, 404);
+    }
+
+    const isAdmin = await communityDb.isAdmin(community.id, actor.id);
+    if (!isAdmin) {
+      return c.json({ error: "Admin access required" }, 403);
+    }
+
+    const post = await db.getPostByPublicId(postId);
+    if (!post) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    // Check post is approved in this community
+    const communityPost = await communityDb.getCommunityPostStatus(community.id, post.id);
+    if (!communityPost || communityPost.status !== "approved") {
+      return c.json({ error: "Post must be approved in this community first" }, 400);
+    }
+
+    await communityDb.pinPost(community.id, post.id, actor.id, post.public_id);
+    return c.json({ ok: true, pinned: true });
+  });
+
+  // Unpin a post in the community (admin only)
+  routes.delete("/:name/posts/:postId/pin", async (c) => {
+    const name = c.req.param("name");
+    const postId = c.req.param("postId");
+    const user = c.get("user");
+    const actor = c.get("actor");
+    if (!user || !actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const communityDb = c.get("communityDb");
+    const db = c.get("db");
+
+    const community = await communityDb.getCommunityByName(name);
+    if (!community) {
+      return c.json({ error: "Community not found" }, 404);
+    }
+
+    const isAdmin = await communityDb.isAdmin(community.id, actor.id);
+    if (!isAdmin) {
+      return c.json({ error: "Admin access required" }, 403);
+    }
+
+    const post = await db.getPostByPublicId(postId);
+    if (!post) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    await communityDb.unpinPost(community.id, post.id, actor.id, post.public_id);
+    return c.json({ ok: true, pinned: false });
+  });
+
+  // Get moderation logs (admin only)
+  routes.get("/:name/mod-logs", async (c) => {
+    const name = c.req.param("name");
+    const user = c.get("user");
+    const actor = c.get("actor");
+    if (!user || !actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const communityDb = c.get("communityDb");
+    const db = c.get("db");
+    const domain = c.get("domain");
+    const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100);
+    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+
+    const community = await communityDb.getCommunityByName(name);
+    if (!community) {
+      return c.json({ error: "Community not found" }, 404);
+    }
+
+    const isAdmin = await communityDb.isAdmin(community.id, actor.id);
+    if (!isAdmin) {
+      return c.json({ error: "Admin access required" }, 403);
+    }
+
+    const logs = await communityDb.getModLogs(community.id, limit + 1, before);
+    const hasMore = logs.length > limit;
+    const result = hasMore ? logs.slice(0, limit) : logs;
+
+    // Get actors for logs
+    const actorIds = [...new Set(result.filter(l => l.actor_id).map(l => l.actor_id!))];
+    const actors = actorIds.length > 0 ? await db.getActorsByIds(actorIds) : new Map();
+
+    const formattedLogs = result.map(log => ({
+      id: log.id,
+      action: log.action,
+      target_type: log.target_type,
+      target_id: log.target_id,
+      details: log.details,
+      created_at: formatDate(log.created_at),
+      actor: log.actor_id ? sanitizeActor(actors.get(log.actor_id)!, domain) : null,
+    }));
+
+    return c.json({
+      logs: formattedLogs,
+      next_cursor: hasMore && result.length > 0 ? result[result.length - 1].id : null,
+    });
   });
 
   return routes;

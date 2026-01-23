@@ -385,12 +385,14 @@ export interface CommunityBan {
 export interface CommunityPost extends Post {
   internal_id?: number;
   submitted_at?: string;
+  pinned_in_community?: boolean;
   community?: {
     id: string;
     name: string;
     handle: string;
     avatar_url: string | null;
   };
+  suggested_by?: Actor | null;
 }
 
 export interface PaginatedCommunities {
@@ -491,10 +493,39 @@ export const communities = {
       method: 'POST',
       body: JSON.stringify({ post_id: postId }),
     }),
+  suggestPost: (name: string, postId: string) =>
+    fetchJson<{ ok: boolean; status: 'pending' }>(`/communities/${name}/suggest/${postId}`, {
+      method: 'POST',
+    }),
   approvePost: (name: string, postId: string) =>
     fetchJson<{ ok: boolean; status: 'approved' }>(`/communities/${name}/posts/${postId}/approve`, { method: 'POST' }),
   rejectPost: (name: string, postId: string) =>
     fetchJson<{ ok: boolean; status: 'rejected' }>(`/communities/${name}/posts/${postId}/reject`, { method: 'POST' }),
   removePost: (name: string, postId: string) =>
     fetchJson<{ ok: boolean }>(`/communities/${name}/posts/${postId}`, { method: 'DELETE' }),
+  getPinnedPosts: (name: string) =>
+    fetchJson<{ posts: CommunityPost[] }>(`/communities/${name}/posts/pinned`),
+  pinPost: (name: string, postId: string) =>
+    fetchJson<{ ok: boolean; pinned: boolean }>(`/communities/${name}/posts/${postId}/pin`, { method: 'POST' }),
+  unpinPost: (name: string, postId: string) =>
+    fetchJson<{ ok: boolean; pinned: boolean }>(`/communities/${name}/posts/${postId}/pin`, { method: 'DELETE' }),
+  getModLogs: (name: string, options?: { limit?: number; before?: number }) => {
+    const params = new URLSearchParams();
+    if (options?.limit) params.set('limit', options.limit.toString());
+    if (options?.before) params.set('before', options.before.toString());
+    const queryStr = params.toString();
+    return fetchJson<{ logs: ModLogEntry[]; next_cursor: number | null }>(
+      `/communities/${name}/mod-logs${queryStr ? '?' + queryStr : ''}`
+    );
+  },
 };
+
+export interface ModLogEntry {
+  id: number;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  details: string | null;
+  created_at: string;
+  actor: Actor | null;
+}

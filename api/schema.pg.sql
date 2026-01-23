@@ -201,6 +201,7 @@ CREATE TABLE IF NOT EXISTS community_posts (
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   reviewed_at TIMESTAMPTZ,
   reviewed_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
+  suggested_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
   UNIQUE (community_id, post_id)
 );
 
@@ -251,3 +252,31 @@ CREATE INDEX IF NOT EXISTS idx_posts_replies_hot ON posts(in_reply_to_id, hot_sc
 
 -- Fuzzy search index for post content (pg_trgm)
 CREATE INDEX IF NOT EXISTS idx_posts_content_trgm ON posts USING GIN (content gin_trgm_ops);
+
+-- Migration: Add suggested_by column to community_posts
+ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS suggested_by INTEGER REFERENCES actors(id) ON DELETE SET NULL;
+
+-- Pinned community posts
+CREATE TABLE IF NOT EXISTS community_pinned_posts (
+  community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  pinned_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
+  pinned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (community_id, post_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_community_pinned_posts_community ON community_pinned_posts(community_id);
+
+-- Community moderation logs
+CREATE TABLE IF NOT EXISTS community_mod_logs (
+  id SERIAL PRIMARY KEY,
+  community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  actor_id INTEGER REFERENCES actors(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  details TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_community_mod_logs_community ON community_mod_logs(community_id, created_at DESC);
