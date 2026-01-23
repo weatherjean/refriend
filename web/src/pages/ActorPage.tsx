@@ -115,28 +115,24 @@ export function ActorPage() {
     setFollowing([]);
 
     try {
-      const handleParts = fullHandle.replace(/^@/, '').split('@');
-      const handleDomain = handleParts.length > 1 ? handleParts[1] : null;
-      const isLikelyLocal = !handleDomain || handleDomain === window.location.host;
+      // Always try local user first (API returns 404 if not found)
+      try {
+        const profileData = await users.get(username, { silent: true });
+        setActor(profileData.actor);
+        setStats(profileData.stats);
+        setIsFollowing(profileData.is_following);
+        setIsOwnProfile(profileData.is_own_profile);
+        setIsLocalUser(true);
 
-      if (isLikelyLocal) {
-        try {
-          const profileData = await users.get(username);
-          setActor(profileData.actor);
-          setStats(profileData.stats);
-          setIsFollowing(profileData.is_following);
-          setIsOwnProfile(profileData.is_own_profile);
-          setIsLocalUser(true);
-
-          const pinnedData = await users.getPinned(username);
-          setPinnedPosts(pinnedData.posts);
-          setLoading(false);
-          return;
-        } catch {
-          // Not a local user, fall through
-        }
+        const pinnedData = await users.getPinned(username);
+        setPinnedPosts(pinnedData.posts);
+        setLoading(false);
+        return;
+      } catch {
+        // Not a local user, fall through to search
       }
 
+      // Search for remote user
       const { users: searchResults } = await search.query(fullHandle);
       if (searchResults.length > 0) {
         const remoteActor = searchResults[0];

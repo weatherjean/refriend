@@ -68,19 +68,24 @@ export interface Post {
   };
 }
 
-async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+interface FetchOptions extends RequestInit {
+  silent?: boolean; // Don't trigger global error handler
+}
+
+async function fetchJson<T>(url: string, options?: FetchOptions): Promise<T> {
+  const { silent, ...fetchOptions } = options || {};
   const res = await fetch(API_BASE + url, {
-    ...options,
+    ...fetchOptions,
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...options?.headers,
+      ...fetchOptions?.headers,
     },
   });
   const data = await res.json();
   if (!res.ok) {
     const error = new Error(data.error || 'Request failed');
-    if (globalErrorHandler) {
+    if (globalErrorHandler && !silent) {
       globalErrorHandler(error);
     }
     throw error;
@@ -172,13 +177,13 @@ export interface TrendingUser {
 export const users = {
   getTrending: () =>
     fetchJson<{ users: TrendingUser[] }>('/users/trending'),
-  get: (username: string) =>
+  get: (username: string, options?: { silent?: boolean }) =>
     fetchJson<{
       actor: Actor;
       stats: { followers: number; following: number };
       is_following: boolean;
       is_own_profile: boolean;
-    }>(`/users/${username}`),
+    }>(`/users/${username}`, options),
   getPosts: (username: string, params?: PaginationParams) =>
     fetchJson<PaginatedPosts>(`/users/${username}/posts${buildQuery({ limit: params?.limit, before: params?.before, sort: params?.sort })}`),
   getReplies: (username: string, params?: PaginationParams) => {

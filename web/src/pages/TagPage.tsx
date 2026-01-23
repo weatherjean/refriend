@@ -33,7 +33,7 @@ export function TagPage() {
 
   return (
     <div>
-      <PageHeader title={`#${tag}`} icon="hash" />
+      <PageHeader title={`#${tag}`} />
       <PostList
         posts={posts}
         emptyIcon="hash"

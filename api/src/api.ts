@@ -818,6 +818,7 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     const publicId = c.req.param("id");
     const db = c.get("db");
     const actor = c.get("actor");
+    const communityDb = c.get("communityDb");
     const post = await db.getPostByPublicId(publicId);
 
     if (!post) {
@@ -837,7 +838,22 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       currentPost = parentPost;
     }
 
-    return c.json({ post: await enrichPost(db, post, actor?.id), ancestors });
+    // Enrich the main post
+    const enrichedPost = await enrichPost(db, post, actor?.id);
+
+    // Add community info if post belongs to a community
+    const community = communityDb ? await communityDb.getCommunityForPost(post.id) : null;
+    const postWithCommunity = community ? {
+      ...enrichedPost,
+      community: {
+        id: community.public_id,
+        name: community.name,
+        handle: community.handle,
+        avatar_url: community.avatar_url,
+      },
+    } : enrichedPost;
+
+    return c.json({ post: postWithCommunity, ancestors });
   });
 
   api.get("/posts/:id/replies", async (c) => {
