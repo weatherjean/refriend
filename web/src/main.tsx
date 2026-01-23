@@ -5,13 +5,13 @@ import App from './App'
 import { AuthProvider } from './context/AuthContext'
 import { FeedProvider } from './context/FeedContext'
 import { ToastProvider } from './context/ToastContext'
-import { NavigationProvider } from './context/NavigationContext'
+import { ModalStackProvider } from './context/ModalStackContext'
 import './styles.scss'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <HashRouter>
-      <NavigationProvider>
+      <ModalStackProvider>
         <ToastProvider>
           <AuthProvider>
             <FeedProvider>
@@ -19,7 +19,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             </FeedProvider>
           </AuthProvider>
         </ToastProvider>
-      </NavigationProvider>
+      </ModalStackProvider>
     </HashRouter>
   </React.StrictMode>,
 )

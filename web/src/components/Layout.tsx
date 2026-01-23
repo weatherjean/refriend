@@ -1,5 +1,5 @@
 import { ReactNode, useState, useEffect, FormEvent } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFeed } from '../context/FeedContext';
 import { getUsername } from '../utils';
@@ -7,7 +7,6 @@ import { tags, notifications as notificationsApi } from '../api';
 import { TagBadge } from './TagBadge';
 import { Avatar } from './Avatar';
 import { ToastContainer } from './ToastContainer';
-import { BackButton } from './BackButton';
 
 interface LayoutProps {
   children: ReactNode;
@@ -17,8 +16,6 @@ export function Layout({ children }: LayoutProps) {
   const { user, actor, logout } = useAuth();
   const { feedType, setFeedType } = useFeed();
   const navigate = useNavigate();
-  const location = useLocation();
-  const isHomePage = location.pathname === '/';
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,6 +26,7 @@ export function Layout({ children }: LayoutProps) {
     if (searchQuery.trim()) {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
       setSearchQuery('');
+      setMobileMenuOpen(false);
     }
   };
 
@@ -154,7 +152,7 @@ export function Layout({ children }: LayoutProps) {
 
           {/* New Post Button */}
           {user && (
-            <Link to="/new" className="btn btn-primary w-100 mb-4">
+            <Link to="/new" className="btn btn-primary w-100 mb-4" onClick={() => setMobileMenuOpen(false)}>
               <i className="bi bi-plus-lg me-1"></i> New Post
             </Link>
           )}
@@ -166,7 +164,7 @@ export function Layout({ children }: LayoutProps) {
                 <h6 className="card-title mb-3">Popular Tags</h6>
                 <div className="d-flex flex-wrap gap-2">
                   {popularTags.map((tag) => (
-                    <TagBadge key={tag.name} tag={tag.name} />
+                    <TagBadge key={tag.name} tag={tag.name} onClick={() => setMobileMenuOpen(false)} />
                   ))}
                 </div>
               </div>
@@ -196,10 +194,11 @@ export function Layout({ children }: LayoutProps) {
                   <Link
                     to={`/u/${actor?.handle}`}
                     className="btn btn-outline-secondary btn-sm flex-grow-1"
+                    onClick={() => setMobileMenuOpen(false)}
                   >
                     <i className="bi bi-person-fill me-1"></i> Profile
                   </Link>
-                  <button onClick={handleLogout} className="btn btn-outline-secondary btn-sm flex-grow-1">
+                  <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="btn btn-outline-secondary btn-sm flex-grow-1">
                     <i className="bi bi-box-arrow-right me-1"></i> Logout
                   </button>
                 </div>
@@ -209,8 +208,8 @@ export function Layout({ children }: LayoutProps) {
             <div className="card">
               <div className="card-body text-center">
                 <p className="small mb-3">Join Riff to post and participate</p>
-                <Link to="/register" className="btn btn-primary btn-sm w-100 mb-2">Sign up</Link>
-                <Link to="/login" className="btn btn-outline-secondary btn-sm w-100">Login</Link>
+                <Link to="/register" className="btn btn-primary btn-sm w-100 mb-2" onClick={() => setMobileMenuOpen(false)}>Sign up</Link>
+                <Link to="/login" className="btn btn-outline-secondary btn-sm w-100" onClick={() => setMobileMenuOpen(false)}>Login</Link>
               </div>
             </div>
           )}
@@ -222,7 +221,6 @@ export function Layout({ children }: LayoutProps) {
 
         {/* Main Content */}
         <div className="col-lg-8 py-4 px-3 main-content">
-          {!isHomePage && <BackButton className="mb-3" />}
           {children}
         </div>
       </div>
@@ -232,7 +230,7 @@ export function Layout({ children }: LayoutProps) {
         <Link to="/" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
           <img src="/icon.svg" alt="Home" height="24" />
         </Link>
-        <Link to="/search" className="mobile-nav-item">
+        <Link to="/search" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
           <i className="bi bi-search"></i>
         </Link>
         <button

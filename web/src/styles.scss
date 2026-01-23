@@ -474,7 +474,7 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
 
 // Mobile responsive styles
 @media (max-width: 991.98px) {
-  // Hide sidebar by default on mobile
+  // Hide sidebar by default on mobile (z-index higher than modal at 1050)
   .sidebar {
     position: fixed;
     top: 0;
@@ -482,7 +482,7 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
     width: 85%;
     max-width: 320px;
     height: 100vh;
-    z-index: 1050;
+    z-index: 1060;
     transform: translateX(-100%);
     transition: transform 0.3s ease-in-out;
     background-color: var(--bs-body-bg);
@@ -524,7 +524,7 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
     right: 0;
     bottom: 0;
     background-color: rgba(0, 0, 0, 0.5);
-    z-index: 1040;
+    z-index: 1055;
   }
 
   // Main content takes full width on mobile
@@ -532,7 +532,7 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
     padding-bottom: 70px !important; // Space for bottom bar
   }
 
-  // Mobile bottom navigation bar
+  // Mobile bottom navigation bar (above modal at 1050)
   .mobile-bottom-bar {
     position: fixed;
     bottom: 0;
@@ -544,7 +544,7 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
     display: flex;
     align-items: center;
     justify-content: space-around;
-    z-index: 1030;
+    z-index: 1070;
     padding: 0 1rem;
     padding-bottom: env(safe-area-inset-bottom); // iOS safe area
   }
@@ -603,5 +603,83 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
 
   .mobile-sidebar-close {
     display: none !important;
+  }
+}
+
+// Post Modal (Twitter-style overlay)
+.page-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 1050;
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 2rem 1rem;
+}
+
+.page-modal-container {
+  position: relative;
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.page-modal-header {
+  background: var(--bs-body-bg);
+  border-radius: 1rem 1rem 0 0;
+  padding: 1rem 1.5rem;
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--bs-border-color);
+}
+
+.page-modal-btn {
+  background: var(--bs-tertiary-bg);
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--bs-body-color);
+
+  &:hover {
+    background: var(--bs-secondary-bg);
+  }
+}
+
+.page-modal-content {
+  background: var(--bs-body-bg);
+  border-radius: 0 0 1rem 1rem;
+  padding: 1.5rem;
+  min-height: 200px;
+}
+
+@media (max-width: 767px) {
+  .page-modal-backdrop {
+    padding: 0;
+  }
+
+  .page-modal-container {
+    max-width: 100%;
+  }
+
+  .page-modal-header {
+    border-radius: 0;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .page-modal-content {
+    border-radius: 0;
+    min-height: calc(100vh - 70px); // Account for header
+    padding-bottom: 70px; // Space for mobile bottom bar
   }
 }

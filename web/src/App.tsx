@@ -1,4 +1,3 @@
-import { Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
@@ -15,9 +14,29 @@ import { CommunitiesPage } from './pages/CommunitiesPage';
 import { CommunityPage } from './pages/CommunityPage';
 import { CreateCommunityPage } from './pages/CreateCommunityPage';
 import { useAuth } from './context/AuthContext';
+import { StackedModals } from './components/StackedModals';
+import { useModalStack } from './context/ModalStackContext';
+
+// Route configuration for modal pages
+export const modalRoutes = [
+  { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <RegisterPage /> },
+  { path: '/search', element: <SearchPage /> },
+  { path: '/explore', element: <ExplorePage /> },
+  { path: '/notifications', element: <NotificationsPage /> },
+  { path: '/new', element: <NewPostPage /> },
+  { path: '/posts/:id', element: <PostPage /> },
+  { path: '/u/:handle/*', element: <ActorPage /> },
+  { path: '/actor/:id', element: <ActorByIdPage /> },
+  { path: '/tags/:tag', element: <TagPage /> },
+  { path: '/communities', element: <CommunitiesPage /> },
+  { path: '/communities/new', element: <CreateCommunityPage /> },
+  { path: '/c/:name', element: <CommunityPage /> },
+];
 
 function App() {
   const { loading } = useAuth();
+  const { stack } = useModalStack();
 
   if (loading) {
     return (
@@ -29,22 +48,11 @@ function App() {
 
   return (
     <Layout>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/search" element={<SearchPage />} />
-        <Route path="/explore" element={<ExplorePage />} />
-        <Route path="/notifications" element={<NotificationsPage />} />
-        <Route path="/new" element={<NewPostPage />} />
-        <Route path="/posts/:id" element={<PostPage />} />
-        <Route path="/u/:handle/*" element={<ActorPage />} />
-        <Route path="/actor/:id" element={<ActorByIdPage />} />
-        <Route path="/tags/:tag" element={<TagPage />} />
-        <Route path="/communities" element={<CommunitiesPage />} />
-        <Route path="/communities/new" element={<CreateCommunityPage />} />
-        <Route path="/c/:name" element={<CommunityPage />} />
-      </Routes>
+      {/* Home feed - ALWAYS rendered */}
+      <HomePage />
+
+      {/* Stacked modals - each visited page stays mounted */}
+      {stack.length > 0 && <StackedModals />}
     </Layout>
   );
 }

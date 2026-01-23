@@ -21,8 +21,8 @@ export function ToastContainer() {
 
   return (
     <div
-      className="toast-container position-fixed bottom-0 start-50 translate-middle-x p-3"
-      style={{ zIndex: 1100, maxWidth: '90vw', marginBottom: '60px' }}
+      className="toast-container position-fixed top-0 end-0 p-3"
+      style={{ zIndex: 1100, maxWidth: '90vw' }}
     >
       {toasts.map((toast) => (
         <div

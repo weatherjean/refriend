@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 
 interface TagBadgeProps {
   tag: string;
+  onClick?: () => void;
 }
 
 // Dark mode palette - subtle backgrounds with bright text
@@ -22,7 +23,7 @@ const TAG_COLORS = [
   { bg: 'rgba(244, 114, 182, 0.15)', text: '#f472b6' }, // pink
 ];
 
-export function TagBadge({ tag }: TagBadgeProps) {
+export function TagBadge({ tag, onClick }: TagBadgeProps) {
   // Simple hash to pick color from palette
   const hash = tag.split('').reduce((acc, char) => {
     return ((acc << 5) - acc + char.charCodeAt(0)) | 0;
@@ -43,6 +44,7 @@ export function TagBadge({ tag }: TagBadgeProps) {
         fontWeight: 500,
         transition: 'opacity 0.15s',
       }}
+      onClick={onClick}
       onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
       onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
     >
