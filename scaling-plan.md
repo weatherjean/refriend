@@ -1,65 +1,136 @@
-# Scaling Plan: PostgreSQL + Workers
+# Infrastructure Plan: Scaleway
 
-## Phase 1: PostgreSQL Migration
+## Base Setup (~€25/month)
 
-**Changes:**
-- Replace SQLite with PostgreSQL (Docker container)
-- Update db.ts: connection pool, `$1` params, `SERIAL` keys
-- Update schema.sql: Postgres syntax (`NOW()`, `TIMESTAMPTZ`, etc.)
+| Service | Spec | Cost |
+|---------|------|------|
+| **Managed PostgreSQL** | DB-DEV-S (2 vCPU, 2GB) + 10GB storage | ~€12 |
+| **App Server** | PLAY2-PICO (1 vCPU, 2GB) + Docker InstantApp | ~€10 |
+| **Object Storage** | 50GB One-Zone (S3-compatible) | ~€0.50 |
+| **Transactional Email** | 10k emails/month | ~€2.50 |
 
-**Schema additions:**
-```sql
-CREATE TABLE jobs (
-  id SERIAL PRIMARY KEY,
-  type TEXT NOT NULL,
-  payload JSONB NOT NULL,
-  status TEXT DEFAULT 'pending',
-  attempts INT DEFAULT 0,
-  run_at TIMESTAMPTZ DEFAULT NOW(),
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX idx_jobs_pending ON jobs(run_at) WHERE status = 'pending';
+## Architecture
+
+```
+        ┌─────────────────────────────────────┐
+        │           PLAY2-PICO                │
+        │  ┌───────┬─────────┬──────────┐     │
+        │  │ Caddy │ Web API │ Worker   │     │
+        │  │ :443  │  :8000  │          │     │
+        │  └───┬───┴────┬────┴────┬─────┘     │
+        └──────┼────────┼─────────┼───────────┘
+   HTTPS       │        │         │
+   ◄───────────┘        └────┬────┘
+                             ▼
+                      ┌──────────────┐
+                      │  Managed DB  │
+                      │   DB-DEV-S   │
+                      └──────────────┘
 ```
 
-## Phase 2: Background Worker
+- **Caddy** handles HTTPS with automatic Let's Encrypt certificates
+- **Web API** and **Worker** run as separate containers on same server
+- Worker handles outbound ActivityPub delivery (inbox scales with web server)
+- Media uploads go to Object Storage (S3-compatible)
+- Password reset emails via Scaleway Transactional Email
 
-**New file:** `src/worker.ts`
-- Poll jobs table with `FOR UPDATE SKIP LOCKED`
-- Process federation delivery, notifications
-- Retry with exponential backoff
-- ~100-150 lines
+## Deployment
 
-**Job types:**
-- `deliver` - Send activity to remote inbox
-- `notify` - Push notifications (future)
+### Initial Setup (Scaleway Console)
 
-## Phase 3: Docker Setup
+1. Create **Managed PostgreSQL** (DB-DEV-S)
+2. Create **Instance** (PLAY2-PICO, select Docker InstantApp)
+3. Create **Object Storage** bucket
+4. Enable **Transactional Email**
+5. Point DNS A record to instance IP
+
+### First Deploy
+
+```bash
+ssh root@your-server
+git clone https://github.com/you/riff.git
+cd riff
+cp .env.example .env
+# Edit .env with DB connection string, S3 creds, etc.
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Updates
+
+```bash
+# From your local machine
+ssh root@your-server "cd riff && ./deploy.sh"
+```
+
+Or automate with GitHub Actions on push to main.
+
+### deploy.sh (on server)
+
+```bash
+#!/bin/bash
+set -e
+git pull
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d
+docker image prune -f
+echo "Deployed at $(date)"
+```
+
+~5-10 seconds downtime during deploy. Fine for now.
+
+### Production Docker Compose
 
 ```yaml
+# docker-compose.prod.yml
 services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    depends_on:
+      - api
+
   api:
     build: ./api
+    restart: unless-stopped
+    env_file: .env
     command: deno run --allow-all src/main.ts
+
   worker:
     build: ./api
+    restart: unless-stopped
+    env_file: .env
     command: deno run --allow-all src/worker.ts
-    deploy:
-      replicas: 2
-  db:
-    image: postgres:16-alpine
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  caddy_data:
 ```
 
-## Expected Capacity
+### Caddyfile
 
-| Box (€/mo) | DAU | Registered |
-|------------|-----|------------|
-| €20 | 10-20k | 100-200k |
-| €70 | 30-50k | 300-500k |
-| €100 | 50-80k | 500k-1M |
+```
+yourdomain.com {
+    reverse_proxy api:8000
+}
+```
 
-## Future (if needed)
-- PgBouncer for connection pooling
-- Read replicas
-- Redis + BullMQ (only if PG queue bottlenecks)
+That's it. Caddy handles SSL automatically.
+
+## Capacity
+
+- **Concurrent users:** 50-100 comfortable, 200-300 degraded
+- **Registered users:** 1,000-5,000
+- **Posts/day:** 500-1,000
+
+## Why Scaleway
+
+- EU-based (French company, GDPR compliant)
+- No egress fees for first 75GB/month
+- Native transactional email service
+- Managed PostgreSQL with automated backups
+- Docker InstantApp for zero-setup deployment
