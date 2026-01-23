@@ -1,5 +1,5 @@
 import { ReactNode, useState, useEffect, FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFeed } from '../context/FeedContext';
 import { getUsername } from '../utils';
@@ -7,6 +7,7 @@ import { tags, notifications as notificationsApi } from '../api';
 import { TagBadge } from './TagBadge';
 import { Avatar } from './Avatar';
 import { ToastContainer } from './ToastContainer';
+import { BackButton } from './BackButton';
 
 interface LayoutProps {
   children: ReactNode;
@@ -16,6 +17,8 @@ export function Layout({ children }: LayoutProps) {
   const { user, actor, logout } = useAuth();
   const { feedType, setFeedType } = useFeed();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isHomePage = location.pathname === '/';
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
@@ -219,6 +222,7 @@ export function Layout({ children }: LayoutProps) {
 
         {/* Main Content */}
         <div className="col-lg-8 py-4 px-3 main-content">
+          {!isHomePage && <BackButton className="mb-3" />}
           {children}
         </div>
       </div>

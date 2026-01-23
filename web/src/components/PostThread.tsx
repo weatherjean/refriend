@@ -52,11 +52,11 @@ export function PostThread({
 
   return (
     <div className="thread-container">
-      <div className="text-muted small mb-2">
-        <i className="bi bi-arrow-up me-1"></i>
-        Conversation thread
-      </div>
       {content}
+      <div className="text-muted small mt-3">
+        <i className="bi bi-chat-square-quote me-1"></i>
+        Viewing thread ({ancestors.length} {ancestors.length === 1 ? 'reply' : 'replies'} deep)
+      </div>
     </div>
   );
 }

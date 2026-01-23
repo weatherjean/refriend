@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { posts as postsApi, Post } from '../api';
+import { posts as postsApi, Post, AttachmentInput } from '../api';
 import { PostCard } from '../components/PostCard';
 import { PostThread } from '../components/PostThread';
+import { PostComposer } from '../components/PostComposer';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { LoadMoreButton } from '../components/LoadMoreButton';
 import { LoadingButton } from '../components/LoadingButton';
@@ -22,8 +23,6 @@ export function PostPage() {
   const [error, setError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [replyContent, setReplyContent] = useState('');
-  const [replying, setReplying] = useState(false);
   const [replySort, setReplySort] = useState<'new' | 'hot'>('hot');
   const [opAuthorId, setOpAuthorId] = useState<string | null>(null);
 
@@ -40,12 +39,14 @@ export function PostPage() {
     loadingMore,
     hasMore,
     loadMore,
+    reset: resetReplies,
   } = usePagination<Post>({ fetchFn: fetchReplies, key: `${id}-${replySort}`, autoLoad: false });
 
   // Load post and ancestors, then load replies
   useEffect(() => {
     const load = async () => {
       setLoading(true);
+      resetReplies(); // Clear old replies when navigating to a new post
       try {
         const postData = await postsApi.get(id!);
         setPost(postData.post);
@@ -57,7 +58,7 @@ export function PostPage() {
       }
     };
     load();
-  }, [id]);
+  }, [id, resetReplies]);
 
   // Load replies after post loads
   useEffect(() => {
@@ -79,20 +80,10 @@ export function PostPage() {
     }
   };
 
-  const handleReply = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!post || !replyContent.trim()) return;
-
-    setReplying(true);
-    try {
-      const { post: newReply } = await postsApi.create(replyContent, post.id);
-      setReplies(prev => [...prev, newReply]);
-      setReplyContent('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to post reply');
-    } finally {
-      setReplying(false);
-    }
+  const handleReply = async (content: string, attachments: AttachmentInput[], sensitive: boolean) => {
+    if (!post) return;
+    const { post: newReply } = await postsApi.create(content, post.id, attachments, sensitive);
+    setReplies(prev => [...prev, newReply]);
   };
 
   if (loading) {
@@ -138,27 +129,12 @@ export function PostPage() {
       {user && (
         <div className="card mt-4">
           <div className="card-body">
-            <form onSubmit={handleReply}>
-              <div className="mb-2">
-                <textarea
-                  className="form-control"
-                  rows={2}
-                  placeholder={`Reply to ${post.author?.handle || 'this post'}...`}
-                  value={replyContent}
-                  onChange={(e) => setReplyContent(e.target.value)}
-                  disabled={replying}
-                />
-              </div>
-              <LoadingButton
-                type="submit"
-                size="sm"
-                loading={replying}
-                loadingText="Posting..."
-                disabled={!replyContent.trim()}
-              >
-                Reply
-              </LoadingButton>
-            </form>
+            <PostComposer
+              placeholder={`Reply to ${post.author?.handle || 'this post'}...`}
+              submitLabel="Reply"
+              onSubmit={handleReply}
+              compact
+            />
           </div>
         </div>
       )}
