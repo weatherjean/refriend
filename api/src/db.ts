@@ -201,6 +201,12 @@ export class DB {
     });
   }
 
+  async updateUserEmail(userId: number, email: string): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`UPDATE users SET email = ${email} WHERE id = ${userId}`;
+    });
+  }
+
   // ============ Password Reset Tokens ============
 
   async createPasswordResetToken(userId: number): Promise<string> {

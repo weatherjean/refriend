@@ -8,56 +8,64 @@ const DOMAIN = Deno.env.get("DOMAIN") || "localhost:8000";
 const users = [
   {
     username: "alice",
-    password: "alice123",
+    email: "alice@alice.com",
+    password: "alicepassword",
     name: "Alice Johnson",
     bio: "Software developer and open source enthusiast. Love building things with TypeScript and Rust.",
     avatar_url: "https://api.dicebear.com/7.x/avataaars/svg?seed=alice",
   },
   {
     username: "bob",
-    password: "bob123",
+    email: "bob@bob.com",
+    password: "bobpassword",
     name: "Bob Smith",
     bio: "Photographer and nature lover. Sharing moments from my adventures around the world.",
     avatar_url: "https://api.dicebear.com/7.x/avataaars/svg?seed=bob",
   },
   {
     username: "carol",
-    password: "carol123",
+    email: "carol@carol.com",
+    password: "carolpassword",
     name: "Carol Williams",
     bio: "Writer, coffee addict, and cat person. Currently working on my first novel.",
     avatar_url: "https://api.dicebear.com/7.x/avataaars/svg?seed=carol",
   },
   {
     username: "dave",
-    password: "dave123",
+    email: "dave@dave.com",
+    password: "davepassword",
     name: "Dave Chen",
     bio: "Music producer and DJ. Electronic music is my passion. Check out my latest mixes!",
     avatar_url: "https://api.dicebear.com/7.x/avataaars/svg?seed=dave",
   },
   {
     username: "eve",
-    password: "eve123",
+    email: "eve@eve.com",
+    password: "evepassword",
     name: "Eve Martinez",
     bio: "Security researcher and privacy advocate. Decentralization is the future!",
     avatar_url: "https://api.dicebear.com/7.x/avataaars/svg?seed=eve",
   },
   {
     username: "frank",
-    password: "frank123",
+    email: "frank@frank.com",
+    password: "frankpassword",
     name: "Frank Wilson",
     bio: "Game developer and pixel art enthusiast. Making indie games in my spare time.",
     avatar_url: "https://api.dicebear.com/7.x/avataaars/svg?seed=frank",
   },
   {
     username: "grace",
-    password: "grace123",
+    email: "grace@grace.com",
+    password: "gracepassword",
     name: "Grace Lee",
     bio: "Data scientist by day, baker by night. Love finding patterns in everything.",
     avatar_url: "https://api.dicebear.com/7.x/avataaars/svg?seed=grace",
   },
   {
     username: "henry",
-    password: "henry123",
+    email: "henry@henry.com",
+    password: "henrypassword",
     name: "Henry Taylor",
     bio: "Retro computing collector. If it has a CRT, I probably want it.",
     avatar_url: "https://api.dicebear.com/7.x/avataaars/svg?seed=henry",
@@ -226,8 +234,13 @@ export async function seed(db: DB, domain: string) {
   console.log("\n--- Creating users ---");
   for (const userData of users) {
     // Check if user already exists
-    if (await db.getUserByUsername(userData.username)) {
-      console.log(`User ${userData.username} already exists, skipping...`);
+    const existingUser = await db.getUserByUsername(userData.username);
+    if (existingUser) {
+      console.log(`User ${userData.username} already exists, updating email...`);
+      // Update email if not set
+      if (!existingUser.email) {
+        await db.updateUserEmail(existingUser.id, userData.email);
+      }
       const actor = await db.getActorByUsername(userData.username);
       if (actor) {
         createdActors.push({ id: actor.id, username: userData.username });
@@ -236,7 +249,7 @@ export async function seed(db: DB, domain: string) {
     }
 
     const passwordHash = await hashPassword(userData.password);
-    const user = await db.createUser(userData.username, passwordHash);
+    const user = await db.createUser(userData.username, passwordHash, userData.email);
 
     const actorUri = `https://${domain}/users/${userData.username}`;
     const actor = await db.createActor({
@@ -435,9 +448,9 @@ export async function seed(db: DB, domain: string) {
   console.log("\n========================================");
   console.log("Seeding complete!");
   console.log("========================================");
-  console.log("\nTest accounts (password = username + '123'):");
+  console.log("\nTest accounts (password = username + 'password'):");
   for (const user of users) {
-    console.log(`  ${user.username}: ${user.password}`);
+    console.log(`  ${user.email} / ${user.password}`);
   }
   console.log("\nCommunities:");
   for (const community of communities) {
