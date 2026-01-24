@@ -61,10 +61,9 @@ export async function getTimelinePosts(
   actorId: number,
   limit: number,
   before?: number,
-  _sort?: "new" | "hot"
+  sort: "new" | "hot" = "new"
 ): Promise<PostWithActor[]> {
-  // Note: getHomeFeedWithActor doesn't support sort parameter
-  return db.getHomeFeedWithActor(actorId, limit, before);
+  return db.getHomeFeedWithActor(actorId, limit, before, sort);
 }
 
 export async function getPostMedia(db: DB, postId: number): Promise<Array<{

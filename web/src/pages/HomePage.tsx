@@ -18,12 +18,15 @@ export function HomePage() {
   const isHotFeed = user && feedType === 'hot';
 
   const fetchPosts = useCallback(async (cursor?: number) => {
+    if (!user) {
+      // Not logged in - return empty (will show login prompt)
+      return { items: [], next_cursor: null };
+    }
     if (isHotFeed) {
       const { posts } = await postsApi.getHot(30);
       return { items: posts, next_cursor: null };
     }
-    const timeline = user ? 'home' : 'public';
-    const { posts, next_cursor } = await postsApi.getTimeline(timeline, cursor ? { before: cursor } : undefined);
+    const { posts, next_cursor } = await postsApi.getTimeline(cursor ? { before: cursor } : undefined);
     return { items: posts, next_cursor };
   }, [user, isHotFeed]);
 
@@ -43,18 +46,18 @@ export function HomePage() {
   };
 
   const getTitle = () => {
-    if (!user) return 'Public Timeline';
+    if (!user) return 'Welcome';
     return isHotFeed ? 'Hot' : 'New';
   };
 
   const getIcon = () => {
-    if (!user) return 'globe';
+    if (!user) return 'house';
     return isHotFeed ? 'fire' : 'clock-fill';
   };
 
   const getEmptyDescription = () => {
-    if (!user) return 'Be the first to post!';
-    return isHotFeed ? 'No hot posts right now.' : 'Follow some users to see posts here.';
+    if (!user) return 'Sign in to see your timeline.';
+    return isHotFeed ? 'No hot posts right now.' : 'Follow some users or join communities to see posts here.';
   };
 
   if (loading) {

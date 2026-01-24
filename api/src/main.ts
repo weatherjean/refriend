@@ -43,13 +43,15 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error" }, 500);
 });
 
-// Dynamic domain detection middleware - extracts domain from request
-app.use("*", async (c, next) => {
-  const url = new URL(c.req.url);
-  const domain = url.host;
+// Domain configuration - use DOMAIN env var if set, otherwise detect from request
+const CONFIGURED_DOMAIN = Deno.env.get("DOMAIN");
 
-  // Update federation domain dynamically based on incoming request
+app.use("*", async (c, next) => {
+  const domain = CONFIGURED_DOMAIN || new URL(c.req.url).host;
+
+  // Update federation domain
   setDomain(domain);
+  c.set("domain", domain);
 
   await next();
 });

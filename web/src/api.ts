@@ -261,11 +261,12 @@ export const actors = {
 
 // Posts
 export const posts = {
-  getTimeline: (timeline: 'public' | 'home' = 'public', params?: PaginationParams) => {
-    const query = new URLSearchParams({ timeline });
+  getTimeline: (params?: PaginationParams) => {
+    const query = new URLSearchParams();
     if (params?.limit) query.set('limit', params.limit.toString());
     if (params?.before) query.set('before', params.before.toString());
-    return fetchJson<PaginatedPosts>(`/posts?${query}`);
+    const queryStr = query.toString();
+    return fetchJson<PaginatedPosts>(`/timeline${queryStr ? '?' + queryStr : ''}`);
   },
   getHot: (limit = 10) => fetchJson<{ posts: Post[] }>(`/posts/hot?limit=${limit}`),
   get: (id: string) => fetchJson<{ post: Post; ancestors: Post[] }>(`/posts/${id}`),

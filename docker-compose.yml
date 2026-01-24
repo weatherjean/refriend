@@ -26,6 +26,7 @@ services:
       - 8.8.4.4
     environment:
       DATABASE_URL: postgres://riff:riff@db:5432/riff
+      DOMAIN: unresigned-fruticose-wallace.ngrok-free.app
       STATIC_DIR: /app/static
       PORT: "8000"
     depends_on:

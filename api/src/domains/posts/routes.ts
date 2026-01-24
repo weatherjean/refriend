@@ -35,29 +35,20 @@ interface PostsEnv {
 export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
   const routes = new Hono<PostsEnv>();
 
-  // GET /posts - Get recent posts (public feed)
-  routes.get("/posts", async (c) => {
-    const db = c.get("db");
-    const communityDb = c.get("communityDb");
-    const domain = c.get("domain");
-    const currentActor = c.get("actor");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
-
-    const result = await service.getRecentPosts(db, limit, before, currentActor?.id, domain, communityDb);
-    return c.json(result);
-  });
-
-  // GET /posts/hot - Get hot posts
+  // GET /posts/hot - Get hot posts from user's timeline
   routes.get("/posts/hot", async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
     const db = c.get("db");
     const communityDb = c.get("communityDb");
     const domain = c.get("domain");
-    const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
 
-    const posts = await service.getHotPosts(db, limit, currentActor?.id, domain, communityDb);
-    return c.json({ posts });
+    const result = await service.getTimelinePosts(db, actor.id, limit, undefined, "hot", domain, communityDb);
+    return c.json({ posts: result.posts });
   });
 
   // GET /timeline - Get authenticated user's timeline

@@ -861,34 +861,40 @@ export class DB {
     });
   }
 
-  async getHomeFeedWithActor(actorId: number, limit = 20, before?: number): Promise<PostWithActor[]> {
+  async getHomeFeedWithActor(actorId: number, limit = 20, before?: number, sort: 'new' | 'hot' = 'new'): Promise<PostWithActor[]> {
     return this.query(async (client) => {
-      // Combine posts from followed users AND approved posts from joined communities
+      // For hot sort, we don't use cursor pagination (just return top N by hot_score)
+      const orderBy = sort === 'hot' ? 'p.hot_score DESC, p.id DESC' : 'p.id DESC';
+      const useBefore = sort === 'new' && before;
+
+      // Use CTE to first get distinct post IDs, then join and order
       const baseQuery = `
-        SELECT DISTINCT ON (p.id) ${this.postWithActorSelect} FROM (
+        WITH timeline_posts AS (
           -- Posts from followed users (Person actors)
-          SELECT p.id FROM posts p
+          SELECT DISTINCT p.id FROM posts p
           JOIN follows f ON p.actor_id = f.following_id
           JOIN actors following_actor ON f.following_id = following_actor.id
           WHERE f.follower_id = $1 AND p.in_reply_to_id IS NULL
             AND following_actor.actor_type = 'Person'
-            ${before ? 'AND p.id < $2' : ''}
+            ${useBefore ? 'AND p.id < $2' : ''}
 
           UNION
 
           -- Approved posts from joined communities (Group actors)
-          SELECT p.id FROM posts p
+          SELECT DISTINCT p.id FROM posts p
           JOIN community_posts cp ON p.id = cp.post_id
           JOIN follows f ON cp.community_id = f.following_id
           WHERE f.follower_id = $1 AND cp.status = 'approved' AND p.in_reply_to_id IS NULL
-            ${before ? 'AND p.id < $2' : ''}
-        ) AS post_ids
-        JOIN posts p ON p.id = post_ids.id
+            ${useBefore ? 'AND p.id < $2' : ''}
+        )
+        SELECT ${this.postWithActorSelect}
+        FROM timeline_posts tp
+        JOIN posts p ON p.id = tp.id
         JOIN actors a ON p.actor_id = a.id
-        ORDER BY p.id DESC
-        LIMIT ${before ? '$3' : '$2'}
+        ORDER BY ${orderBy}
+        LIMIT ${useBefore ? '$3' : '$2'}
       `;
-      const params = before ? [actorId, before, limit] : [actorId, limit];
+      const params = useBefore ? [actorId, before, limit] : [actorId, limit];
       const result = await client.queryObject(baseQuery, params);
       return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
     });
