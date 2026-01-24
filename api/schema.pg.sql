@@ -294,3 +294,19 @@ CREATE TABLE IF NOT EXISTS community_mod_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_community_mod_logs_community ON community_mod_logs(community_id, created_at DESC);
+
+-- Migration: Add email column to users table
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT UNIQUE;
+
+-- Password reset tokens
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id SERIAL PRIMARY KEY,
+  token TEXT NOT NULL UNIQUE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_created ON password_reset_tokens(user_id, created_at DESC);

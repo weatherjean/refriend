@@ -31,6 +31,7 @@ import {
   getCachedTrendingUsers,
   setCachedTrendingUsers,
 } from "./cache.ts";
+import { sendPasswordResetEmail } from "./email.ts";
 import {
   getNotifications,
   getUnreadCount,
@@ -119,14 +120,25 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   // ============ Auth ============
 
   api.post("/auth/register", async (c) => {
-    const { username, password } = await c.req.json<{ username: string; password: string }>();
+    const { username, password, email } = await c.req.json<{ username: string; password: string; email: string }>();
 
-    if (!username || !password) {
-      return c.json({ error: "Username and password required" }, 400);
+    if (!username || !password || !email) {
+      return c.json({ error: "Username, email, and password required" }, 400);
     }
 
     if (!/^[a-z0-9_]+$/.test(username) || username.length > 50) {
       return c.json({ error: "Invalid username (lowercase alphanumeric and underscore only)" }, 400);
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return c.json({ error: "Invalid email address" }, 400);
+    }
+
+    // Password must be at least 8 characters
+    if (password.length < 8) {
+      return c.json({ error: "Password must be at least 8 characters" }, 400);
     }
 
     const db = c.get("db");
@@ -136,8 +148,13 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       return c.json({ error: "Username taken" }, 400);
     }
 
+    // Check if email is already in use
+    if (await db.getUserByEmail(email)) {
+      return c.json({ error: "Email already in use" }, 400);
+    }
+
     const passwordHash = await hashPassword(password);
-    const user = await db.createUser(username, passwordHash);
+    const user = await db.createUser(username, passwordHash, email);
 
     // Create actor for the user
     const actorUri = `https://${domain}/users/${username}`;
@@ -167,11 +184,11 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
   });
 
   api.post("/auth/login", async (c) => {
-    const { username, password } = await c.req.json<{ username: string; password: string }>();
+    const { email, password } = await c.req.json<{ email: string; password: string }>();
     const db = c.get("db");
     const domain = c.get("domain");
 
-    const user = await db.getUserByUsername(username);
+    const user = await db.getUserByEmail(email);
     if (!user || !(await verifyPassword(password, user.password_hash))) {
       return c.json({ error: "Invalid credentials" }, 401);
     }
@@ -239,6 +256,85 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     await db.updateUserPassword(user.id, newHash);
 
     return c.json({ ok: true });
+  });
+
+  // POST /auth/forgot-password - Request password reset email
+  api.post("/auth/forgot-password", async (c) => {
+    const { email } = await c.req.json<{ email: string }>();
+    const db = c.get("db");
+
+    // Always return success to prevent email enumeration
+    const successResponse = { ok: true, message: "If an account with that email exists, a reset link has been sent." };
+
+    if (!email) {
+      return c.json(successResponse);
+    }
+
+    const user = await db.getUserByEmail(email);
+    if (!user) {
+      // Don't reveal that the email doesn't exist
+      return c.json(successResponse);
+    }
+
+    // Rate limiting: check last reset request time (60 second minimum)
+    const lastRequest = await db.getLastResetRequestTime(user.id);
+    if (lastRequest) {
+      const timeSinceLastRequest = Date.now() - new Date(lastRequest).getTime();
+      if (timeSinceLastRequest < 60 * 1000) {
+        const secondsRemaining = Math.ceil((60 * 1000 - timeSinceLastRequest) / 1000);
+        return c.json({ error: `Please wait ${secondsRemaining} seconds before requesting another reset email` }, 429);
+      }
+    }
+
+    // Create reset token and send email
+    const token = await db.createPasswordResetToken(user.id);
+    const emailSent = await sendPasswordResetEmail(email, token);
+
+    if (!emailSent) {
+      console.error(`[Auth] Failed to send password reset email to ${email}`);
+      // Still return success to prevent enumeration, but log the error
+    }
+
+    return c.json(successResponse);
+  });
+
+  // GET /auth/reset-password/:token - Validate reset token
+  api.get("/auth/reset-password/:token", async (c) => {
+    const token = c.req.param("token");
+    const db = c.get("db");
+
+    const resetToken = await db.getPasswordResetToken(token);
+    if (!resetToken) {
+      return c.json({ error: "Invalid or expired reset link" }, 400);
+    }
+
+    return c.json({ ok: true, valid: true });
+  });
+
+  // POST /auth/reset-password - Set new password with reset token
+  api.post("/auth/reset-password", async (c) => {
+    const { token, password } = await c.req.json<{ token: string; password: string }>();
+    const db = c.get("db");
+
+    if (!token || !password) {
+      return c.json({ error: "Token and password required" }, 400);
+    }
+
+    if (password.length < 8) {
+      return c.json({ error: "Password must be at least 8 characters" }, 400);
+    }
+
+    const resetToken = await db.getPasswordResetToken(token);
+    if (!resetToken) {
+      return c.json({ error: "Invalid or expired reset link" }, 400);
+    }
+
+    // Update password and mark token as used
+    const passwordHash = await hashPassword(password);
+    await db.updateUserPassword(resetToken.user_id, passwordHash);
+    await db.markTokenUsed(token);
+
+    return c.json({ ok: true, message: "Password updated successfully" });
   });
 
   // ============ Profile ============

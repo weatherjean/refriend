@@ -4,7 +4,17 @@ import { Pool, PoolClient } from "postgres";
 export interface User {
   id: number;
   username: string;
+  email: string | null;
   password_hash: string;
+  created_at: string;
+}
+
+export interface PasswordResetToken {
+  id: number;
+  token: string;
+  user_id: number;
+  expires_at: string;
+  used_at: string | null;
   created_at: string;
 }
 
@@ -154,10 +164,10 @@ export class DB {
 
   // ============ Users ============
 
-  async createUser(username: string, passwordHash: string): Promise<User> {
+  async createUser(username: string, passwordHash: string, email?: string): Promise<User> {
     return this.query(async (client) => {
       const result = await client.queryObject<User>`
-        INSERT INTO users (username, password_hash) VALUES (${username}, ${passwordHash})
+        INSERT INTO users (username, password_hash, email) VALUES (${username}, ${passwordHash}, ${email ?? null})
         RETURNING *
       `;
       return result.rows[0];
@@ -181,6 +191,67 @@ export class DB {
   async updateUserPassword(userId: number, passwordHash: string): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`UPDATE users SET password_hash = ${passwordHash} WHERE id = ${userId}`;
+    });
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<User>`SELECT * FROM users WHERE email = ${email}`;
+      return result.rows[0] || null;
+    });
+  }
+
+  // ============ Password Reset Tokens ============
+
+  async createPasswordResetToken(userId: number): Promise<string> {
+    return this.query(async (client) => {
+      // Generate a secure random token (64 chars)
+      const tokenBytes = crypto.getRandomValues(new Uint8Array(48));
+      const token = btoa(String.fromCharCode(...tokenBytes))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+
+      // Token expires in 1 hour
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+      await client.queryObject`
+        INSERT INTO password_reset_tokens (token, user_id, expires_at)
+        VALUES (${token}, ${userId}, ${expiresAt})
+      `;
+      return token;
+    });
+  }
+
+  async getPasswordResetToken(token: string): Promise<PasswordResetToken | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<PasswordResetToken>`
+        SELECT * FROM password_reset_tokens
+        WHERE token = ${token}
+          AND expires_at > NOW()
+          AND used_at IS NULL
+      `;
+      return result.rows[0] || null;
+    });
+  }
+
+  async markTokenUsed(token: string): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        UPDATE password_reset_tokens SET used_at = NOW() WHERE token = ${token}
+      `;
+    });
+  }
+
+  async getLastResetRequestTime(userId: number): Promise<Date | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ created_at: Date }>`
+        SELECT created_at FROM password_reset_tokens
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `;
+      return result.rows[0]?.created_at || null;
     });
   }
 

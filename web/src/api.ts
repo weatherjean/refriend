@@ -159,21 +159,36 @@ export const media = {
 // Auth
 export const auth = {
   me: () => fetchJson<{ user: User | null; actor: Actor | null }>('/auth/me'),
-  login: (username: string, password: string) =>
+  login: (email: string, password: string) =>
     fetchJson<{ user: User; actor: Actor }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ email, password }),
     }),
-  register: (username: string, password: string) =>
+  register: (username: string, email: string, password: string) =>
     fetchJson<{ user: User; actor: Actor }>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, email, password }),
     }),
   logout: () => fetchJson<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
   changePassword: (currentPassword: string, newPassword: string) =>
     fetchJson<{ ok: boolean }>('/auth/password', {
       method: 'PUT',
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
+  forgotPassword: (email: string) =>
+    fetchJson<{ ok: boolean; message: string }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+      silent: true, // Don't show global error for rate limiting
+    }),
+  validateResetToken: (token: string) =>
+    fetchJson<{ ok: boolean; valid: boolean }>(`/auth/reset-password/${token}`, {
+      silent: true,
+    }),
+  resetPassword: (token: string, password: string) =>
+    fetchJson<{ ok: boolean; message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
     }),
 };
 

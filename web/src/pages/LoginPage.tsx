@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export function LoginPage() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,7 +16,7 @@ export function LoginPage() {
     setLoading(true);
 
     try {
-      await login(username, password);
+      await login(email, password);
       navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -35,12 +35,12 @@ export function LoginPage() {
 
       <form onSubmit={handleSubmit}>
         <div className="mb-3">
-          <label className="form-label">Username</label>
+          <label className="form-label">Email</label>
           <input
-            type="text"
+            type="email"
             className="form-control"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             required
           />
         </div>
@@ -54,6 +54,9 @@ export function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
+          <div className="form-text">
+            <Link to="/forgot-password">Forgot password?</Link>
+          </div>
         </div>
 
         <button type="submit" className="btn btn-primary w-100" disabled={loading}>

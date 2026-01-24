@@ -2,6 +2,8 @@ import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { NewPostPage } from './pages/NewPostPage';
 import { PostPage } from './pages/PostPage';
 import { ActorPage } from './pages/ActorPage';
@@ -21,6 +23,8 @@ import { useModalStack } from './context/ModalStackContext';
 export const modalRoutes = [
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
+  { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/reset-password/:token', element: <ResetPasswordPage /> },
   { path: '/search', element: <SearchPage /> },
   { path: '/explore', element: <ExplorePage /> },
   { path: '/notifications', element: <NotificationsPage /> },

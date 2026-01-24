@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 
 export function RegisterPage() {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -15,20 +16,27 @@ export function RegisterPage() {
     e.preventDefault();
     setError('');
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
 
     setLoading(true);
 
     try {
-      await register(username, password);
+      await register(username, email, password);
       navigate('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
@@ -48,16 +56,33 @@ export function RegisterPage() {
       <form onSubmit={handleSubmit}>
         <div className="mb-3">
           <label className="form-label">Username</label>
+          <div className="input-group">
+            <span className="input-group-text">@</span>
+            <input
+              type="text"
+              className="form-control"
+              value={username}
+              onChange={(e) => setUsername(e.target.value.toLowerCase())}
+              pattern="[a-z0-9_]+"
+              title="Lowercase letters, numbers, and underscores only"
+              required
+            />
+          </div>
+          <div className="form-text">
+            This will be your permanent handle and cannot be changed.
+          </div>
+        </div>
+
+        <div className="mb-3">
+          <label className="form-label">Email</label>
           <input
-            type="text"
+            type="email"
             className="form-control"
-            value={username}
-            onChange={(e) => setUsername(e.target.value.toLowerCase())}
-            pattern="[a-z0-9_]+"
-            title="Lowercase letters, numbers, and underscores only"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             required
           />
-          <div className="form-text">Lowercase letters, numbers, and underscores only</div>
+          <div className="form-text">Used for login and password recovery</div>
         </div>
 
         <div className="mb-3">
@@ -67,9 +92,10 @@ export function RegisterPage() {
             className="form-control"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            minLength={6}
+            minLength={8}
             required
           />
+          <div className="form-text">Minimum 8 characters</div>
         </div>
 
         <div className="mb-3">
