@@ -672,6 +672,7 @@ export class DB {
       addressed_to: (row.addressed_to as string[]) || [],
       likes_count: row.likes_count as number,
       sensitive: row.sensitive as boolean,
+      link_preview: row.link_preview as LinkPreview | null,
       created_at: String(row.created_at),
       author: {
         id: row.author_id as number,
@@ -692,7 +693,7 @@ export class DB {
   }
 
   private readonly postWithActorSelect = `
-    p.id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.addressed_to, p.likes_count, p.sensitive, p.created_at,
+    p.id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.addressed_to, p.likes_count, p.sensitive, p.link_preview, p.created_at,
     a.id as author_id, a.public_id as author_public_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
     a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
     a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,

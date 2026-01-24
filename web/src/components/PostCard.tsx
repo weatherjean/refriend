@@ -42,6 +42,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
   const [showSensitive, setShowSensitive] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [linkPreviewLightboxOpen, setLinkPreviewLightboxOpen] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -276,19 +277,21 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
 
             {/* Link Preview Card */}
             {post.link_preview && (
-              <a
-                href={post.link_preview.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="link-preview-card"
-                onClick={(e) => e.stopPropagation()}
-              >
+              <div className="link-preview-card" onClick={(e) => e.stopPropagation()}>
                 {post.link_preview.image && (
-                  <div className="link-preview-image">
+                  <div
+                    className="link-preview-image"
+                    onClick={() => setLinkPreviewLightboxOpen(true)}
+                  >
                     <img src={post.link_preview.image} alt="" />
                   </div>
                 )}
-                <div className="link-preview-content">
+                <a
+                  href={post.link_preview.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="link-preview-content"
+                >
                   {post.link_preview.title && (
                     <div className="link-preview-title">{post.link_preview.title}</div>
                   )}
@@ -299,8 +302,18 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
                     <i className="bi bi-link-45deg me-1"></i>
                     {new URL(post.link_preview.url).hostname}
                   </div>
-                </div>
-              </a>
+                </a>
+              </div>
+            )}
+
+            {/* Link Preview Lightbox */}
+            {post.link_preview?.image && (
+              <ImageLightbox
+                attachments={[{ id: 0, url: post.link_preview.image, media_type: 'image/jpeg', alt_text: post.link_preview.title || null, width: null, height: null }]}
+                initialIndex={0}
+                isOpen={linkPreviewLightboxOpen}
+                onClose={() => setLinkPreviewLightboxOpen(false)}
+              />
             )}
           </>
         )}
