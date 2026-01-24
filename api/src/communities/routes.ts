@@ -8,6 +8,7 @@ import { announcePost, getCommunityActorUri } from "./federation.ts";
 import { enrichPostsBatch, sanitizeActor as sanitizeActorApi } from "../api.ts";
 import { processActivity } from "../activities.ts";
 import { deleteMedia } from "../storage.ts";
+import { getCachedTrendingCommunities, setCachedTrendingCommunities } from "../cache.ts";
 
 type Env = {
   Variables: {
@@ -139,6 +140,30 @@ export function createCommunityRoutes(
     return c.json({
       communities: communities.map(sanitizeCommunity),
     });
+  });
+
+  // Rising communities (most new members in last 24h) - for sidebar
+  routes.get("/trending", async (c) => {
+    const cached = await getCachedTrendingCommunities();
+    if (cached) {
+      return c.json(cached);
+    }
+
+    const communityDb = c.get("communityDb");
+    const communities = await communityDb.getTrendingCommunities(5);
+    const result = {
+      communities: communities.map(community => ({
+        id: community.public_id,
+        handle: community.handle,
+        name: community.name,
+        avatar_url: community.avatar_url,
+        member_count: community.member_count || 0,
+        new_members: community.new_members,
+      })),
+    };
+
+    await setCachedTrendingCommunities(result);
+    return c.json(result);
   });
 
   // Create a new community

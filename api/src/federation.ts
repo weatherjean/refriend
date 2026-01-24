@@ -98,12 +98,15 @@ federation
 
     const keys = await ctx.getActorKeyPairs(identifier);
 
-    // Helper for icon
-    const icon = actor.avatar_url ? new Image({
-      url: new URL(actor.avatar_url),
-      mediaType: actor.avatar_url.includes('.webp') ? "image/webp" :
-                 actor.avatar_url.includes('.svg') || actor.avatar_url.includes('dicebear') ? "image/svg+xml" :
-                 actor.avatar_url.includes('.png') ? "image/png" : "image/jpeg"
+    // Helper for icon - handle both absolute and relative URLs
+    const avatarUrl = actor.avatar_url
+      ? (actor.avatar_url.startsWith('/') ? `https://${DOMAIN}${actor.avatar_url}` : actor.avatar_url)
+      : null;
+    const icon = avatarUrl ? new Image({
+      url: new URL(avatarUrl),
+      mediaType: avatarUrl.includes('.webp') ? "image/webp" :
+                 avatarUrl.includes('.svg') || avatarUrl.includes('dicebear') ? "image/svg+xml" :
+                 avatarUrl.includes('.png') ? "image/png" : "image/jpeg"
     }) : undefined;
 
     // Return Group for communities, Person for users

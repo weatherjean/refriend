@@ -4,9 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import { useFeed } from '../context/FeedContext';
 import { useScrollLockEffect } from '../context/ScrollLockContext';
 import { getUsername } from '../utils';
-import { tags, notifications as notificationsApi } from '../api';
+import { tags, notifications as notificationsApi, communities, type TrendingCommunity } from '../api';
 import { TagBadge } from './TagBadge';
-import { Avatar } from './Avatar';
+import { Avatar, CommunityAvatar } from './Avatar';
 import { ToastContainer } from './ToastContainer';
 
 interface LayoutProps {
@@ -19,6 +19,7 @@ export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
+  const [trendingCommunities, setTrendingCommunities] = useState<TrendingCommunity[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -35,6 +36,9 @@ export function Layout({ children }: LayoutProps) {
   useEffect(() => {
     tags.getPopular()
       .then(({ tags }) => setPopularTags(tags))
+      .catch(() => {});
+    communities.getTrending()
+      .then(({ communities }) => setTrendingCommunities(communities))
       .catch(() => {});
   }, []);
 
@@ -171,6 +175,36 @@ export function Layout({ children }: LayoutProps) {
                   {popularTags.map((tag) => (
                     <TagBadge key={tag.name} tag={tag.name} onClick={() => setMobileMenuOpen(false)} />
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Rising Communities */}
+          {trendingCommunities.length > 0 && (
+            <div className="card mb-4">
+              <div className="card-body py-2 px-3">
+                <h6 className="card-title mb-2 small text-muted">Rising</h6>
+                <div className="d-flex flex-column">
+                  {trendingCommunities.map((community) => {
+                    const slug = community.handle.replace(/^@/, '').split('@')[0];
+                    return (
+                      <Link
+                        key={community.id}
+                        to={`/c/${slug}`}
+                        className="d-flex align-items-center text-decoration-none text-reset py-1"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        <CommunityAvatar
+                          src={community.avatar_url}
+                          size={32}
+                          className="flex-shrink-0"
+                        />
+                        <span className="ms-2 text-truncate" style={{ fontSize: '0.9rem' }}>{community.name || slug}</span>
+                        <small className="text-muted ms-auto flex-shrink-0">+{community.new_members}</small>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             </div>

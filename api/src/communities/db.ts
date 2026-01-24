@@ -874,6 +874,35 @@ export class CommunityDB {
     });
   }
 
+  // Get trending communities (most new members in last 24h)
+  async getTrendingCommunities(limit = 3): Promise<(Community & { new_members: number })[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Community & { new_members: bigint }>`
+        SELECT a.*, cs.require_approval, cs.created_by,
+               (SELECT COUNT(*) FROM follows WHERE following_id = a.id) as member_count,
+               COUNT(f.follower_id) as new_members
+        FROM actors a
+        LEFT JOIN community_settings cs ON a.id = cs.actor_id
+        JOIN follows f ON f.following_id = a.id
+        WHERE f.created_at > NOW() - INTERVAL '24 hours'
+          AND a.actor_type = 'Group'
+        GROUP BY a.id, cs.require_approval, cs.created_by
+        ORDER BY new_members DESC
+        LIMIT ${limit}
+      `;
+      return result.rows.map(row => ({
+        ...row,
+        member_count: Number((row as Record<string, unknown>).member_count || 0),
+        new_members: Number(row.new_members),
+        settings: row.require_approval !== undefined ? {
+          actor_id: row.id,
+          require_approval: row.require_approval as unknown as boolean,
+          created_by: row.created_by as unknown as number | null,
+        } : undefined,
+      })) as (Community & { new_members: number })[];
+    });
+  }
+
   // Search communities
   async searchCommunities(query: string, limit = 20): Promise<Community[]> {
     return this.query(async (client) => {

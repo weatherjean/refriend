@@ -804,8 +804,9 @@ async function processFollow(
   await createNotification(db, 'follow', followerActor.id, targetActor.id);
   console.log(`[Follow] ${followerActor.handle} -> ${targetActor.handle}`);
 
-  // For inbound: if target is local, send Accept
-  if (direction === "inbound" && targetActor.user_id && followerActor.inbox_url) {
+  // For inbound: if target is local (user or community), send Accept
+  const isLocalTarget = targetActor.user_id || targetActor.actor_type === 'Group';
+  if (direction === "inbound" && isLocalTarget && followerActor.inbox_url) {
     const username = targetActor.handle.match(/@([^@]+)@/)?.[1];
     if (username) {
       const accept = new Accept({

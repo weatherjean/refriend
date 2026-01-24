@@ -445,6 +445,15 @@ export interface PaginatedCommunityPosts {
   next_cursor: number | null;
 }
 
+export interface TrendingCommunity {
+  id: string;
+  handle: string;
+  name: string | null;
+  avatar_url: string | null;
+  member_count: number;
+  new_members: number;
+}
+
 export const communities = {
   // List and search
   list: (params?: PaginationParams) => {
@@ -458,6 +467,8 @@ export const communities = {
     fetchJson<{ communities: Community[] }>(`/communities/search?q=${encodeURIComponent(q)}&limit=${limit}`),
   getJoined: (limit = 50) =>
     fetchJson<{ communities: Community[] }>(`/communities/joined?limit=${limit}`),
+  getTrending: () =>
+    fetchJson<{ communities: TrendingCommunity[] }>(`/communities/trending`),
 
   // CRUD
   create: (name: string, bio?: string, requireApproval?: boolean) =>

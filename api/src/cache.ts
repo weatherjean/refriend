@@ -63,3 +63,18 @@ export async function setCachedTrendingUsers(value: unknown): Promise<void> {
   if (!kv) return;
   await kv.set(["trending", "users"], value, { expireIn: TRENDING_TTL_MS });
 }
+
+// ============ Trending Communities Cache ============
+
+const TRENDING_COMMUNITIES_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+export async function getCachedTrendingCommunities(): Promise<unknown | null> {
+  if (!kv) return null;
+  const entry = await kv.get(["trending", "communities"]);
+  return entry.value;
+}
+
+export async function setCachedTrendingCommunities(value: unknown): Promise<void> {
+  if (!kv) return;
+  await kv.set(["trending", "communities"], value, { expireIn: TRENDING_COMMUNITIES_TTL_MS });
+}

@@ -39,17 +39,40 @@ export async function announcePost(
   postUri: string
 ): Promise<void> {
   const domain = getDomain();
-  console.log(`[Community] Would announce post ${postUri} from community ${communityName}`);
+  console.log(`[Community] Announcing post ${postUri} from community ${communityName}`);
 
-  // Get community followers and send Announce to each
   const community = await communityDb.getCommunityByName(communityName);
-  if (!community) return;
+  if (!community) {
+    console.error(`[Community] Community not found: ${communityName}`);
+    return;
+  }
 
-  const members = await communityDb.getMembers(community.id, 1000);
-  console.log(`[Community] Would send Announce to ${members.length} members of ${communityName}`);
+  // Create the Announce activity
+  const announceId = new URL(`https://${domain}/users/${communityName}#announces/${crypto.randomUUID()}`);
+  const announce = new Announce({
+    id: announceId,
+    actor: ctx.getActorUri(communityName),
+    object: new URL(postUri),
+    to: PUBLIC_COLLECTION,
+  });
 
-  // TODO: Actually send Announce activity to followers
-  // This requires using ctx.sendActivity() with proper signing
+  // Send to all followers of the community
+  try {
+    await ctx.sendActivity(
+      { identifier: communityName },
+      "followers",
+      announce,
+      { preferSharedInbox: true }
+    );
+    console.log(`[Community] Sent Announce to followers of ${communityName}`);
+  } catch (e) {
+    const errMsg = String(e);
+    if (errMsg.includes("Localhost") || errMsg.includes("localhost")) {
+      console.log(`[Community] Skipped Announce (localhost): ${announceId.href}`);
+    } else {
+      console.error(`[Community] Failed to send Announce:`, e);
+    }
+  }
 }
 
 /**
