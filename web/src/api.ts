@@ -309,6 +309,11 @@ export const posts = {
     fetchJson<{ ok: boolean; pinned: boolean }>(`/posts/${id}/pin`, {
       method: 'DELETE',
     }),
+  report: (id: string, reason: string, details?: string) =>
+    fetchJson<{ ok: boolean }>(`/posts/${id}/report`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, details }),
+    }),
 };
 
 // Follows

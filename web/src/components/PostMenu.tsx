@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { SuggestToCommunityModal } from './SuggestToCommunityModal';
+import { ReportPostModal } from './ReportPostModal';
 
 interface PostMenuProps {
   postId: string;
+  isOwnPost?: boolean;
 }
 
-export function PostMenu({ postId }: PostMenuProps) {
+export function PostMenu({ postId, isOwnPost = false }: PostMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showSuggestModal, setShowSuggestModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,6 +37,12 @@ export function PostMenu({ postId }: PostMenuProps) {
     setShowSuggestModal(true);
   };
 
+  const handleReportClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsOpen(false);
+    setShowReportModal(true);
+  };
+
   return (
     <div className="post-menu" ref={menuRef}>
       <button
@@ -53,6 +62,15 @@ export function PostMenu({ postId }: PostMenuProps) {
             <i className="bi bi-send-plus"></i>
             <span>Suggest to community</span>
           </button>
+          {!isOwnPost && (
+            <button
+              className="post-menu-item post-menu-item-danger"
+              onClick={handleReportClick}
+            >
+              <i className="bi bi-flag"></i>
+              <span>Report post</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -60,6 +78,13 @@ export function PostMenu({ postId }: PostMenuProps) {
         <SuggestToCommunityModal
           postId={postId}
           onClose={() => setShowSuggestModal(false)}
+        />
+      )}
+
+      {showReportModal && (
+        <ReportPostModal
+          postId={postId}
+          onClose={() => setShowReportModal(false)}
         />
       )}
     </div>

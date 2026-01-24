@@ -1412,6 +1412,46 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     return c.json({ ok: true, pinned: false });
   });
 
+  // POST /posts/:id/report - Report a post
+  api.post("/posts/:id/report", async (c) => {
+    const publicId = c.req.param("id");
+    const user = c.get("user");
+    const actor = c.get("actor");
+    const db = c.get("db");
+
+    if (!user || !actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const { reason, details } = await c.req.json<{ reason: string; details?: string }>();
+
+    const validReasons = ['spam', 'harassment', 'hate_speech', 'violence', 'misinformation', 'other'];
+    if (!reason || !validReasons.includes(reason)) {
+      return c.json({ error: "Invalid reason" }, 400);
+    }
+
+    const post = await db.getPostByPublicId(publicId);
+    if (!post) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    // Can't report your own post
+    if (post.actor_id === actor.id) {
+      return c.json({ error: "Cannot report your own post" }, 400);
+    }
+
+    try {
+      await db.createReport(post.id, actor.id, reason, details || null);
+      return c.json({ ok: true });
+    } catch (err) {
+      // Handle unique constraint violation (already reported)
+      if (err instanceof Error && err.message.includes('unique')) {
+        return c.json({ error: "You have already reported this post" }, 400);
+      }
+      throw err;
+    }
+  });
+
   // GET /users/:username/pinned - Get pinned posts for a user
   api.get("/users/:username/pinned", async (c) => {
     const username = c.req.param("username");

@@ -441,7 +441,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
             </button>
           )}
 
-          {user && <PostMenu postId={post.id} />}
+          {user && <PostMenu postId={post.id} isOwnPost={post.author?.id === actor?.id} />}
         </div>
       </div>
     </div>

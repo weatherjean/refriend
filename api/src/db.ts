@@ -1584,4 +1584,15 @@ export class DB {
       return Number(result.rows[0].count);
     });
   }
+
+  // ============ Reports ============
+
+  async createReport(postId: number, reporterId: number, reason: string, details: string | null): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        INSERT INTO reports (post_id, reporter_id, reason, details)
+        VALUES (${postId}, ${reporterId}, ${reason}, ${details})
+      `;
+    });
+  }
 }

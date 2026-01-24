@@ -994,6 +994,18 @@ body {
   &:hover {
     background: var(--bs-tertiary-bg);
   }
+
+  &.post-menu-item-danger {
+    color: #f87171;
+
+    i {
+      color: #f87171;
+    }
+
+    &:hover {
+      background: rgba(248, 113, 113, 0.1);
+    }
+  }
 }
 
 // Suggest to community modal
@@ -1136,6 +1148,137 @@ body {
 .suggest-modal-item-members {
   color: #71717a;
   font-size: 0.75rem;
+}
+
+// Report modal
+.report-modal {
+  max-width: 420px;
+}
+
+.report-modal-intro {
+  color: #a1a1aa;
+  font-size: 0.9375rem;
+  margin: 0.5rem 0.75rem 1rem;
+}
+
+.report-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0.5rem;
+}
+
+.report-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+
+  input[type="radio"] {
+    margin-top: 3px;
+    accent-color: var(--bs-primary);
+  }
+
+  &:hover {
+    background: var(--bs-tertiary-bg);
+  }
+
+  &.selected {
+    background: rgba(59, 130, 246, 0.1);
+  }
+}
+
+.report-reason-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report-reason-label {
+  color: #e5e5e5;
+  font-weight: 500;
+  font-size: 0.9375rem;
+}
+
+.report-reason-desc {
+  color: #71717a;
+  font-size: 0.8125rem;
+}
+
+.report-details {
+  margin: 1rem 0.75rem 0.5rem;
+
+  label {
+    display: block;
+    color: #a1a1aa;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+  }
+
+  textarea {
+    width: 100%;
+    background: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    padding: 0.75rem;
+    color: #e5e5e5;
+    font-size: 0.875rem;
+    resize: vertical;
+
+    &::placeholder {
+      color: #71717a;
+    }
+
+    &:focus {
+      outline: none;
+      border-color: var(--bs-primary);
+    }
+  }
+}
+
+.report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-top: 1px solid var(--bs-border-color);
+  margin-top: 0.5rem;
+
+  .btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: 8px;
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--bs-border-color);
+    color: #a1a1aa;
+
+    &:hover {
+      background: var(--bs-tertiary-bg);
+      color: #e5e5e5;
+    }
+  }
+
+  .btn-danger {
+    background: #dc2626;
+    border: none;
+    color: white;
+
+    &:hover:not(:disabled) {
+      background: #b91c1c;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
 }
 
 // Moderation logs
