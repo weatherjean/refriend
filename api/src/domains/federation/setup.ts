@@ -153,61 +153,35 @@ federation
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return [];
 
+    // Must be a local user or community
+    if (!actor.user_id && actor.actor_type !== "Group") return [];
+
     const keyPairs: CryptoKeyPair[] = [];
 
-    // For users, use user_id based keys; for communities, use actor_id based keys
-    if (actor.user_id) {
-      const userId = actor.user_id;
-
-      let rsaKey = await db.getKeyPair(userId, "RSASSA-PKCS1-v1_5");
-      if (!rsaKey) {
-        const generated = await generateCryptoKeyPair("RSASSA-PKCS1-v1_5");
-        const privateJwk = await exportJwk(generated.privateKey);
-        const publicJwk = await exportJwk(generated.publicKey);
-        rsaKey = await db.saveKeyPair(userId, "RSASSA-PKCS1-v1_5", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
-      }
-      keyPairs.push({
-        privateKey: await importJwk(JSON.parse(rsaKey.private_key), "private"),
-        publicKey: await importJwk(JSON.parse(rsaKey.public_key), "public"),
-      });
-
-      let edKey = await db.getKeyPair(userId, "Ed25519");
-      if (!edKey) {
-        const generated = await generateCryptoKeyPair("Ed25519");
-        const privateJwk = await exportJwk(generated.privateKey);
-        const publicJwk = await exportJwk(generated.publicKey);
-        edKey = await db.saveKeyPair(userId, "Ed25519", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
-      }
-      keyPairs.push({
-        privateKey: await importJwk(JSON.parse(edKey.private_key), "private"),
-        publicKey: await importJwk(JSON.parse(edKey.public_key), "public"),
-      });
-    } else if (actor.actor_type === "Group") {
-      // Community - use actor_id based keys
-      let rsaKey = await db.getKeyPairByActorId(actor.id, "RSASSA-PKCS1-v1_5");
-      if (!rsaKey) {
-        const generated = await generateCryptoKeyPair("RSASSA-PKCS1-v1_5");
-        const privateJwk = await exportJwk(generated.privateKey);
-        const publicJwk = await exportJwk(generated.publicKey);
-        rsaKey = await db.saveKeyPairByActorId(actor.id, "RSASSA-PKCS1-v1_5", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
-      }
-      keyPairs.push({
-        privateKey: await importJwk(JSON.parse(rsaKey.private_key), "private"),
-        publicKey: await importJwk(JSON.parse(rsaKey.public_key), "public"),
-      });
-
-      let edKey = await db.getKeyPairByActorId(actor.id, "Ed25519");
-      if (!edKey) {
-        const generated = await generateCryptoKeyPair("Ed25519");
-        const privateJwk = await exportJwk(generated.privateKey);
-        const publicJwk = await exportJwk(generated.publicKey);
-        edKey = await db.saveKeyPairByActorId(actor.id, "Ed25519", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
-      }
-      keyPairs.push({
-        privateKey: await importJwk(JSON.parse(edKey.private_key), "private"),
-        publicKey: await importJwk(JSON.parse(edKey.public_key), "public"),
-      });
+    // Unified: always use actor_id based keys
+    let rsaKey = await db.getKeyPairByActorId(actor.id, "RSASSA-PKCS1-v1_5");
+    if (!rsaKey) {
+      const generated = await generateCryptoKeyPair("RSASSA-PKCS1-v1_5");
+      const privateJwk = await exportJwk(generated.privateKey);
+      const publicJwk = await exportJwk(generated.publicKey);
+      rsaKey = await db.saveKeyPairByActorId(actor.id, "RSASSA-PKCS1-v1_5", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
     }
+    keyPairs.push({
+      privateKey: await importJwk(JSON.parse(rsaKey.private_key), "private"),
+      publicKey: await importJwk(JSON.parse(rsaKey.public_key), "public"),
+    });
+
+    let edKey = await db.getKeyPairByActorId(actor.id, "Ed25519");
+    if (!edKey) {
+      const generated = await generateCryptoKeyPair("Ed25519");
+      const privateJwk = await exportJwk(generated.privateKey);
+      const publicJwk = await exportJwk(generated.publicKey);
+      edKey = await db.saveKeyPairByActorId(actor.id, "Ed25519", JSON.stringify(privateJwk), JSON.stringify(publicJwk));
+    }
+    keyPairs.push({
+      privateKey: await importJwk(JSON.parse(edKey.private_key), "private"),
+      publicKey: await importJwk(JSON.parse(edKey.public_key), "public"),
+    });
 
     return keyPairs;
   })

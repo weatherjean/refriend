@@ -34,7 +34,7 @@ function sanitizeCommunity(community: Community) {
     avatar_url: community.avatar_url,
     url: community.url,
     member_count: community.member_count || 0,
-    require_approval: community.settings?.require_approval || false,
+    require_approval: community.require_approval || false,
     created_at: formatDate(community.created_at),
   };
 }

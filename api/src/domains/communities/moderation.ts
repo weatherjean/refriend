@@ -33,7 +33,7 @@ export class CommunityModeration {
       return { allowed: false, reason: "Community not found", requiresApproval: false };
     }
 
-    const requiresApproval = community.settings?.require_approval ?? false;
+    const requiresApproval = community.require_approval ?? false;
 
     // Admins bypass approval
     const isAdmin = await this.communityDb.isAdmin(communityId, actorId);
@@ -116,7 +116,7 @@ export class CommunityModeration {
     if (!community) return false;
 
     // If community doesn't require approval, auto-approve
-    if (!community.settings?.require_approval) {
+    if (!community.require_approval) {
       return true;
     }
 

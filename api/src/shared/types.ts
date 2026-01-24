@@ -37,6 +37,9 @@ export interface Actor {
   url: string | null;
   user_id: number | null;
   actor_type: "Person" | "Group";
+  follower_count: number;
+  require_approval: boolean | null;  // null for Person actors
+  created_by: number | null;  // creator actor_id for communities
   created_at: string;
 }
 
@@ -79,6 +82,7 @@ export interface Post {
   content: string;
   url: string | null;
   in_reply_to_id: number | null;
+  community_id: number | null;  // community actor_id for community posts/replies
   addressed_to: string[];  // ActivityPub to/cc recipients (actor URIs)
   likes_count: number;
   sensitive: boolean;

@@ -27,10 +27,10 @@ CREATE TABLE IF NOT EXISTS actors (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Keys: Cryptographic key pairs for local actors
+-- Keys: Cryptographic key pairs for local actors (unified to use actor_id only)
 CREATE TABLE IF NOT EXISTS keys (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, -- deprecated, migrated to actor_id
   actor_id INTEGER REFERENCES actors(id) ON DELETE CASCADE,
   type TEXT NOT NULL CHECK (type IN ('RSASSA-PKCS1-v1_5', 'Ed25519')),
   private_key TEXT NOT NULL,
@@ -165,12 +165,30 @@ CREATE TABLE IF NOT EXISTS jobs (
 ALTER TABLE actors ADD COLUMN IF NOT EXISTS actor_type TEXT NOT NULL DEFAULT 'Person'
   CHECK (actor_type IN ('Person', 'Group'));
 
--- Community settings (extends actors for Group type)
-CREATE TABLE IF NOT EXISTS community_settings (
-  actor_id INTEGER PRIMARY KEY REFERENCES actors(id) ON DELETE CASCADE,
-  require_approval BOOLEAN NOT NULL DEFAULT false,
-  created_by INTEGER REFERENCES actors(id) ON DELETE SET NULL
-);
+-- Follower count for efficient member_count queries (maintained by trigger)
+ALTER TABLE actors ADD COLUMN IF NOT EXISTS follower_count INTEGER NOT NULL DEFAULT 0;
+
+-- Community settings merged into actors table (for Group type)
+ALTER TABLE actors ADD COLUMN IF NOT EXISTS require_approval BOOLEAN DEFAULT false;
+ALTER TABLE actors ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES actors(id) ON DELETE SET NULL;
+
+-- Trigger to maintain follower_count
+CREATE OR REPLACE FUNCTION update_follower_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE actors SET follower_count = follower_count + 1 WHERE id = NEW.following_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE actors SET follower_count = GREATEST(0, follower_count - 1) WHERE id = OLD.following_id;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_update_follower_count ON follows;
+CREATE TRIGGER trigger_update_follower_count
+AFTER INSERT OR DELETE ON follows
+FOR EACH ROW EXECUTE FUNCTION update_follower_count();
 
 -- Community admins (owners and admins - followers are regular members)
 CREATE TABLE IF NOT EXISTS community_admins (
@@ -270,6 +288,13 @@ ALTER TABLE posts ADD COLUMN IF NOT EXISTS link_preview JSONB;
 -- Migration: Add video_embed column for video embeds (YouTube, TikTok, PeerTube)
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS video_embed JSONB;
 
+-- Migration: Add community_id to posts for efficient community lookup
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS community_id INTEGER REFERENCES actors(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_community ON posts(community_id) WHERE community_id IS NOT NULL;
+
+-- Migration: Add missing index on community_posts.post_id for batch lookups
+CREATE INDEX IF NOT EXISTS idx_community_posts_post_id ON community_posts(post_id);
+
 -- Pinned community posts
 CREATE TABLE IF NOT EXISTS community_pinned_posts (
   community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
@@ -326,3 +351,60 @@ CREATE TABLE IF NOT EXISTS reports (
 CREATE INDEX IF NOT EXISTS idx_reports_post ON reports(post_id);
 CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(reporter_id);
 CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status) WHERE status = 'pending';
+
+-- ============ Data Migration (force update all data) ============
+
+-- Force recalculate follower_count for all actors
+UPDATE actors SET follower_count = (
+  SELECT COUNT(*) FROM follows WHERE following_id = actors.id
+);
+
+-- Migrate community_settings to actors columns (if community_settings table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'community_settings') THEN
+    UPDATE actors a SET
+      require_approval = COALESCE(cs.require_approval, false),
+      created_by = cs.created_by
+    FROM community_settings cs
+    WHERE a.id = cs.actor_id;
+  END IF;
+END $$;
+
+-- Force set community_id on all root posts from community_posts (approved posts only)
+UPDATE posts p SET community_id = cp.community_id
+FROM community_posts cp
+WHERE cp.post_id = p.id
+  AND cp.status = 'approved';
+
+-- Propagate community_id to all replies (recursive, run multiple times until no updates)
+DO $$
+DECLARE
+  rows_updated INTEGER;
+BEGIN
+  LOOP
+    UPDATE posts child SET community_id = parent.community_id
+    FROM posts parent
+    WHERE child.in_reply_to_id = parent.id
+      AND parent.community_id IS NOT NULL
+      AND (child.community_id IS NULL OR child.community_id != parent.community_id);
+    GET DIAGNOSTICS rows_updated = ROW_COUNT;
+    EXIT WHEN rows_updated = 0;
+  END LOOP;
+END $$;
+
+-- Clean up duplicate keys: delete old user_id based keys where actor_id based keys already exist
+DELETE FROM keys k1
+USING keys k2, actors a
+WHERE k1.user_id = a.user_id
+  AND k2.actor_id = a.id
+  AND k1.type = k2.type
+  AND k1.user_id IS NOT NULL
+  AND k1.actor_id IS NULL;
+
+-- Migrate remaining keys from user_id to actor_id
+UPDATE keys k SET actor_id = a.id
+FROM actors a
+WHERE k.user_id = a.user_id
+  AND k.user_id IS NOT NULL
+  AND k.actor_id IS NULL;
