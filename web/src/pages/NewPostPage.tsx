@@ -28,6 +28,10 @@ export function NewPostPage() {
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkError, setLinkError] = useState('');
+  const [showVideoInput, setShowVideoInput] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoError, setVideoError] = useState('');
+  const [showCommunityInput, setShowCommunityInput] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -65,6 +69,8 @@ export function NewPostPage() {
   const isNearLimit = charactersRemaining <= 50 && charactersRemaining >= 0;
 
   const hasImages = images.length > 0;
+  const hasLink = showLinkInput || linkUrl.trim().length > 0;
+  const hasVideo = showVideoInput || videoUrl.trim().length > 0;
 
   const validateUrl = (url: string): boolean => {
     if (!url.trim()) return true;
@@ -83,6 +89,16 @@ export function NewPostPage() {
       setLinkError('Please enter a valid URL (http:// or https://)');
     } else {
       setLinkError('');
+    }
+  };
+
+  const handleVideoChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const url = e.target.value;
+    setVideoUrl(url);
+    if (url.trim() && !validateUrl(url)) {
+      setVideoError('Please enter a valid URL (http:// or https://)');
+    } else {
+      setVideoError('');
     }
   };
 
@@ -205,8 +221,15 @@ export function NewPostPage() {
       return;
     }
 
+    const trimmedVideo = videoUrl.trim();
+    if (trimmedVideo && !validateUrl(trimmedVideo)) {
+      setVideoError('Please enter a valid URL');
+      return;
+    }
+
     setError('');
     setLinkError('');
+    setVideoError('');
     setLoading(true);
 
     try {
@@ -222,7 +245,7 @@ export function NewPostPage() {
       }
 
       // Create post with attachments
-      const { post } = await posts.create(trimmedContent, undefined, uploadedAttachments, sensitive, trimmedLink || undefined);
+      const { post } = await posts.create(trimmedContent, undefined, uploadedAttachments, sensitive, trimmedLink || undefined, trimmedVideo || undefined);
 
       // Submit to community if selected
       if (selectedCommunity) {
@@ -241,7 +264,7 @@ export function NewPostPage() {
     }
   };
 
-  const canSubmit = content.trim().length > 0 && !isOverLimit && !loading && !linkError;
+  const canSubmit = content.trim().length > 0 && !isOverLimit && !loading && !linkError && !videoError;
 
   return (
     <div>
@@ -283,75 +306,6 @@ export function NewPostPage() {
                 </small>
               </div>
             </div>
-
-            {/* Community selector */}
-            {joinedCommunities.length > 0 && (
-              <div className="mb-3">
-                <label className="form-label small text-muted">Post to community (optional)</label>
-                <div className="position-relative">
-                  {selectedCommunity ? (
-                    <div className="d-flex align-items-center justify-content-between border rounded p-2">
-                      <div className="d-flex align-items-center">
-                        <Avatar
-                          src={selectedCommunity.avatar_url}
-                          name={selectedCommunity.name || ''}
-                          size="xs"
-                          className="me-2"
-                        />
-                        <span>{selectedCommunity.name}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={() => setSelectedCommunity(null)}
-                      >
-                        <i className="bi bi-x"></i>
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Search your communities..."
-                        value={communitySearch}
-                        onChange={(e) => setCommunitySearch(e.target.value)}
-                        onFocus={() => setShowCommunityDropdown(true)}
-                        onBlur={() => setTimeout(() => setShowCommunityDropdown(false), 150)}
-                      />
-                      {showCommunityDropdown && filteredCommunities.length > 0 && (
-                        <div className="position-absolute w-100 mt-1 bg-body border rounded shadow-sm" style={{ zIndex: 1000, maxHeight: 200, overflowY: 'auto' }}>
-                          {filteredCommunities.map(c => (
-                            <button
-                              key={c.id}
-                              type="button"
-                              className="d-flex align-items-center w-100 p-2 border-0 bg-transparent text-start"
-                              style={{ cursor: 'pointer' }}
-                              onMouseDown={() => {
-                                setSelectedCommunity(c);
-                                setCommunitySearch('');
-                                setShowCommunityDropdown(false);
-                              }}
-                            >
-                              <Avatar
-                                src={c.avatar_url}
-                                name={c.name || ''}
-                                size="xs"
-                                className="me-2"
-                              />
-                              <div>
-                                <div className="fw-semibold small">{c.name}</div>
-                                <div className="text-muted" style={{ fontSize: '0.75rem' }}>{c.handle}</div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* Image previews */}
             {images.length > 0 && (
@@ -413,6 +367,132 @@ export function NewPostPage() {
               </div>
             )}
 
+            {/* Video URL input */}
+            {showVideoInput && (
+              <div className="mb-3">
+                <div className="input-group">
+                  <span className="input-group-text">
+                    <i className="bi bi-play-btn"></i>
+                  </span>
+                  <input
+                    type="url"
+                    className={`form-control ${videoError ? 'is-invalid' : ''}`}
+                    placeholder="https://youtube.com/watch?v=..."
+                    value={videoUrl}
+                    onChange={handleVideoChange}
+                    disabled={loading}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => {
+                      setShowVideoInput(false);
+                      setVideoUrl('');
+                      setVideoError('');
+                    }}
+                    title="Remove video"
+                  >
+                    <i className="bi bi-x"></i>
+                  </button>
+                </div>
+                <small className="text-muted">YouTube, TikTok, and PeerTube supported</small>
+                {videoError && (
+                  <small className="text-danger d-block">{videoError}</small>
+                )}
+              </div>
+            )}
+
+            {/* Community selector */}
+            {showCommunityInput && joinedCommunities.length > 0 && (
+              <div className="mb-3">
+                <div className="position-relative">
+                  {selectedCommunity ? (
+                    <div className="input-group">
+                      <span className="input-group-text">
+                        <i className="bi bi-people-fill"></i>
+                      </span>
+                      <div className="form-control d-flex align-items-center">
+                        <Avatar
+                          src={selectedCommunity.avatar_url}
+                          name={selectedCommunity.name || ''}
+                          size="xs"
+                          className="me-2"
+                        />
+                        <span>@{selectedCommunity.name}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary"
+                        onClick={() => setSelectedCommunity(null)}
+                        title="Remove community"
+                      >
+                        <i className="bi bi-x"></i>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="input-group">
+                        <span className="input-group-text">
+                          <i className="bi bi-people-fill"></i>
+                        </span>
+                        <span className="input-group-text">@</span>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Search your communities..."
+                          value={communitySearch}
+                          onChange={(e) => setCommunitySearch(e.target.value)}
+                          onFocus={() => setShowCommunityDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowCommunityDropdown(false), 150)}
+                          disabled={loading}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-outline-secondary"
+                          onClick={() => {
+                            setShowCommunityInput(false);
+                            setCommunitySearch('');
+                            setSelectedCommunity(null);
+                          }}
+                          title="Cancel"
+                        >
+                          <i className="bi bi-x"></i>
+                        </button>
+                      </div>
+                      {showCommunityDropdown && filteredCommunities.length > 0 && (
+                        <div className="position-absolute w-100 mt-1 bg-body border rounded shadow-sm" style={{ zIndex: 1000, maxHeight: 200, overflowY: 'auto' }}>
+                          {filteredCommunities.map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              className="d-flex align-items-center w-100 p-2 border-0 bg-transparent text-start"
+                              style={{ cursor: 'pointer' }}
+                              onMouseDown={() => {
+                                setSelectedCommunity(c);
+                                setCommunitySearch('');
+                                setShowCommunityDropdown(false);
+                              }}
+                            >
+                              <Avatar
+                                src={c.avatar_url}
+                                name={c.name || ''}
+                                size="xs"
+                                className="me-2"
+                              />
+                              <div>
+                                <div className="fw-semibold small">@{c.name}</div>
+                                <div className="text-muted" style={{ fontSize: '0.75rem' }}>{c.handle}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Actions row */}
             <div className="d-flex justify-content-between align-items-center pt-2 border-top">
               <div className="d-flex gap-2">
@@ -429,8 +509,8 @@ export function NewPostPage() {
                   type="button"
                   className="btn btn-outline-secondary btn-sm"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={images.length >= MAX_IMAGES || loading || showLinkInput}
-                  title={showLinkInput ? 'Cannot add images with a link' : `Add images (${images.length}/${MAX_IMAGES})`}
+                  disabled={images.length >= MAX_IMAGES || loading || hasLink || hasVideo}
+                  title={hasLink || hasVideo ? 'Cannot add images with a link or video' : `Add images (${images.length}/${MAX_IMAGES})`}
                 >
                   <i className="bi bi-image me-1"></i>
                   {images.length}/{MAX_IMAGES}
@@ -441,10 +521,21 @@ export function NewPostPage() {
                   type="button"
                   className={`btn btn-sm ${showLinkInput ? 'btn-primary' : 'btn-outline-secondary'}`}
                   onClick={() => setShowLinkInput(!showLinkInput)}
-                  disabled={loading || hasImages}
-                  title={hasImages ? 'Cannot add link with images' : 'Add link'}
+                  disabled={loading || hasImages || hasVideo}
+                  title={hasImages ? 'Cannot add link with images' : hasVideo ? 'Cannot add link with video' : 'Add link'}
                 >
                   <i className="bi bi-link-45deg"></i>
+                </button>
+
+                {/* Add video button */}
+                <button
+                  type="button"
+                  className={`btn btn-sm ${showVideoInput ? 'btn-primary' : 'btn-outline-secondary'}`}
+                  onClick={() => setShowVideoInput(!showVideoInput)}
+                  disabled={loading || hasImages || hasLink}
+                  title={hasImages ? 'Cannot add video with images' : hasLink ? 'Cannot add video with link' : 'Add video'}
+                >
+                  <i className="bi bi-play-btn"></i>
                 </button>
 
                 {/* Sensitive content toggle */}
@@ -456,6 +547,19 @@ export function NewPostPage() {
                 >
                   <i className={`bi bi-eye${sensitive ? '-slash' : ''}-fill`}></i>
                 </button>
+
+                {/* Community selector toggle */}
+                {joinedCommunities.length > 0 && (
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${showCommunityInput || selectedCommunity ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    onClick={() => setShowCommunityInput(!showCommunityInput)}
+                    disabled={loading}
+                    title="Post to community"
+                  >
+                    <i className="bi bi-people-fill"></i>
+                  </button>
+                )}
               </div>
 
               <button type="submit" className="btn btn-primary" disabled={!canSubmit}>

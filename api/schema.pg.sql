@@ -267,6 +267,9 @@ ALTER TABLE posts ADD COLUMN IF NOT EXISTS addressed_to TEXT[] NOT NULL DEFAULT 
 -- Migration: Add link_preview column for OpenGraph card data
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS link_preview JSONB;
 
+-- Migration: Add video_embed column for video embeds (YouTube, TikTok, PeerTube)
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS video_embed JSONB;
+
 -- Pinned community posts
 CREATE TABLE IF NOT EXISTS community_pinned_posts (
   community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,

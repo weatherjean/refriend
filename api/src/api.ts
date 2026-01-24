@@ -17,7 +17,8 @@ import {
   PUBLIC_COLLECTION,
 } from "@fedify/fedify";
 import type { Federation } from "@fedify/fedify";
-import type { DB, Actor, Post, PostWithActor, User, LinkPreview } from "./db.ts";
+import type { DB, Actor, Post, PostWithActor, User, LinkPreview, VideoEmbed } from "./db.ts";
+import { parseVideoUrl } from "./video.ts";
 import type { CommunityDB } from "./communities/db.ts";
 import { processActivity, persistActor } from "./activities.ts";
 import { saveAvatar, saveMedia, deleteMedia } from "./storage.ts";
@@ -767,12 +768,13 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       height: number;
     }
 
-    const { content, in_reply_to, attachments, sensitive, link_url } = await c.req.json<{
+    const { content, in_reply_to, attachments, sensitive, link_url, video_url } = await c.req.json<{
       content: string;
       in_reply_to?: string;  // UUID/public_id
       attachments?: AttachmentInput[];
       sensitive?: boolean;
       link_url?: string;
+      video_url?: string;
     }>();
 
     if (!content?.trim()) {
@@ -789,9 +791,15 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       return c.json({ error: "Maximum 4 attachments allowed" }, 400);
     }
 
-    // Link and attachments are mutually exclusive
+    // Link, video, and attachments are mutually exclusive
     if (link_url && attachments && attachments.length > 0) {
       return c.json({ error: "Cannot have both link and attachments" }, 400);
+    }
+    if (video_url && attachments && attachments.length > 0) {
+      return c.json({ error: "Cannot have both video and attachments" }, 400);
+    }
+    if (link_url && video_url) {
+      return c.json({ error: "Cannot have both link and video" }, 400);
     }
 
     // Validate and fetch OpenGraph data for link
@@ -807,6 +815,27 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
       // If OG fetch fails, still allow the post - just won't have preview metadata
       if (!linkPreview) {
         linkPreview = { url: link_url, title: null, description: null, image: null, site_name: null };
+      }
+    }
+
+    // Validate and parse video URL
+    let videoEmbed: VideoEmbed | null = null;
+    if (video_url) {
+      try {
+        new URL(video_url); // Validate URL format
+      } catch {
+        return c.json({ error: "Invalid video URL" }, 400);
+      }
+      videoEmbed = parseVideoUrl(video_url);
+      if (!videoEmbed) {
+        return c.json({ error: "Unsupported video platform. Supported: YouTube, TikTok, PeerTube" }, 400);
+      }
+      // For PeerTube, fetch the OG image as thumbnail since static paths vary
+      if (videoEmbed.platform === 'peertube') {
+        const ogData = await fetchOpenGraph(video_url);
+        if (ogData?.image) {
+          videoEmbed.thumbnailUrl = ogData.image;
+        }
       }
     }
 
@@ -831,10 +860,13 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
 
     // Process content: escape HTML, linkify mentions and hashtags
     const { html: processedContent, mentions } = processContent(content, domain);
-    // If there's a link, append it to content for federation (so other servers can generate their own cards)
+    // If there's a link or video, append it to content for federation (so other servers can generate their own cards)
     let safeContent = `<p>${processedContent}</p>`;
     if (link_url) {
       safeContent += `<p><a href="${escapeHtml(link_url)}">${escapeHtml(link_url)}</a></p>`;
+    }
+    if (video_url) {
+      safeContent += `<p><a href="${escapeHtml(video_url)}">${escapeHtml(video_url)}</a></p>`;
     }
 
     const ctx = federation.createContext(c.req.raw, undefined);
@@ -892,6 +924,12 @@ export function createApi(db: DB, federation: Federation<void>, communityDb: Com
     if (linkPreview) {
       await db.updatePostLinkPreview(post.id, linkPreview);
       post.link_preview = linkPreview;
+    }
+
+    // Store video embed if we have one
+    if (videoEmbed) {
+      await db.updatePostVideoEmbed(post.id, videoEmbed);
+      post.video_embed = videoEmbed;
     }
 
     // Note: Media records are created by processCreate from the Note attachments
@@ -1884,6 +1922,7 @@ async function enrichPost(db: DB, post: Post, currentActorId?: number | null, do
       height: a.height,
     })),
     link_preview: post.link_preview,
+    video_embed: post.video_embed,
   };
 }
 
@@ -1951,6 +1990,7 @@ export async function enrichPostsBatch(db: DB, posts: PostWithActor[], currentAc
         height: a.height,
       })),
       link_preview: post.link_preview,
+      video_embed: post.video_embed,
     };
   });
 }

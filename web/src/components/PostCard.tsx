@@ -8,6 +8,7 @@ import { Avatar } from './Avatar';
 import { ImageSlider } from './ImageSlider';
 import { ImageLightbox } from './ImageLightbox';
 import { PostMenu } from './PostMenu';
+import { VideoEmbed } from './VideoEmbed';
 
 interface CommunityInfo {
   id: string;
@@ -314,6 +315,11 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
                 isOpen={linkPreviewLightboxOpen}
                 onClose={() => setLinkPreviewLightboxOpen(false)}
               />
+            )}
+
+            {/* Video Embed */}
+            {post.video_embed && (
+              <VideoEmbed video={post.video_embed} />
             )}
           </>
         )}

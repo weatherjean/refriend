@@ -365,6 +365,106 @@ body {
     }
   }
 
+  // Video Embed
+  .video-embed {
+    border-radius: 0.5rem;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+    background-color: #000;
+    aspect-ratio: 16 / 9;
+
+    &.video-embed-vertical {
+      aspect-ratio: unset;
+      max-width: 325px;
+      margin-left: auto;
+      margin-right: auto;
+
+      &.video-embed-playing {
+        background-color: transparent;
+      }
+
+      &.video-embed-preview {
+        aspect-ratio: 9 / 16;
+        max-height: 400px;
+      }
+
+      iframe {
+        min-height: 580px;
+      }
+    }
+
+    &.video-embed-playing {
+      iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+    }
+
+    &.video-embed-preview {
+      position: relative;
+      cursor: pointer;
+
+      &:hover .video-embed-overlay {
+        background: rgba(0, 0, 0, 0.5);
+      }
+
+      &:hover .video-embed-play-btn {
+        transform: scale(1.1);
+      }
+    }
+
+    .video-embed-thumbnail {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+    }
+
+    .video-embed-placeholder {
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    }
+
+    .video-embed-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.4);
+      transition: background 0.15s ease-in-out;
+    }
+
+    .video-embed-play-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.15s ease-in-out;
+
+      i {
+        font-size: 2rem;
+        color: #000;
+        margin-left: 4px; // Optical centering for play icon
+      }
+    }
+
+    .video-embed-platform {
+      margin-top: 0.75rem;
+      padding: 0.25rem 0.75rem;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 1rem;
+      font-size: 0.75rem;
+      color: #fff;
+    }
+  }
+
   // Sensitive content cover
   .post-sensitive-cover {
     display: flex;

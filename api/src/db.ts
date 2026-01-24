@@ -47,6 +47,14 @@ export interface LinkPreview {
   site_name: string | null;
 }
 
+export interface VideoEmbed {
+  platform: 'youtube' | 'tiktok' | 'peertube';
+  videoId: string;
+  embedUrl: string;
+  thumbnailUrl: string | null;
+  originalUrl: string;
+}
+
 export interface Post {
   id: number;
   public_id: string;
@@ -59,6 +67,7 @@ export interface Post {
   likes_count: number;
   sensitive: boolean;
   link_preview: LinkPreview | null;
+  video_embed: VideoEmbed | null;
   created_at: string;
 }
 
@@ -521,23 +530,24 @@ export class DB {
 
   // ============ Posts ============
 
-  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score" | "addressed_to" | "link_preview"> & { created_at?: string; addressed_to?: string[]; link_preview?: LinkPreview | null }): Promise<Post> {
+  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score" | "addressed_to" | "link_preview" | "video_embed"> & { created_at?: string; addressed_to?: string[]; link_preview?: LinkPreview | null; video_embed?: VideoEmbed | null }): Promise<Post> {
     return this.query(async (client) => {
       await client.queryArray`BEGIN`;
       try {
         const addressedTo = post.addressed_to || [];
         const linkPreview = post.link_preview ? JSON.stringify(post.link_preview) : null;
+        const videoEmbed = post.video_embed ? JSON.stringify(post.video_embed) : null;
         let result;
         if (post.created_at) {
           result = await client.queryObject<Post>`
-            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, created_at)
-            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${post.created_at})
+            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, video_embed, created_at)
+            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${videoEmbed}, ${post.created_at})
             RETURNING *
           `;
         } else {
           result = await client.queryObject<Post>`
-            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview)
-            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview})
+            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, video_embed)
+            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${videoEmbed})
             RETURNING *
           `;
         }
@@ -570,6 +580,13 @@ export class DB {
     await this.query(async (client) => {
       const json = linkPreview ? JSON.stringify(linkPreview) : null;
       await client.queryArray`UPDATE posts SET link_preview = ${json} WHERE id = ${id}`;
+    });
+  }
+
+  async updatePostVideoEmbed(id: number, videoEmbed: VideoEmbed | null): Promise<void> {
+    await this.query(async (client) => {
+      const json = videoEmbed ? JSON.stringify(videoEmbed) : null;
+      await client.queryArray`UPDATE posts SET video_embed = ${json} WHERE id = ${id}`;
     });
   }
 
@@ -673,6 +690,7 @@ export class DB {
       likes_count: row.likes_count as number,
       sensitive: row.sensitive as boolean,
       link_preview: row.link_preview as LinkPreview | null,
+      video_embed: row.video_embed as VideoEmbed | null,
       created_at: String(row.created_at),
       author: {
         id: row.author_id as number,
@@ -693,7 +711,7 @@ export class DB {
   }
 
   private readonly postWithActorSelect = `
-    p.id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.addressed_to, p.likes_count, p.sensitive, p.link_preview, p.created_at,
+    p.id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.addressed_to, p.likes_count, p.sensitive, p.link_preview, p.video_embed, p.created_at,
     a.id as author_id, a.public_id as author_public_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
     a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
     a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,

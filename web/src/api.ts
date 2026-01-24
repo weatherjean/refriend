@@ -44,6 +44,14 @@ export interface LinkPreview {
   site_name: string | null;
 }
 
+export interface VideoEmbed {
+  platform: 'youtube' | 'tiktok' | 'peertube';
+  videoId: string;
+  embedUrl: string;
+  thumbnailUrl: string | null;
+  originalUrl: string;
+}
+
 export interface Post {
   id: string;  // UUID
   uri: string;
@@ -61,6 +69,7 @@ export interface Post {
   sensitive: boolean;
   attachments: Attachment[];
   link_preview: LinkPreview | null;
+  video_embed: VideoEmbed | null;
   in_reply_to: {
     id: string;  // UUID
     uri: string;
@@ -254,10 +263,10 @@ export const posts = {
       `/posts/${id}/replies${query ? `?${query}` : ''}`
     );
   },
-  create: (content: string, inReplyTo?: string, attachments?: AttachmentInput[], sensitive?: boolean, linkUrl?: string) =>
+  create: (content: string, inReplyTo?: string, attachments?: AttachmentInput[], sensitive?: boolean, linkUrl?: string, videoUrl?: string) =>
     fetchJson<{ post: Post }>('/posts', {
       method: 'POST',
-      body: JSON.stringify({ content, in_reply_to: inReplyTo, attachments, sensitive, link_url: linkUrl }),
+      body: JSON.stringify({ content, in_reply_to: inReplyTo, attachments, sensitive, link_url: linkUrl, video_url: videoUrl }),
     }),
   delete: (id: string) =>
     fetchJson<{ ok: boolean }>(`/posts/${id}`, { method: 'DELETE' }),
