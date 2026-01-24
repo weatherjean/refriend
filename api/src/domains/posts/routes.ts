@@ -146,23 +146,6 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     });
   });
 
-  // GET /search - Search posts
-  routes.get("/search", async (c) => {
-    const query = c.req.query("q") || "";
-    if (!query.trim()) {
-      return c.json({ posts: [] });
-    }
-
-    const db = c.get("db");
-    const communityDb = c.get("communityDb");
-    const domain = c.get("domain");
-    const currentActor = c.get("actor");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-
-    const posts = await service.searchPosts(db, query, limit, currentActor?.id, domain, communityDb);
-    return c.json({ posts });
-  });
-
   // GET /hashtag/:tag - Get posts by hashtag
   routes.get("/hashtag/:tag", async (c) => {
     const tag = c.req.param("tag").toLowerCase();

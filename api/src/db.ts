@@ -1598,6 +1598,15 @@ export class DB {
     });
   }
 
+  async getAnyLocalUser(): Promise<User | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<User>`
+        SELECT * FROM users LIMIT 1
+      `;
+      return result.rows[0] || null;
+    });
+  }
+
   // ============ Reports ============
 
   async createReport(postId: number, reporterId: number, reason: string, details: string | null): Promise<void> {

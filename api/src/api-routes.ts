@@ -19,6 +19,7 @@ import { createSocialRoutes } from "./domains/social/routes.ts";
 import { createPostRoutes } from "./domains/posts/routes.ts";
 import { createCommunityRoutes } from "./domains/communities/routes.ts";
 import { createTagRoutes } from "./domains/tags/routes.ts";
+import { createSearchRoutes } from "./domains/search/index.ts";
 
 type Env = {
   Variables: {
@@ -85,8 +86,11 @@ export function createApiRoutes(
   // Social interactions: /follow, /unfollow, /posts/:id/like, /posts/:id/boost, /block, /mute
   api.route("/", createSocialRoutes(federation));
 
-  // Posts: /posts, /posts/hot, /timeline, /search, /hashtag/:tag
+  // Posts: /posts, /posts/hot, /timeline, /hashtag/:tag
   api.route("/", createPostRoutes(federation));
+
+  // Search: /search (with remote actor lookup)
+  api.route("/", createSearchRoutes(federation));
 
   // Notifications: /notifications/*
   api.route("/notifications", createNotificationRoutes());
