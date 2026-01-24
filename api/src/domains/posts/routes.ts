@@ -38,23 +38,25 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
   // GET /posts - Get recent posts (public feed)
   routes.get("/posts", async (c) => {
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
 
-    const result = await service.getRecentPosts(db, limit, before, currentActor?.id, domain);
+    const result = await service.getRecentPosts(db, limit, before, currentActor?.id, domain, communityDb);
     return c.json(result);
   });
 
   // GET /posts/hot - Get hot posts
   routes.get("/posts/hot", async (c) => {
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
 
-    const posts = await service.getHotPosts(db, limit, currentActor?.id, domain);
+    const posts = await service.getHotPosts(db, limit, currentActor?.id, domain, communityDb);
     return c.json({ posts });
   });
 
@@ -66,12 +68,13 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     }
 
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
     const sort = c.req.query("sort") === "hot" ? "hot" : "new";
 
-    const result = await service.getTimelinePosts(db, actor.id, limit, before, sort, domain);
+    const result = await service.getTimelinePosts(db, actor.id, limit, before, sort, domain, communityDb);
     return c.json(result);
   });
 
@@ -79,6 +82,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
   routes.get("/posts/:id", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
 
@@ -96,12 +100,12 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       const parentPost = await db.getPostById(currentPost.in_reply_to_id);
       if (!parentPost || seen.has(parentPost.id)) break;
       seen.add(parentPost.id);
-      ancestors.unshift(await service.enrichPost(db, parentPost, currentActor?.id, domain));
+      ancestors.unshift(await service.enrichPost(db, parentPost, currentActor?.id, domain, communityDb));
       currentPost = parentPost;
     }
 
     // Enrich the main post
-    const enrichedPost = await service.enrichPost(db, post, currentActor?.id, domain);
+    const enrichedPost = await service.enrichPost(db, post, currentActor?.id, domain, communityDb);
 
     return c.json({ post: enrichedPost, ancestors });
   });
@@ -110,6 +114,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
   routes.get("/posts/:id/replies", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
 
@@ -135,7 +140,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       : null;
 
     return c.json({
-      replies: await service.enrichPostsBatch(db, resultReplies, currentActor?.id, domain),
+      replies: await service.enrichPostsBatch(db, resultReplies, currentActor?.id, domain, communityDb),
       next_cursor: nextCursor,
       op_author_id: parentAuthor?.public_id || null,
     });
@@ -149,11 +154,12 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     }
 
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
 
-    const posts = await service.searchPosts(db, query, limit, currentActor?.id, domain);
+    const posts = await service.searchPosts(db, query, limit, currentActor?.id, domain, communityDb);
     return c.json({ posts });
   });
 
@@ -161,6 +167,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
   routes.get("/hashtag/:tag", async (c) => {
     const tag = c.req.param("tag").toLowerCase();
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
@@ -174,7 +181,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       }
     }
 
-    const result = await service.getPostsByHashtag(db, tag, limit, before, currentActor?.id, domain);
+    const result = await service.getPostsByHashtag(db, tag, limit, before, currentActor?.id, domain, communityDb);
 
     // Cache for unauthenticated users
     if (!currentActor && !before) {
@@ -438,7 +445,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     // Create notifications for mentioned users
     await service.notifyMentions(db, mentions, actor.id, post.id, domain);
 
-    return c.json({ post: await service.enrichPost(db, post, actor?.id, domain) });
+    return c.json({ post: await service.enrichPost(db, post, actor?.id, domain, communityDb) });
   });
 
   // DELETE /posts/:id - Delete post via ActivityPub Delete activity

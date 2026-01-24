@@ -7,6 +7,7 @@
 import { Hono } from "@hono/hono";
 import type { DB } from "../../db.ts";
 import type { User, Actor } from "../../shared/types.ts";
+import type { CommunityDB } from "../communities/repository.ts";
 import * as service from "./service.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
 import { getCachedHashtagPosts, setCachedHashtagPosts } from "../../cache.ts";
@@ -14,6 +15,7 @@ import { getCachedHashtagPosts, setCachedHashtagPosts } from "../../cache.ts";
 interface TagsEnv {
   Variables: {
     db: DB;
+    communityDb: CommunityDB;
     domain: string;
     user: User | null;
     actor: Actor | null;
@@ -50,6 +52,7 @@ export function createTagRoutes(): Hono<TagsEnv> {
   routes.get("/tags/:tag", async (c) => {
     const tag = c.req.param("tag").toLowerCase();
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const actor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
@@ -73,7 +76,7 @@ export function createTagRoutes(): Hono<TagsEnv> {
 
     const result = {
       tag,
-      posts: await enrichPostsBatch(db, resultPosts, actor?.id, domain),
+      posts: await enrichPostsBatch(db, resultPosts, actor?.id, domain, communityDb),
       next_cursor: nextCursor,
     };
 

@@ -84,6 +84,12 @@ export interface EnrichedPost {
   }[];
   link_preview: LinkPreview | null;
   video_embed: VideoEmbed | null;
+  community: {
+    id: string;
+    name: string | null;
+    handle: string;
+    avatar_url: string | null;
+  } | null;
 }
 
 export interface PostsListResponse {

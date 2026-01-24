@@ -615,7 +615,7 @@ export function createCommunityRoutes(
     }));
 
     // Enrich posts with all the data PostCard needs
-    const enrichedPosts = await enrichPostsBatch(db, postsWithActors, currentActor?.id, domain);
+    const enrichedPosts = await enrichPostsBatch(db, postsWithActors, currentActor?.id, domain, communityDb);
 
     // Add community info, pinned status, and boost info to each post
     // A post is a "boost" (announcement) if is_announcement = true
@@ -682,7 +682,7 @@ export function createCommunityRoutes(
     }));
 
     // Enrich posts with all the data PostCard needs
-    const enrichedPosts = await enrichPostsBatch(db, postsWithActors, currentActor?.id, domain);
+    const enrichedPosts = await enrichPostsBatch(db, postsWithActors, currentActor?.id, domain, communityDb);
 
     // Add community info, pinned status, and boost info
     const posts = enrichedPosts.map((post, index) => {
@@ -751,7 +751,7 @@ export function createCommunityRoutes(
     }));
 
     // Enrich posts with all the data PostCard needs
-    const enrichedPosts = await enrichPostsBatch(db, postsWithActors, actor.id, domain);
+    const enrichedPosts = await enrichPostsBatch(db, postsWithActors, actor.id, domain, communityDb);
 
     // Get suggester info separately
     const suggesterIds = pendingPosts.filter((cp) => cp.suggested_by).map((cp) => cp.suggested_by!);

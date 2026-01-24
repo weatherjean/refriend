@@ -214,10 +214,11 @@ export function createUserRoutes(): Hono<UsersEnv> {
   routes.get("/users/:username/pinned", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
 
-    const result = await service.getUserPinnedPosts(db, username, currentActor?.id, domain);
+    const result = await service.getUserPinnedPosts(db, username, currentActor?.id, domain, communityDb);
 
     if (!result) {
       return c.json({ error: "User not found" }, 404);
@@ -230,6 +231,7 @@ export function createUserRoutes(): Hono<UsersEnv> {
   routes.get("/users/:username/boosts", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
@@ -240,6 +242,7 @@ export function createUserRoutes(): Hono<UsersEnv> {
       before,
       currentActorId: currentActor?.id,
       domain,
+      communityDb,
     });
 
     if (!result) {
@@ -302,10 +305,11 @@ export function createUserRoutes(): Hono<UsersEnv> {
   routes.get("/actors/:id/pinned", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
 
-    const result = await service.getActorPinnedPosts(db, publicId, currentActor?.id, domain);
+    const result = await service.getActorPinnedPosts(db, publicId, currentActor?.id, domain, communityDb);
 
     if (!result) {
       return c.json({ error: "Actor not found" }, 404);
@@ -318,6 +322,7 @@ export function createUserRoutes(): Hono<UsersEnv> {
   routes.get("/actors/:id/boosts", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
+    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
@@ -328,6 +333,7 @@ export function createUserRoutes(): Hono<UsersEnv> {
       before,
       currentActorId: currentActor?.id,
       domain,
+      communityDb,
     });
 
     if (!result) {

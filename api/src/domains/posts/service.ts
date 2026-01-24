@@ -344,11 +344,12 @@ export async function enrichPost(
   db: DB,
   post: Post,
   currentActorId?: number,
-  domain?: string
+  domain?: string,
+  communityDb?: { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>> }
 ): Promise<EnrichedPost> {
   const author = await db.getActorById(post.actor_id);
   const postWithActor: PostWithActor = { ...post, author: author! };
-  const enriched = await enrichPostsBatch(db, [postWithActor], currentActorId, domain);
+  const enriched = await enrichPostsBatch(db, [postWithActor], currentActorId, domain, communityDb);
   return enriched[0];
 }
 
@@ -359,20 +360,22 @@ export async function enrichPostsBatch(
   db: DB,
   posts: PostWithActor[],
   currentActorId?: number,
-  domain?: string
+  domain?: string,
+  communityDb?: { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>> }
 ): Promise<EnrichedPost[]> {
   if (posts.length === 0) return [];
 
   const postIds = posts.map((p) => p.id);
 
   // Batch fetch all related data
-  const [hashtagsMap, mediaMap, likedSet, boostedSet, repliesMap, pinnedSet] = await Promise.all([
+  const [hashtagsMap, mediaMap, likedSet, boostedSet, repliesMap, pinnedSet, communitiesMap] = await Promise.all([
     repository.getBatchHashtags(db, postIds),
     repository.getBatchPostMedia(db, postIds),
     currentActorId ? db.getLikedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
     currentActorId ? db.getBoostedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
     db.getRepliesCounts(postIds),
     currentActorId ? db.getPinnedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
+    communityDb ? communityDb.getCommunitiesForPosts(postIds) : Promise.resolve(new Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>()),
   ]);
 
   // Collect parent post IDs for replies
@@ -399,6 +402,7 @@ export async function enrichPostsBatch(
 
   return posts.map((post) => {
     const parentPost = post.in_reply_to_id ? parentPostsMap.get(post.in_reply_to_id) : null;
+    const communityInfo = communitiesMap.get(post.id);
 
     return {
       id: post.public_id,
@@ -426,11 +430,20 @@ export async function enrichPostsBatch(
       attachments: mediaMap.get(post.id) ?? [],
       link_preview: post.link_preview,
       video_embed: post.video_embed,
+      community: communityInfo ? {
+        id: communityInfo.public_id,
+        name: communityInfo.name,
+        handle: communityInfo.handle,
+        avatar_url: communityInfo.avatar_url,
+      } : null,
     };
   });
 }
 
 // ============ Post Retrieval ============
+
+// Type for communityDb parameter
+type CommunityDbForEnrich = { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>> };
 
 /**
  * Get recent posts (public feed)
@@ -440,14 +453,15 @@ export async function getRecentPosts(
   limit: number,
   before?: number,
   currentActorId?: number,
-  domain?: string
+  domain?: string,
+  communityDb?: CommunityDbForEnrich
 ): Promise<PostsListResponse> {
   const posts = await repository.getRecentPosts(db, limit + 1, before);
   const hasMore = posts.length > limit;
   const resultPosts = hasMore ? posts.slice(0, limit) : posts;
   const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : null;
 
-  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain);
+  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain, communityDb);
 
   return {
     posts: enrichedPosts,
@@ -462,10 +476,11 @@ export async function getHotPosts(
   db: DB,
   limit: number,
   currentActorId?: number,
-  domain?: string
+  domain?: string,
+  communityDb?: CommunityDbForEnrich
 ): Promise<EnrichedPost[]> {
   const posts = await repository.getHotPosts(db, limit);
-  return enrichPostsBatch(db, posts, currentActorId, domain);
+  return enrichPostsBatch(db, posts, currentActorId, domain, communityDb);
 }
 
 /**
@@ -477,14 +492,15 @@ export async function getTimelinePosts(
   limit: number,
   before?: number,
   sort: "new" | "hot" = "new",
-  domain?: string
+  domain?: string,
+  communityDb?: CommunityDbForEnrich
 ): Promise<PostsListResponse> {
   const posts = await repository.getTimelinePosts(db, actorId, limit + 1, before, sort);
   const hasMore = posts.length > limit;
   const resultPosts = hasMore ? posts.slice(0, limit) : posts;
   const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : null;
 
-  const enrichedPosts = await enrichPostsBatch(db, resultPosts, actorId, domain);
+  const enrichedPosts = await enrichPostsBatch(db, resultPosts, actorId, domain, communityDb);
 
   return {
     posts: enrichedPosts,
@@ -499,11 +515,12 @@ export async function getPost(
   db: DB,
   publicId: string,
   currentActorId?: number,
-  domain?: string
+  domain?: string,
+  communityDb?: CommunityDbForEnrich
 ): Promise<EnrichedPost | null> {
   const post = await repository.getPostByPublicId(db, publicId);
   if (!post) return null;
-  return enrichPost(db, post, currentActorId, domain);
+  return enrichPost(db, post, currentActorId, domain, communityDb);
 }
 
 /**
@@ -513,13 +530,14 @@ export async function getReplies(
   db: DB,
   publicId: string,
   currentActorId?: number,
-  domain?: string
+  domain?: string,
+  communityDb?: CommunityDbForEnrich
 ): Promise<EnrichedPost[]> {
   const post = await repository.getPostByPublicId(db, publicId);
   if (!post) return [];
 
   const replies = await repository.getReplies(db, post.id);
-  return enrichPostsBatch(db, replies, currentActorId, domain);
+  return enrichPostsBatch(db, replies, currentActorId, domain, communityDb);
 }
 
 /**
@@ -530,10 +548,11 @@ export async function searchPosts(
   query: string,
   limit: number,
   currentActorId?: number,
-  domain?: string
+  domain?: string,
+  communityDb?: CommunityDbForEnrich
 ): Promise<EnrichedPost[]> {
   const posts = await repository.searchPosts(db, query, limit);
-  return enrichPostsBatch(db, posts, currentActorId, domain);
+  return enrichPostsBatch(db, posts, currentActorId, domain, communityDb);
 }
 
 /**
@@ -545,14 +564,15 @@ export async function getPostsByHashtag(
   limit: number,
   before?: number,
   currentActorId?: number,
-  domain?: string
+  domain?: string,
+  communityDb?: CommunityDbForEnrich
 ): Promise<PostsListResponse> {
   const posts = await repository.getPostsByHashtag(db, hashtag, limit + 1, before);
   const hasMore = posts.length > limit;
   const resultPosts = hasMore ? posts.slice(0, limit) : posts;
   const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : null;
 
-  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain);
+  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain, communityDb);
 
   return {
     posts: enrichedPosts,

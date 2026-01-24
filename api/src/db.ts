@@ -813,9 +813,21 @@ export class DB {
   async getHotPosts(limit = 10): Promise<PostWithActor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject(`
-        SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
-        WHERE p.in_reply_to_id IS NULL AND p.hot_score > 0
-        ORDER BY p.hot_score DESC LIMIT $1
+        SELECT DISTINCT ON (p.hot_score, p.id) ${this.postWithActorSelect} FROM (
+          -- Regular posts with engagement
+          SELECT p.id FROM posts p
+          WHERE p.in_reply_to_id IS NULL AND p.hot_score > 0
+
+          UNION
+
+          -- Approved community posts with engagement
+          SELECT p.id FROM posts p
+          JOIN community_posts cp ON p.id = cp.post_id
+          WHERE cp.status = 'approved' AND p.in_reply_to_id IS NULL AND p.hot_score > 0
+        ) AS post_ids
+        JOIN posts p ON p.id = post_ids.id
+        JOIN actors a ON p.actor_id = a.id
+        ORDER BY p.hot_score DESC, p.id DESC LIMIT $1
       `, [limit]);
       return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
     });
