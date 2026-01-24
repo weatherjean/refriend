@@ -1068,23 +1068,9 @@ async function checkAndSubmitToCommunity(
     }
   }
 
-  // If this is a reply, check if the parent post belongs to a community
-  if (inReplyToId) {
-    const parentCommunity = await communityDb.getCommunityForPost(inReplyToId);
-    if (parentCommunity) {
-      // Check if author can post to this community
-      const permission = await communityModeration.canPost(parentCommunity.id, authorActorId);
-      if (!permission.allowed) {
-        console.log(`[Create] Reply ${postId} rejected from community ${parentCommunity.name}: ${permission.reason}`);
-        return;
-      }
-
-      // Submit the reply to the community (replies inherit community context)
-      const autoApprove = await communityModeration.shouldAutoApprove(parentCommunity.id, authorActorId);
-      await communityDb.submitCommunityPost(parentCommunity.id, postId, autoApprove);
-      console.log(`[Create] Reply ${postId} submitted to community ${parentCommunity.name} (inherited from parent)`);
-    }
-  }
+  // Note: Replies to community posts are NOT added to community_posts table.
+  // They are just regular replies that show up under their parent post.
+  // Only top-level posts addressed directly to a community go into community_posts.
 }
 
 async function processDelete(
