@@ -7,6 +7,7 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   username TEXT NOT NULL UNIQUE CHECK (username ~ '^[a-z0-9_]+$' AND length(username) <= 50),
+  email TEXT UNIQUE,
   password_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -24,13 +25,18 @@ CREATE TABLE IF NOT EXISTS actors (
   shared_inbox_url TEXT,
   url TEXT,
   user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  actor_type TEXT NOT NULL DEFAULT 'Person' CHECK (actor_type IN ('Person', 'Group')),
+  follower_count INTEGER NOT NULL DEFAULT 0,
+  following_count INTEGER NOT NULL DEFAULT 0,
+  require_approval BOOLEAN DEFAULT false,
+  created_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Keys: Cryptographic key pairs for local actors (unified to use actor_id only)
+-- Keys: Cryptographic key pairs for local actors
 CREATE TABLE IF NOT EXISTS keys (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, -- deprecated, migrated to actor_id
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   actor_id INTEGER REFERENCES actors(id) ON DELETE CASCADE,
   type TEXT NOT NULL CHECK (type IN ('RSASSA-PKCS1-v1_5', 'Ed25519')),
   private_key TEXT NOT NULL,
@@ -58,12 +64,15 @@ CREATE TABLE IF NOT EXISTS posts (
   content TEXT NOT NULL,
   url TEXT,
   in_reply_to_id INTEGER REFERENCES posts(id) ON DELETE SET NULL,
-  addressed_to TEXT[] NOT NULL DEFAULT '{}',  -- ActivityPub to/cc recipients (actor URIs)
+  community_id INTEGER REFERENCES actors(id) ON DELETE SET NULL,
+  addressed_to TEXT[] NOT NULL DEFAULT '{}',
   likes_count INTEGER NOT NULL DEFAULT 0,
   boosts_count INTEGER NOT NULL DEFAULT 0,
   replies_count INTEGER NOT NULL DEFAULT 0,
   hot_score DOUBLE PRECISION NOT NULL DEFAULT 0,
   sensitive BOOLEAN NOT NULL DEFAULT FALSE,
+  link_preview JSONB,
+  video_embed JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -161,41 +170,6 @@ CREATE TABLE IF NOT EXISTS jobs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Actor type for distinguishing Person vs Group (communities)
-ALTER TABLE actors ADD COLUMN IF NOT EXISTS actor_type TEXT NOT NULL DEFAULT 'Person'
-  CHECK (actor_type IN ('Person', 'Group'));
-
--- Follower count for efficient member_count queries (maintained by trigger)
-ALTER TABLE actors ADD COLUMN IF NOT EXISTS follower_count INTEGER NOT NULL DEFAULT 0;
-
--- Following count for efficient following count queries (maintained by trigger)
-ALTER TABLE actors ADD COLUMN IF NOT EXISTS following_count INTEGER NOT NULL DEFAULT 0;
-
--- Community settings merged into actors table (for Group type)
-ALTER TABLE actors ADD COLUMN IF NOT EXISTS require_approval BOOLEAN DEFAULT false;
-ALTER TABLE actors ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES actors(id) ON DELETE SET NULL;
-
--- Trigger to maintain follower_count and following_count
-CREATE OR REPLACE FUNCTION update_follow_counts()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    UPDATE actors SET follower_count = follower_count + 1 WHERE id = NEW.following_id;
-    UPDATE actors SET following_count = following_count + 1 WHERE id = NEW.follower_id;
-  ELSIF TG_OP = 'DELETE' THEN
-    UPDATE actors SET follower_count = GREATEST(0, follower_count - 1) WHERE id = OLD.following_id;
-    UPDATE actors SET following_count = GREATEST(0, following_count - 1) WHERE id = OLD.follower_id;
-  END IF;
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trigger_update_follower_count ON follows;
-DROP TRIGGER IF EXISTS trigger_update_follow_counts ON follows;
-CREATE TRIGGER trigger_update_follow_counts
-AFTER INSERT OR DELETE ON follows
-FOR EACH ROW EXECUTE FUNCTION update_follow_counts();
-
 -- Community admins (owners and admins - followers are regular members)
 CREATE TABLE IF NOT EXISTS community_admins (
   id SERIAL PRIMARY KEY,
@@ -223,83 +197,13 @@ CREATE TABLE IF NOT EXISTS community_posts (
   community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
   post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-  is_announcement BOOLEAN NOT NULL DEFAULT false,  -- true = community boosted this post, false = post addressed TO community
+  is_announcement BOOLEAN NOT NULL DEFAULT false,
   submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   reviewed_at TIMESTAMPTZ,
   reviewed_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
   suggested_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
   UNIQUE (community_id, post_id)
 );
-
--- Migration: Add is_announcement column
-ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS is_announcement BOOLEAN NOT NULL DEFAULT false;
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_actors_public_id ON actors(public_id);
-CREATE INDEX IF NOT EXISTS idx_actors_user_id ON actors(user_id);
-CREATE INDEX IF NOT EXISTS idx_actors_handle ON actors(handle);
-CREATE INDEX IF NOT EXISTS idx_posts_public_id ON posts(public_id);
-CREATE INDEX IF NOT EXISTS idx_posts_actor_id ON posts(actor_id);
-CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_posts_hot_score ON posts(hot_score DESC);
-CREATE INDEX IF NOT EXISTS idx_posts_in_reply_to ON posts(in_reply_to_id) WHERE in_reply_to_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_posts_actor_replies ON posts(actor_id, created_at DESC) WHERE in_reply_to_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_posts_actor_posts ON posts(actor_id, created_at DESC) WHERE in_reply_to_id IS NULL;
-CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
-CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
-CREATE INDEX IF NOT EXISTS idx_follows_following_created ON follows(following_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);
-CREATE INDEX IF NOT EXISTS idx_likes_actor_id ON likes(actor_id);
-CREATE INDEX IF NOT EXISTS idx_boosts_post_id ON boosts(post_id);
-CREATE INDEX IF NOT EXISTS idx_boosts_actor_id ON boosts(actor_id);
-CREATE INDEX IF NOT EXISTS idx_boosts_actor_created ON boosts(actor_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_activities_actor ON activities(actor_id);
-CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type);
-CREATE INDEX IF NOT EXISTS idx_activities_direction ON activities(direction);
-CREATE INDEX IF NOT EXISTS idx_activities_uri ON activities(uri);
-CREATE INDEX IF NOT EXISTS idx_post_hashtags_hashtag ON post_hashtags(hashtag_id);
-CREATE INDEX IF NOT EXISTS idx_post_hashtags_post ON post_hashtags(post_id);
-CREATE INDEX IF NOT EXISTS idx_media_post ON media(post_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
-CREATE INDEX IF NOT EXISTS idx_jobs_pending ON jobs(run_at) WHERE status = 'pending';
-CREATE INDEX IF NOT EXISTS idx_notifications_target ON notifications(target_actor_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(target_actor_id, read) WHERE read = FALSE;
-
--- Community indexes
-CREATE INDEX IF NOT EXISTS idx_actors_type ON actors(actor_type);
-CREATE INDEX IF NOT EXISTS idx_community_admins_community ON community_admins(community_id);
-CREATE INDEX IF NOT EXISTS idx_community_admins_actor ON community_admins(actor_id);
-CREATE INDEX IF NOT EXISTS idx_community_bans_community ON community_bans(community_id);
-CREATE INDEX IF NOT EXISTS idx_community_bans_actor ON community_bans(actor_id);
-CREATE INDEX IF NOT EXISTS idx_community_posts_community ON community_posts(community_id);
-CREATE INDEX IF NOT EXISTS idx_community_posts_status ON community_posts(community_id, status);
-
--- Hot score indexes for sorting
-CREATE INDEX IF NOT EXISTS idx_posts_actor_hot ON posts(actor_id, hot_score DESC) WHERE in_reply_to_id IS NULL;
-CREATE INDEX IF NOT EXISTS idx_posts_replies_hot ON posts(in_reply_to_id, hot_score DESC) WHERE in_reply_to_id IS NOT NULL;
-
--- Fuzzy search index for post content (pg_trgm)
-CREATE INDEX IF NOT EXISTS idx_posts_content_trgm ON posts USING GIN (content gin_trgm_ops);
-
--- Migration: Add suggested_by column to community_posts
-ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS suggested_by INTEGER REFERENCES actors(id) ON DELETE SET NULL;
-
--- Migration: Add addressed_to column to posts for ActivityPub to/cc recipients
-ALTER TABLE posts ADD COLUMN IF NOT EXISTS addressed_to TEXT[] NOT NULL DEFAULT '{}';
-
--- Migration: Add link_preview column for OpenGraph card data
-ALTER TABLE posts ADD COLUMN IF NOT EXISTS link_preview JSONB;
-
--- Migration: Add video_embed column for video embeds (YouTube, TikTok, PeerTube)
-ALTER TABLE posts ADD COLUMN IF NOT EXISTS video_embed JSONB;
-
--- Migration: Add community_id to posts for efficient community lookup
-ALTER TABLE posts ADD COLUMN IF NOT EXISTS community_id INTEGER REFERENCES actors(id) ON DELETE SET NULL;
-CREATE INDEX IF NOT EXISTS idx_posts_community ON posts(community_id) WHERE community_id IS NOT NULL;
-
--- Migration: Add missing index on community_posts.post_id for batch lookups
-CREATE INDEX IF NOT EXISTS idx_community_posts_post_id ON community_posts(post_id);
 
 -- Pinned community posts
 CREATE TABLE IF NOT EXISTS community_pinned_posts (
@@ -309,8 +213,6 @@ CREATE TABLE IF NOT EXISTS community_pinned_posts (
   pinned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (community_id, post_id)
 );
-
-CREATE INDEX IF NOT EXISTS idx_community_pinned_posts_community ON community_pinned_posts(community_id);
 
 -- Community moderation logs
 CREATE TABLE IF NOT EXISTS community_mod_logs (
@@ -324,11 +226,6 @@ CREATE TABLE IF NOT EXISTS community_mod_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_community_mod_logs_community ON community_mod_logs(community_id, created_at DESC);
-
--- Migration: Add email column to users table
-ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT UNIQUE;
-
 -- Password reset tokens
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id SERIAL PRIMARY KEY,
@@ -338,9 +235,6 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   used_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
-CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_created ON password_reset_tokens(user_id, created_at DESC);
 
 -- Post reports
 CREATE TABLE IF NOT EXISTS reports (
@@ -354,63 +248,101 @@ CREATE TABLE IF NOT EXISTS reports (
   UNIQUE (post_id, reporter_id)
 );
 
+-- ============ Triggers ============
+
+-- Trigger to maintain follower_count and following_count
+CREATE OR REPLACE FUNCTION update_follow_counts()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE actors SET follower_count = follower_count + 1 WHERE id = NEW.following_id;
+    UPDATE actors SET following_count = following_count + 1 WHERE id = NEW.follower_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE actors SET follower_count = GREATEST(0, follower_count - 1) WHERE id = OLD.following_id;
+    UPDATE actors SET following_count = GREATEST(0, following_count - 1) WHERE id = OLD.follower_id;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_update_follow_counts ON follows;
+CREATE TRIGGER trigger_update_follow_counts
+AFTER INSERT OR DELETE ON follows
+FOR EACH ROW EXECUTE FUNCTION update_follow_counts();
+
+-- ============ Indexes ============
+
+-- Actors
+CREATE INDEX IF NOT EXISTS idx_actors_public_id ON actors(public_id);
+CREATE INDEX IF NOT EXISTS idx_actors_user_id ON actors(user_id);
+CREATE INDEX IF NOT EXISTS idx_actors_handle ON actors(handle);
+CREATE INDEX IF NOT EXISTS idx_actors_type ON actors(actor_type);
+
+-- Posts
+CREATE INDEX IF NOT EXISTS idx_posts_public_id ON posts(public_id);
+CREATE INDEX IF NOT EXISTS idx_posts_actor_id ON posts(actor_id);
+CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_hot_score ON posts(hot_score DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_in_reply_to ON posts(in_reply_to_id) WHERE in_reply_to_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_actor_replies ON posts(actor_id, created_at DESC) WHERE in_reply_to_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_actor_posts ON posts(actor_id, created_at DESC) WHERE in_reply_to_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_actor_hot ON posts(actor_id, hot_score DESC) WHERE in_reply_to_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_replies_hot ON posts(in_reply_to_id, hot_score DESC) WHERE in_reply_to_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_community ON posts(community_id) WHERE community_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_posts_content_trgm ON posts USING GIN (content gin_trgm_ops);
+
+-- Follows
+CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
+CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
+CREATE INDEX IF NOT EXISTS idx_follows_following_created ON follows(following_id, created_at DESC);
+
+-- Likes & Boosts
+CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_likes_actor_id ON likes(actor_id);
+CREATE INDEX IF NOT EXISTS idx_boosts_post_id ON boosts(post_id);
+CREATE INDEX IF NOT EXISTS idx_boosts_actor_id ON boosts(actor_id);
+CREATE INDEX IF NOT EXISTS idx_boosts_actor_created ON boosts(actor_id, created_at DESC);
+
+-- Activities
+CREATE INDEX IF NOT EXISTS idx_activities_actor ON activities(actor_id);
+CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type);
+CREATE INDEX IF NOT EXISTS idx_activities_direction ON activities(direction);
+CREATE INDEX IF NOT EXISTS idx_activities_uri ON activities(uri);
+
+-- Hashtags
+CREATE INDEX IF NOT EXISTS idx_post_hashtags_hashtag ON post_hashtags(hashtag_id);
+CREATE INDEX IF NOT EXISTS idx_post_hashtags_post ON post_hashtags(post_id);
+
+-- Media
+CREATE INDEX IF NOT EXISTS idx_media_post ON media(post_id);
+
+-- Sessions
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
+-- Jobs
+CREATE INDEX IF NOT EXISTS idx_jobs_pending ON jobs(run_at) WHERE status = 'pending';
+
+-- Notifications
+CREATE INDEX IF NOT EXISTS idx_notifications_target ON notifications(target_actor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(target_actor_id, read) WHERE read = FALSE;
+
+-- Communities
+CREATE INDEX IF NOT EXISTS idx_community_admins_community ON community_admins(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_admins_actor ON community_admins(actor_id);
+CREATE INDEX IF NOT EXISTS idx_community_bans_community ON community_bans(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_bans_actor ON community_bans(actor_id);
+CREATE INDEX IF NOT EXISTS idx_community_posts_community ON community_posts(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_posts_status ON community_posts(community_id, status);
+CREATE INDEX IF NOT EXISTS idx_community_posts_post_id ON community_posts(post_id);
+CREATE INDEX IF NOT EXISTS idx_community_pinned_posts_community ON community_pinned_posts(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_mod_logs_community ON community_mod_logs(community_id, created_at DESC);
+
+-- Password reset tokens
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_created ON password_reset_tokens(user_id, created_at DESC);
+
+-- Reports
 CREATE INDEX IF NOT EXISTS idx_reports_post ON reports(post_id);
 CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(reporter_id);
 CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status) WHERE status = 'pending';
-
--- ============ Data Migration (force update all data) ============
-
--- Force recalculate follower_count and following_count for all actors
-UPDATE actors SET
-  follower_count = (SELECT COUNT(*) FROM follows WHERE following_id = actors.id),
-  following_count = (SELECT COUNT(*) FROM follows WHERE follower_id = actors.id);
-
--- Migrate community_settings to actors columns (if community_settings table exists)
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'community_settings') THEN
-    UPDATE actors a SET
-      require_approval = COALESCE(cs.require_approval, false),
-      created_by = cs.created_by
-    FROM community_settings cs
-    WHERE a.id = cs.actor_id;
-  END IF;
-END $$;
-
--- Force set community_id on all root posts from community_posts (approved posts only)
-UPDATE posts p SET community_id = cp.community_id
-FROM community_posts cp
-WHERE cp.post_id = p.id
-  AND cp.status = 'approved';
-
--- Propagate community_id to all replies (recursive, run multiple times until no updates)
-DO $$
-DECLARE
-  rows_updated INTEGER;
-BEGIN
-  LOOP
-    UPDATE posts child SET community_id = parent.community_id
-    FROM posts parent
-    WHERE child.in_reply_to_id = parent.id
-      AND parent.community_id IS NOT NULL
-      AND (child.community_id IS NULL OR child.community_id != parent.community_id);
-    GET DIAGNOSTICS rows_updated = ROW_COUNT;
-    EXIT WHEN rows_updated = 0;
-  END LOOP;
-END $$;
-
--- Clean up duplicate keys: delete old user_id based keys where actor_id based keys already exist
-DELETE FROM keys k1
-USING keys k2, actors a
-WHERE k1.user_id = a.user_id
-  AND k2.actor_id = a.id
-  AND k1.type = k2.type
-  AND k1.user_id IS NOT NULL
-  AND k1.actor_id IS NULL;
-
--- Migrate remaining keys from user_id to actor_id
-UPDATE keys k SET actor_id = a.id
-FROM actors a
-WHERE k.user_id = a.user_id
-  AND k.user_id IS NOT NULL
-  AND k.actor_id IS NULL;
