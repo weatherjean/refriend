@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { communities as communitiesApi, Community } from '../api';
+import { useScrollLockEffect } from '../context/ScrollLockContext';
 import { Avatar } from './Avatar';
 
 interface SuggestToCommunityModalProps {
@@ -13,6 +14,9 @@ export function SuggestToCommunityModal({ postId, onClose }: SuggestToCommunityM
   const [submitting, setSubmitting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Lock scroll while modal is open
+  useScrollLockEffect('suggest-to-community-modal', true);
 
   useEffect(() => {
     async function fetchCommunities() {

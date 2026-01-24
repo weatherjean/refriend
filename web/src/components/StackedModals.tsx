@@ -1,20 +1,14 @@
-import { useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { useModalStack } from '../context/ModalStackContext';
 import { ModalActiveProvider } from '../context/ModalActiveContext';
+import { useScrollLockEffect } from '../context/ScrollLockContext';
 import { modalRoutes } from '../App';
 
 export function StackedModals() {
   const { stack, goBack, goHome } = useModalStack();
 
   // Prevent body scroll when any modal is open
-  useEffect(() => {
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, []);
+  useScrollLockEffect('stacked-modals', stack.length > 0);
 
   return (
     <>
@@ -48,6 +42,7 @@ export function StackedModals() {
                 >
                   <i className="bi bi-house-fill"></i>
                 </button>
+                <img src="/icon.svg" alt="" className="page-modal-logo" />
               </div>
               <div className="page-modal-content">
                 <ModalActiveProvider isActive={isTop}>

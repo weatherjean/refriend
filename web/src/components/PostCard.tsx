@@ -163,6 +163,22 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
           </div>
         )}
 
+        {/* Community pill - shown above header on mobile */}
+        {community && (
+          <Link
+            to={`/c/${community.name}`}
+            className="community-pill community-pill-mobile"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {community.avatar_url ? (
+              <img src={community.avatar_url} alt="" />
+            ) : (
+              <i className="bi bi-people-fill"></i>
+            )}
+            <span>{community.name}</span>
+          </Link>
+        )}
+
         {/* Header: Avatar + Meta + Community */}
         <div className="post-header">
           <Link to={authorLink} onClick={(e) => e.stopPropagation()} className="post-avatar-link">
@@ -196,7 +212,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
           {community && (
             <Link
               to={`/c/${community.name}`}
-              className="community-pill"
+              className="community-pill community-pill-desktop"
               onClick={(e) => e.stopPropagation()}
             >
               {community.avatar_url ? (

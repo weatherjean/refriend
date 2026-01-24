@@ -2,6 +2,7 @@ import { ReactNode, useState, useEffect, FormEvent } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFeed } from '../context/FeedContext';
+import { useScrollLockEffect } from '../context/ScrollLockContext';
 import { getUsername } from '../utils';
 import { tags, notifications as notificationsApi } from '../api';
 import { TagBadge } from './TagBadge';
@@ -38,16 +39,7 @@ export function Layout({ children }: LayoutProps) {
   }, []);
 
   // Lock body scroll when mobile menu is open
-  useEffect(() => {
-    if (mobileMenuOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [mobileMenuOpen]);
+  useScrollLockEffect('mobile-menu', mobileMenuOpen);
 
   // Fetch unread notification count
   useEffect(() => {

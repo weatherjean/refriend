@@ -37,12 +37,13 @@ export function ProfileTabs({ activeTab, showBoosts, showSettings, onTabChange }
         </li>
       )}
       {showSettings && (
-        <li className="nav-item">
+        <li className="nav-item ms-auto">
           <button
             className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`}
             onClick={() => onTabChange('settings')}
+            title="Settings"
           >
-            <i className="bi bi-gear-fill me-1"></i>Settings
+            <i className="bi bi-gear-fill"></i>
           </button>
         </li>
       )}

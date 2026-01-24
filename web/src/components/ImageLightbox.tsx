@@ -62,7 +62,8 @@ export function ImageLightbox({ attachments, initialIndex, isOpen, onClose }: Im
         onClick={onClose}
       >
         <button
-          className="btn btn-link text-white position-absolute top-0 end-0 m-3 fs-3"
+          className="btn btn-link text-white position-absolute end-0 fs-3"
+          style={{ top: 'max(0.75rem, env(safe-area-inset-top))', right: '0.75rem' }}
           onClick={onClose}
         >
           <i className="bi bi-x-lg"></i>
@@ -90,7 +91,10 @@ export function ImageLightbox({ attachments, initialIndex, isOpen, onClose }: Im
           onClick={(e) => e.stopPropagation()}
         />
         {attachments.length > 1 && (
-          <div className="position-absolute bottom-0 start-50 translate-middle-x mb-4 text-white">
+          <div
+            className="position-absolute start-50 translate-middle-x text-white"
+            style={{ bottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
+          >
             {currentIndex + 1} / {attachments.length}
           </div>
         )}
