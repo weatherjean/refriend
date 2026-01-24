@@ -168,27 +168,33 @@ ALTER TABLE actors ADD COLUMN IF NOT EXISTS actor_type TEXT NOT NULL DEFAULT 'Pe
 -- Follower count for efficient member_count queries (maintained by trigger)
 ALTER TABLE actors ADD COLUMN IF NOT EXISTS follower_count INTEGER NOT NULL DEFAULT 0;
 
+-- Following count for efficient following count queries (maintained by trigger)
+ALTER TABLE actors ADD COLUMN IF NOT EXISTS following_count INTEGER NOT NULL DEFAULT 0;
+
 -- Community settings merged into actors table (for Group type)
 ALTER TABLE actors ADD COLUMN IF NOT EXISTS require_approval BOOLEAN DEFAULT false;
 ALTER TABLE actors ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES actors(id) ON DELETE SET NULL;
 
--- Trigger to maintain follower_count
-CREATE OR REPLACE FUNCTION update_follower_count()
+-- Trigger to maintain follower_count and following_count
+CREATE OR REPLACE FUNCTION update_follow_counts()
 RETURNS TRIGGER AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     UPDATE actors SET follower_count = follower_count + 1 WHERE id = NEW.following_id;
+    UPDATE actors SET following_count = following_count + 1 WHERE id = NEW.follower_id;
   ELSIF TG_OP = 'DELETE' THEN
     UPDATE actors SET follower_count = GREATEST(0, follower_count - 1) WHERE id = OLD.following_id;
+    UPDATE actors SET following_count = GREATEST(0, following_count - 1) WHERE id = OLD.follower_id;
   END IF;
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_update_follower_count ON follows;
-CREATE TRIGGER trigger_update_follower_count
+DROP TRIGGER IF EXISTS trigger_update_follow_counts ON follows;
+CREATE TRIGGER trigger_update_follow_counts
 AFTER INSERT OR DELETE ON follows
-FOR EACH ROW EXECUTE FUNCTION update_follower_count();
+FOR EACH ROW EXECUTE FUNCTION update_follow_counts();
 
 -- Community admins (owners and admins - followers are regular members)
 CREATE TABLE IF NOT EXISTS community_admins (
@@ -354,10 +360,10 @@ CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status) WHERE status = 
 
 -- ============ Data Migration (force update all data) ============
 
--- Force recalculate follower_count for all actors
-UPDATE actors SET follower_count = (
-  SELECT COUNT(*) FROM follows WHERE following_id = actors.id
-);
+-- Force recalculate follower_count and following_count for all actors
+UPDATE actors SET
+  follower_count = (SELECT COUNT(*) FROM follows WHERE following_id = actors.id),
+  following_count = (SELECT COUNT(*) FROM follows WHERE follower_id = actors.id);
 
 -- Migrate community_settings to actors columns (if community_settings table exists)
 DO $$

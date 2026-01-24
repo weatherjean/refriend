@@ -32,6 +32,7 @@ export interface Actor {
   user_id: number | null;
   actor_type: "Person" | "Group";
   follower_count: number;
+  following_count: number;
   require_approval: boolean | null;  // null for Person actors
   created_by: number | null;  // creator actor_id for communities
   created_at: string;
@@ -267,7 +268,7 @@ export class DB {
 
   // ============ Actors ============
 
-  async createActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "follower_count" | "require_approval" | "created_by"> & { follower_count?: number; require_approval?: boolean | null; created_by?: number | null }): Promise<Actor> {
+  async createActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "follower_count" | "following_count" | "require_approval" | "created_by"> & { follower_count?: number; following_count?: number; require_approval?: boolean | null; created_by?: number | null }): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type, follower_count, require_approval, created_by)
@@ -442,7 +443,7 @@ export class DB {
     });
   }
 
-  async upsertActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "user_id" | "follower_count" | "require_approval" | "created_by">): Promise<Actor> {
+  async upsertActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "user_id" | "follower_count" | "following_count" | "require_approval" | "created_by">): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type)
@@ -552,25 +553,27 @@ export class DB {
     });
   }
 
-  async getFollowers(actorId: number): Promise<Actor[]> {
+  async getFollowers(actorId: number, limit = 200): Promise<Actor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         SELECT a.* FROM actors a
         JOIN follows f ON a.id = f.follower_id
         WHERE f.following_id = ${actorId}
         ORDER BY f.created_at DESC
+        LIMIT ${limit}
       `;
       return result.rows;
     });
   }
 
-  async getFollowing(actorId: number): Promise<Actor[]> {
+  async getFollowing(actorId: number, limit = 200): Promise<Actor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         SELECT a.* FROM actors a
         JOIN follows f ON a.id = f.following_id
         WHERE f.follower_id = ${actorId}
         ORDER BY f.created_at DESC
+        LIMIT ${limit}
       `;
       return result.rows;
     });
@@ -578,19 +581,21 @@ export class DB {
 
   async getFollowersCount(actorId: number): Promise<number> {
     return this.query(async (client) => {
-      const result = await client.queryObject<{ count: bigint }>`
-        SELECT COUNT(*) as count FROM follows WHERE following_id = ${actorId}
+      // Use pre-computed follower_count from actors table (maintained by trigger)
+      const result = await client.queryObject<{ follower_count: number }>`
+        SELECT follower_count FROM actors WHERE id = ${actorId}
       `;
-      return Number(result.rows[0].count);
+      return result.rows[0]?.follower_count ?? 0;
     });
   }
 
   async getFollowingCount(actorId: number): Promise<number> {
     return this.query(async (client) => {
-      const result = await client.queryObject<{ count: bigint }>`
-        SELECT COUNT(*) as count FROM follows WHERE follower_id = ${actorId}
+      // Use pre-computed following_count from actors table (maintained by trigger)
+      const result = await client.queryObject<{ following_count: number }>`
+        SELECT following_count FROM actors WHERE id = ${actorId}
       `;
-      return Number(result.rows[0].count);
+      return result.rows[0]?.following_count ?? 0;
     });
   }
 
@@ -801,6 +806,7 @@ export class DB {
         user_id: row.author_user_id as number | null,
         actor_type: (row.author_actor_type as "Person" | "Group") || "Person",
         follower_count: (row.author_follower_count as number) || 0,
+        following_count: (row.author_following_count as number) || 0,
         require_approval: row.author_require_approval as boolean | null,
         created_by: row.author_created_by as number | null,
         created_at: String(row.author_created_at),
@@ -813,7 +819,7 @@ export class DB {
     a.id as author_id, a.public_id as author_public_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
     a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
     a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,
-    a.actor_type as author_actor_type, a.follower_count as author_follower_count,
+    a.actor_type as author_actor_type, a.follower_count as author_follower_count, a.following_count as author_following_count,
     a.require_approval as author_require_approval, a.created_by as author_created_by, a.created_at as author_created_at
   `;
 
@@ -1359,13 +1365,14 @@ export class DB {
     });
   }
 
-  async getPostLikers(postId: number): Promise<Actor[]> {
+  async getPostLikers(postId: number, limit = 100): Promise<Actor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         SELECT a.* FROM actors a
         JOIN likes l ON a.id = l.actor_id
         WHERE l.post_id = ${postId}
         ORDER BY l.created_at DESC
+        LIMIT ${limit}
       `;
       return result.rows;
     });
@@ -1451,13 +1458,14 @@ export class DB {
     });
   }
 
-  async getPostBoosters(postId: number): Promise<Actor[]> {
+  async getPostBoosters(postId: number, limit = 100): Promise<Actor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         SELECT a.* FROM actors a
         JOIN boosts b ON a.id = b.actor_id
         WHERE b.post_id = ${postId}
         ORDER BY b.created_at DESC
+        LIMIT ${limit}
       `;
       return result.rows;
     });
@@ -1502,13 +1510,14 @@ export class DB {
     });
   }
 
-  async getPinnedPosts(actorId: number): Promise<Post[]> {
+  async getPinnedPosts(actorId: number, limit = 10): Promise<Post[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Post>`
         SELECT p.* FROM posts p
         JOIN pinned_posts pp ON p.id = pp.post_id
         WHERE pp.actor_id = ${actorId}
         ORDER BY pp.pinned_at DESC
+        LIMIT ${limit}
       `;
       return result.rows;
     });
@@ -1637,6 +1646,72 @@ export class DB {
         INSERT INTO reports (post_id, reporter_id, reason, details)
         VALUES (${postId}, ${reporterId}, ${reason}, ${details})
       `;
+    });
+  }
+
+  // ============ Batch/Optimized Methods ============
+
+  /**
+   * Get the ancestor chain for a post using recursive CTE (single query).
+   * Returns posts in order from root to immediate parent.
+   */
+  async getAncestorChain(postId: number, limit = 50): Promise<Post[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        WITH RECURSIVE ancestors AS (
+          SELECT p.*, 0 as depth FROM posts p WHERE id = ${postId}
+          UNION ALL
+          SELECT p.*, a.depth + 1 FROM posts p
+          JOIN ancestors a ON p.id = a.in_reply_to_id
+          WHERE a.depth < ${limit}
+        )
+        SELECT id, public_id, uri, actor_id, content, url, in_reply_to_id, community_id,
+               addressed_to, likes_count, sensitive, link_preview, video_embed, created_at
+        FROM ancestors WHERE id != ${postId} ORDER BY depth DESC
+      `;
+      return result.rows;
+    });
+  }
+
+  /**
+   * Get the ancestor chain with actor data joined (single query).
+   */
+  async getAncestorChainWithActor(postId: number, limit = 50): Promise<PostWithActor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject(`
+        WITH RECURSIVE ancestors AS (
+          SELECT p.*, 0 as depth FROM posts p WHERE id = $1
+          UNION ALL
+          SELECT p.*, a.depth + 1 FROM posts p
+          JOIN ancestors a ON p.id = a.in_reply_to_id
+          WHERE a.depth < $2
+        )
+        SELECT ${this.postWithActorSelect}
+        FROM ancestors p
+        JOIN actors a ON p.actor_id = a.id
+        WHERE p.id != $1
+        ORDER BY p.depth DESC
+      `, [postId, limit]);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+    });
+  }
+
+  /**
+   * Batch lookup actors by usernames (single query).
+   */
+  async getActorsByUsernames(usernames: string[]): Promise<Map<string, Actor>> {
+    if (usernames.length === 0) return new Map();
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor & { username: string }>`
+        SELECT a.*, u.username FROM actors a
+        JOIN users u ON a.user_id = u.id
+        WHERE LOWER(u.username) = ANY(${usernames.map(u => u.toLowerCase())})
+      `;
+      const map = new Map<string, Actor>();
+      for (const row of result.rows) {
+        map.set(row.username.toLowerCase(), row);
+      }
+      return map;
     });
   }
 }

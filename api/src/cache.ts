@@ -78,3 +78,4 @@ export async function setCachedTrendingCommunities(value: unknown): Promise<void
   if (!kv) return;
   await kv.set(["trending", "communities"], value, { expireIn: TRENDING_COMMUNITIES_TTL_MS });
 }
+

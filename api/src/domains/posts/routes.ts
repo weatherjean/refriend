@@ -91,18 +91,9 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       return c.json({ error: "Post not found" }, 404);
     }
 
-    // Get ancestor chain (walk up in_reply_to_id)
-    const ancestors: Awaited<ReturnType<typeof service.enrichPost>>[] = [];
-    let currentPost = post;
-    const seen = new Set<number>([post.id]); // Prevent infinite loops
-
-    while (currentPost.in_reply_to_id) {
-      const parentPost = await db.getPostById(currentPost.in_reply_to_id);
-      if (!parentPost || seen.has(parentPost.id)) break;
-      seen.add(parentPost.id);
-      ancestors.unshift(await service.enrichPost(db, parentPost, currentActor?.id, domain, communityDb));
-      currentPost = parentPost;
-    }
+    // Get ancestor chain using batch fetch (single recursive CTE query)
+    const ancestorPosts = await db.getAncestorChainWithActor(post.id, 50);
+    const ancestors = await service.enrichPostsBatch(db, ancestorPosts, currentActor?.id, domain, communityDb);
 
     // Enrich the main post
     const enrichedPost = await service.enrichPost(db, post, currentActor?.id, domain, communityDb);

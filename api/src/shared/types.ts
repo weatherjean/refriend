@@ -38,6 +38,7 @@ export interface Actor {
   user_id: number | null;
   actor_type: "Person" | "Group";
   follower_count: number;
+  following_count: number;
   require_approval: boolean | null;  // null for Person actors
   created_by: number | null;  // creator actor_id for communities
   created_at: string;

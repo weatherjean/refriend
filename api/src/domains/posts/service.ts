@@ -309,7 +309,7 @@ export async function validateCreatePost(
 }
 
 /**
- * Notify mentioned users about a post
+ * Notify mentioned users about a post (batch lookup for efficiency)
  */
 export async function notifyMentions(
   db: DB,
@@ -318,19 +318,26 @@ export async function notifyMentions(
   postId: number,
   domain: string
 ): Promise<void> {
-  for (const mention of mentions) {
-    // Parse mention: @username or @username@domain
-    const mentionMatch = mention.match(/^@([\w.-]+)(?:@([\w.-]+))?$/);
-    if (!mentionMatch) continue;
+  // Parse and filter mentions to local users only
+  const localMentions = mentions
+    .map(m => m.match(/^@([\w.-]+)(?:@([\w.-]+))?$/))
+    .filter((match): match is RegExpMatchArray => {
+      if (!match) return false;
+      const mentionDomain = match[2];
+      return !mentionDomain || mentionDomain === domain;
+    })
+    .map(match => match[1].toLowerCase());
 
-    const [, mentionUsername, mentionDomain] = mentionMatch;
+  const uniqueMentions = [...new Set(localMentions)];
+  if (uniqueMentions.length === 0) return;
 
-    // Only notify local users (on our domain or no domain specified)
-    if (mentionDomain && mentionDomain !== domain) continue;
+  // Batch fetch all mentioned actors (single query)
+  const actorsMap = await db.getActorsByUsernames(uniqueMentions);
 
-    const mentionedActor = await db.getActorByUsername(mentionUsername);
-    if (mentionedActor && mentionedActor.id !== authorActorId) {
-      await createNotification(db, 'mention', authorActorId, mentionedActor.id, postId);
+  // Create notifications
+  for (const [, actor] of actorsMap) {
+    if (actor.id !== authorActorId) {
+      await createNotification(db, 'mention', authorActorId, actor.id, postId);
     }
   }
 }

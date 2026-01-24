@@ -263,9 +263,13 @@ federation
     if (!actor) return null;
 
     const pinnedPosts = await db.getPinnedPosts(actor.id);
+    // Batch fetch all media for pinned posts (1 query instead of N)
+    const postIds = pinnedPosts.map(p => p.id);
+    const mediaMap = await db.getMediaForPosts(postIds);
+
     // Return Note objects for pinned posts with attachments
-    const items = await Promise.all(pinnedPosts.map(async (p) => {
-      const mediaList = await db.getMediaByPostId(p.id);
+    const items = pinnedPosts.map((p) => {
+      const mediaList = mediaMap.get(p.id) || [];
       const attachments = mediaList.map(m => new Document({
         url: m.url.startsWith('http') ? new URL(m.url) : new URL(`https://${DOMAIN}${m.url}`),
         mediaType: m.media_type,
@@ -283,7 +287,7 @@ federation
         sensitive: p.sensitive,
         attachments: attachments.length > 0 ? attachments : undefined,
       });
-    }));
+    });
 
     return { items };
   });
@@ -298,22 +302,21 @@ federation
     // Get stored activities from the activities table
     const activities = await db.getOutboxActivities(actor.id, 50);
 
-    // Parse JSON-LD back into Activity objects
-    const items: Activity[] = [];
-    for (const a of activities) {
-      try {
-        const jsonLd = JSON.parse(a.raw_json);
-        const activity = await Activity.fromJsonLd(jsonLd, {
-          documentLoader: ctx.documentLoader,
-          contextLoader: ctx.contextLoader,
-        });
-        if (activity) {
-          items.push(activity);
+    // Parse JSON-LD back into Activity objects (parallel for better performance)
+    const items = (await Promise.all(
+      activities.map(async (a) => {
+        try {
+          const jsonLd = JSON.parse(a.raw_json);
+          return await Activity.fromJsonLd(jsonLd, {
+            documentLoader: ctx.documentLoader,
+            contextLoader: ctx.contextLoader,
+          });
+        } catch (e) {
+          console.error(`[Outbox] Failed to parse activity ${a.uri}:`, e);
+          return null;
         }
-      } catch (e) {
-        console.error(`[Outbox] Failed to parse activity ${a.uri}:`, e);
-      }
-    }
+      })
+    )).filter((a): a is Activity => a !== null);
 
     return { items };
   });
