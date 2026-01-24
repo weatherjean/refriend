@@ -1,5 +1,5 @@
-import type { CommunityDB, Community } from "./db.ts";
-import type { Actor } from "../db.ts";
+import type { CommunityDB, Community } from "./repository.ts";
+import type { Actor } from "../../db.ts";
 
 export interface PostPermissionResult {
   allowed: boolean;

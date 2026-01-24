@@ -1,14 +1,15 @@
 import { Hono } from "@hono/hono";
-import type { DB, Actor, User, PostWithActor } from "../db.ts";
+import type { DB, Actor, User, PostWithActor } from "../../db.ts";
 import type { Federation, Context } from "@fedify/fedify";
 import { Delete, Tombstone, PUBLIC_COLLECTION } from "@fedify/fedify";
-import { CommunityDB, type Community } from "./db.ts";
+import { CommunityDB, type Community } from "./repository.ts";
 import { CommunityModeration } from "./moderation.ts";
 import { announcePost, getCommunityActorUri } from "./federation.ts";
-import { enrichPostsBatch, sanitizeActor as sanitizeActorApi } from "../api.ts";
-import { processActivity } from "../activities.ts";
-import { deleteMedia } from "../storage.ts";
-import { getCachedTrendingCommunities, setCachedTrendingCommunities } from "../cache.ts";
+import { enrichPostsBatch } from "../posts/service.ts";
+import { processActivity } from "../../activities.ts";
+import { deleteMedia } from "../../storage.ts";
+import { getCachedTrendingCommunities, setCachedTrendingCommunities } from "../../cache.ts";
+import { formatDate } from "../../shared/formatting.ts";
 
 type Env = {
   Variables: {
@@ -21,23 +22,6 @@ type Env = {
     federation: Federation<void>;
   };
 };
-
-// Helper to format dates
-function formatDate(date: string | Date | unknown): string {
-  if (date instanceof Date) {
-    return date.toISOString();
-  }
-  if (date && typeof date === "object" && "toISOString" in date) {
-    return (date as Date).toISOString();
-  }
-  if (date) {
-    const parsed = new Date(String(date));
-    if (!isNaN(parsed.getTime())) {
-      return parsed.toISOString();
-    }
-  }
-  return String(date);
-}
 
 // Sanitize community for API response
 function sanitizeCommunity(community: Community) {

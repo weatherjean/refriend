@@ -135,12 +135,17 @@ Deno.test({
 
         const { actor } = await createTestUser({ username: "poster", email: "poster@test.com" });
         await createTestPost(actor, { content: "Hello world this is a test" });
-        await createTestPost(actor, { content: "Another post" });
+        await createTestPost(actor, { content: "Another post about coding" });
 
         const res = await testRequest(api, "GET", "/search?q=hello");
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.posts);
+        // Search should find the post containing "hello"
+        assertEquals(data.posts.length >= 1, true);
+        // Verify the found post contains the search term
+        const foundPost = data.posts.find((p: { content: string }) => p.content.toLowerCase().includes("hello"));
+        assertExists(foundPost);
       });
 
       await t.step("returns empty for no query", async () => {
@@ -363,6 +368,49 @@ Deno.test({
         assertEquals(res.status, 400);
         const data = await res.json();
         assertEquals(data.error, "No image provided");
+      });
+
+      await t.step("rejects image over 5MB", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+
+        await createTestUser({ username: "user", email: "user@test.com", password: "password123" });
+        const cookie = await loginUser(api, "user@test.com", "password123");
+
+        // Create a base64 string that decodes to > 5MB
+        const largeData = "A".repeat(7 * 1024 * 1024); // 7MB of base64 = ~5.25MB decoded
+
+        const res = await testRequest(api, "POST", "/media", {
+          cookie,
+          body: { image: `data:image/webp;base64,${largeData}` },
+        });
+
+        assertEquals(res.status, 400);
+        const data = await res.json();
+        assertEquals(data.error, "Image too large (max 5MB)");
+      });
+
+      await t.step("uploads valid image successfully", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+
+        await createTestUser({ username: "user", email: "user@test.com", password: "password123" });
+        const cookie = await loginUser(api, "user@test.com", "password123");
+
+        // A small valid base64 image (just for testing the flow)
+        const smallImage = btoa("fake image data for testing");
+
+        const res = await testRequest(api, "POST", "/media", {
+          cookie,
+          body: { image: `data:image/webp;base64,${smallImage}` },
+        });
+
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        assertExists(data.url);
+        assertEquals(data.media_type, "image/webp");
+        // URL should be a valid uploads path
+        assertEquals(data.url.startsWith("/uploads/media/"), true);
       });
     });
 

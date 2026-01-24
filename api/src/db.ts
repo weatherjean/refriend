@@ -153,7 +153,7 @@ export class DB {
     await this.pool.end();
   }
 
-  private async query<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  async query<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
       return await fn(client);

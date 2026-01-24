@@ -1,5 +1,5 @@
 import { DB } from "./db.ts";
-import { CommunityDB } from "./communities/db.ts";
+import { CommunityDB } from "./domains/communities/repository.ts";
 
 const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://riff:riff@localhost:5432/riff";
 const DOMAIN = Deno.env.get("DOMAIN") || "localhost:8000";

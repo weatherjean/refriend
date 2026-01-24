@@ -1,7 +1,7 @@
 import { Announce, Context, PUBLIC_COLLECTION } from "@fedify/fedify";
 import type { Hono } from "@hono/hono";
-import type { CommunityDB } from "./db.ts";
-import { getDomain } from "../federation.ts";
+import type { CommunityDB } from "./repository.ts";
+import { getDomain } from "../federation/setup.ts";
 
 let communityDb: CommunityDB;
 

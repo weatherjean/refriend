@@ -335,6 +335,24 @@ Deno.test({
         const res = await testRequest(api, "DELETE", `/posts/${post.public_id}`, { cookie });
         assertEquals(res.status, 404);
       });
+
+      await t.step("deletes own post successfully", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+
+        const { actor } = await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
+        const post = await createTestPost(actor, { content: "Delete me" });
+        const cookie = await loginUser(api, "poster@test.com", "password123");
+
+        const res = await testRequest(api, "DELETE", `/posts/${post.public_id}`, { cookie });
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        assertEquals(data.ok, true);
+
+        // Verify post is actually deleted
+        const getRes = await testRequest(api, "GET", `/posts/${post.public_id}`);
+        assertEquals(getRes.status, 404);
+      });
     });
 
     // ============ POST /posts/:id/like ============

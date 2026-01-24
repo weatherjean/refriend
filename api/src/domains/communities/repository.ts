@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from "postgres";
-import type { Actor, Post, PostWithActor } from "../db.ts";
+import type { Actor, Post, PostWithActor } from "../../db.ts";
 
 // Community-specific types
 export interface CommunitySettings {
@@ -152,7 +152,7 @@ export class CommunityDB {
         LIMIT 1
       `;
       if (!result.rows[0]) return null;
-      const row = result.rows[0] as Record<string, unknown>;
+      const row = result.rows[0] as unknown as Record<string, unknown>;
       return {
         ...result.rows[0],
         member_count: Number(row.member_count || 0),
@@ -175,7 +175,7 @@ export class CommunityDB {
         WHERE a.id = ${actorId} AND a.actor_type = 'Group'
       `;
       if (!result.rows[0]) return null;
-      const row = result.rows[0] as Record<string, unknown>;
+      const row = result.rows[0] as unknown as Record<string, unknown>;
       return {
         ...result.rows[0],
         member_count: Number(row.member_count || 0),
@@ -275,8 +275,8 @@ export class CommunityDB {
            ORDER BY a.id DESC LIMIT $1`;
       const params = before ? [before, limit] : [limit];
       const result = await client.queryObject(query, params);
-      return result.rows.map((row: Record<string, unknown>) => ({
-        ...(row as Actor),
+      return (result.rows as Record<string, unknown>[]).map((row) => ({
+        ...(row as unknown as Actor),
         member_count: Number(row.member_count || 0),
         settings: row.require_approval !== undefined ? {
           actor_id: row.id as number,
@@ -511,7 +511,7 @@ export class CommunityDB {
         ORDER BY a.name ASC
         LIMIT ${limit}
       `;
-      return result.rows.map((row: Record<string, unknown>) => ({
+      return (result.rows as Record<string, unknown>[]).map((row) => ({
         id: row.id as number,
         public_id: row.public_id as string,
         uri: row.uri as string,
@@ -680,7 +680,7 @@ export class CommunityDB {
       }
 
       const result = await client.queryObject(query, params);
-      return result.rows.map((row: Record<string, unknown>) => ({
+      return (result.rows as Record<string, unknown>[]).map((row) => ({
         id: row.cp_id as number,
         community_id: row.community_id as number,
         post_id: row.post_id as number,
@@ -805,7 +805,7 @@ export class CommunityDB {
         WHERE cpp.community_id = ${communityId} AND cp.status = 'approved'
         ORDER BY cpp.pinned_at DESC
       `;
-      return result.rows.map((row: Record<string, unknown>) => ({
+      return (result.rows as Record<string, unknown>[]).map((row) => ({
         id: row.cp_id as number,
         community_id: row.community_id as number,
         post_id: row.post_id as number,
@@ -890,14 +890,14 @@ export class CommunityDB {
         ORDER BY new_members DESC
         LIMIT ${limit}
       `;
-      return result.rows.map(row => ({
+      return (result.rows as unknown as (Community & { new_members: bigint; require_approval?: boolean; created_by?: number | null })[]).map(row => ({
         ...row,
-        member_count: Number((row as Record<string, unknown>).member_count || 0),
+        member_count: Number(row.member_count || 0),
         new_members: Number(row.new_members),
         settings: row.require_approval !== undefined ? {
           actor_id: row.id,
-          require_approval: row.require_approval as unknown as boolean,
-          created_by: row.created_by as unknown as number | null,
+          require_approval: row.require_approval,
+          created_by: row.created_by ?? null,
         } : undefined,
       })) as (Community & { new_members: number })[];
     });
@@ -917,8 +917,8 @@ export class CommunityDB {
         ORDER BY (SELECT COUNT(*) FROM follows WHERE following_id = a.id) DESC
         LIMIT ${limit}
       `;
-      return result.rows.map((row: Record<string, unknown>) => ({
-        ...(row as Actor),
+      return (result.rows as unknown as Record<string, unknown>[]).map((row) => ({
+        ...(row as unknown as Actor),
         member_count: Number(row.member_count || 0),
         settings: row.require_approval !== undefined ? {
           actor_id: row.id as number,

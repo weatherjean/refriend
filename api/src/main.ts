@@ -3,12 +3,12 @@ import { serveStatic } from "@hono/hono/deno";
 import { federation as fedifyIntegration } from "@fedify/fedify/x/hono";
 import { behindProxy } from "@hongminhee/x-forwarded-fetch";
 import { DB } from "./db.ts";
-import { federation, setDomain, setDB } from "./federation.ts";
-import { createApi } from "./api.ts";
+import { federation, setDomain, setDB } from "./domains/federation/setup.ts";
+import { createApiRoutes } from "./api-routes.ts";
 import { initStorage, getUploadsDir } from "./storage.ts";
 import { initCache } from "./cache.ts";
-import { CommunityDB } from "./communities/db.ts";
-import { addCommunityFederationRoutes, setCommunityDB as setCommunityDBFed } from "./communities/federation.ts";
+import { CommunityDB } from "./domains/communities/repository.ts";
+import { addCommunityFederationRoutes, setCommunityDB as setCommunityDBFed } from "./domains/communities/federation.ts";
 import { setCommunityDb as setActivityCommunityDb } from "./activities.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
@@ -83,7 +83,7 @@ addCommunityFederationRoutes(app);
 setActivityCommunityDb(communityDb);
 
 // API routes for the React frontend - pass domain dynamically
-app.route("/api", createApi(db, federation, communityDb));
+app.route("/api", createApiRoutes(db, federation, communityDb));
 
 // Health check
 app.get("/health", (c) => c.json({ ok: true }));

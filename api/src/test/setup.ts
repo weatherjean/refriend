@@ -5,8 +5,8 @@
  */
 
 import { DB } from "../db.ts";
-import { CommunityDB } from "../communities/db.ts";
-import { createApi } from "../api.ts";
+import { CommunityDB } from "../domains/communities/repository.ts";
+import { createApiRoutes } from "../api-routes.ts";
 import type { User, Actor, Post } from "../db.ts";
 
 const TEST_DB_PORT = "5433";
@@ -128,7 +128,7 @@ export async function createTestApi() {
     }),
   };
 
-  return createApi(db as any, mockFederation as any, communityDb);
+  return createApiRoutes(db as any, mockFederation as any, communityDb);
 }
 
 /**

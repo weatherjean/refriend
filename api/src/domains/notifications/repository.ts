@@ -1,38 +1,11 @@
 /**
- * Notifications module
+ * Notifications Repository
  *
- * Handles creating and querying notifications for user interactions.
- * Notification types: like, boost, follow, reply, mention
+ * Database operations for notifications.
  */
 
-import type { DB } from "./db.ts";
-
-export type NotificationType = 'like' | 'boost' | 'follow' | 'reply' | 'mention';
-
-export interface Notification {
-  id: number;
-  type: NotificationType;
-  actor_id: number;
-  target_actor_id: number;
-  post_id: number | null;
-  read: boolean;
-  created_at: Date;
-}
-
-export interface NotificationWithActor extends Notification {
-  actor: {
-    id: number;
-    public_id: string;
-    handle: string;
-    name: string | null;
-    avatar_url: string | null;
-  };
-  post?: {
-    id: number;
-    public_id: string;
-    content: string;
-  };
-}
+import type { DB } from "../../db.ts";
+import type { NotificationType, NotificationWithActor } from "../../shared/types.ts";
 
 /**
  * Create a notification

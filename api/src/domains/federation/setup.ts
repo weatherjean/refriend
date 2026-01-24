@@ -21,8 +21,8 @@ import {
   PUBLIC_COLLECTION,
 } from "@fedify/fedify";
 import { DenoKvStore, DenoKvMessageQueue } from "@fedify/denokv";
-import type { DB } from "./db.ts";
-import { processActivity } from "./activities.ts";
+import type { DB } from "../../db.ts";
+import { processActivity } from "./processor.ts";
 
 // Domain will be set at runtime
 let DOMAIN = "localhost:8000";
