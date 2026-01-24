@@ -344,6 +344,7 @@ export const tags = {
     const query = new URLSearchParams();
     if (params?.limit) query.set('limit', params.limit.toString());
     if (params?.before) query.set('before', params.before.toString());
+    if (params?.sort) query.set('sort', params.sort);
     const queryStr = query.toString();
     return fetchJson<PaginatedPosts & { tag: string }>(`/tags/${encodeURIComponent(tag)}${queryStr ? '?' + queryStr : ''}`);
   },

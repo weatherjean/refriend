@@ -1014,20 +1014,21 @@ export class DB {
     });
   }
 
-  async getPostsByHashtagWithActor(hashtagName: string, limit = 20, before?: number): Promise<PostWithActor[]> {
+  async getPostsByHashtagWithActor(hashtagName: string, limit = 20, before?: number, sort: 'new' | 'hot' = 'new'): Promise<PostWithActor[]> {
     const normalized = hashtagName.toLowerCase().replace(/^#/, "");
+    const orderBy = sort === 'hot' ? 'p.hot_score DESC, p.id DESC' : 'p.id DESC';
     return this.query(async (client) => {
       const query = before
         ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
            JOIN post_hashtags ph ON p.id = ph.post_id
            JOIN hashtags h ON ph.hashtag_id = h.id
            WHERE h.name = $1 AND p.id < $2
-           ORDER BY p.id DESC LIMIT $3`
+           ORDER BY ${orderBy} LIMIT $3`
         : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
            JOIN post_hashtags ph ON p.id = ph.post_id
            JOIN hashtags h ON ph.hashtag_id = h.id
            WHERE h.name = $1
-           ORDER BY p.id DESC LIMIT $2`;
+           ORDER BY ${orderBy} LIMIT $2`;
       const params = before ? [normalized, before, limit] : [normalized, limit];
       const result = await client.queryObject(query, params);
       return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));

@@ -57,16 +57,17 @@ export function createTagRoutes(): Hono<TagsEnv> {
     const actor = c.get("actor");
     const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
     const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const sort = c.req.query("sort") === "hot" ? "hot" : "new";
 
-    // Try cache for logged-out users
-    if (!actor) {
+    // Try cache for logged-out users with default sort
+    if (!actor && sort === "new") {
       const cached = await getCachedHashtagPosts(tag, limit, before);
       if (cached) {
         return c.json(cached);
       }
     }
 
-    const posts = await db.getPostsByHashtagWithActor(tag, limit + 1, before);
+    const posts = await db.getPostsByHashtagWithActor(tag, limit + 1, before, sort);
 
     const hasMore = posts.length > limit;
     const resultPosts = hasMore ? posts.slice(0, limit) : posts;
@@ -80,8 +81,8 @@ export function createTagRoutes(): Hono<TagsEnv> {
       next_cursor: nextCursor,
     };
 
-    // Cache for logged-out users
-    if (!actor) {
+    // Cache for logged-out users with default sort
+    if (!actor && sort === "new") {
       await setCachedHashtagPosts(tag, limit, before, result);
     }
 
