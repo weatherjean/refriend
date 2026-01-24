@@ -319,7 +319,10 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
 
             {/* Video Embed */}
             {post.video_embed && (
-              <VideoEmbed video={post.video_embed} />
+              <VideoEmbed
+                video={post.video_embed}
+                onPlayClick={linkToPost ? () => navigate(postLink) : undefined}
+              />
             )}
           </>
         )}

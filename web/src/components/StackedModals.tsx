@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { useModalStack } from '../context/ModalStackContext';
+import { ModalActiveProvider } from '../context/ModalActiveContext';
 import { modalRoutes } from '../App';
 
 export function StackedModals() {
@@ -49,11 +50,13 @@ export function StackedModals() {
                 </button>
               </div>
               <div className="page-modal-content">
-                <Routes location={location}>
-                  {modalRoutes.map(route => (
-                    <Route key={route.path} path={route.path} element={route.element} />
-                  ))}
-                </Routes>
+                <ModalActiveProvider isActive={isTop}>
+                  <Routes location={location}>
+                    {modalRoutes.map(route => (
+                      <Route key={route.path} path={route.path} element={route.element} />
+                    ))}
+                  </Routes>
+                </ModalActiveProvider>
               </div>
             </div>
           </div>

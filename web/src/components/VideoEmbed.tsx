@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { VideoEmbed as VideoEmbedType } from '../api';
+import { useModalActive } from '../context/ModalActiveContext';
 
 interface VideoEmbedProps {
   video: VideoEmbedType;
+  onPlayClick?: () => void; // If provided, clicking play calls this instead of playing inline
 }
 
 const PLATFORM_NAMES: Record<VideoEmbedType['platform'], string> = {
@@ -17,8 +19,16 @@ const PLATFORM_ICONS: Record<VideoEmbedType['platform'], string> = {
   peertube: 'bi-play-btn',
 };
 
-export function VideoEmbed({ video }: VideoEmbedProps) {
+export function VideoEmbed({ video, onPlayClick }: VideoEmbedProps) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const { isActive } = useModalActive();
+
+  // Reset playing state when modal becomes inactive (goes to background)
+  useEffect(() => {
+    if (!isActive && isPlaying) {
+      setIsPlaying(false);
+    }
+  }, [isActive, isPlaying]);
 
   const platformName = PLATFORM_NAMES[video.platform];
   const platformIcon = PLATFORM_ICONS[video.platform];
@@ -43,7 +53,11 @@ export function VideoEmbed({ video }: VideoEmbedProps) {
       className={`video-embed video-embed-preview ${isTikTok ? 'video-embed-vertical' : ''}`}
       onClick={(e) => {
         e.stopPropagation();
-        setIsPlaying(true);
+        if (onPlayClick) {
+          onPlayClick();
+        } else {
+          setIsPlaying(true);
+        }
       }}
     >
       {video.thumbnailUrl ? (
