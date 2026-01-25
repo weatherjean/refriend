@@ -55,16 +55,28 @@ function toDTO(n: NotificationWithActor): NotificationDTO {
 }
 
 /**
- * Get notifications for an actor
+ * Get notifications for an actor with cursor-based pagination.
+ * @param db Database instance
+ * @param actorId The actor receiving notifications
+ * @param limit Maximum notifications to return
+ * @param before Optional cursor - return notifications with ID less than this value
+ * @returns Object with notifications array and next_cursor for pagination
  */
 export async function getNotifications(
   db: DB,
   actorId: number,
   limit: number = 50,
-  offset: number = 0
-): Promise<NotificationDTO[]> {
-  const notifications = await repository.getNotifications(db, actorId, limit, offset);
-  return notifications.map(toDTO);
+  before?: number
+): Promise<{ notifications: NotificationDTO[]; next_cursor: number | null }> {
+  const notifications = await repository.getNotifications(db, actorId, limit, before);
+  const dtos = notifications.map(toDTO);
+
+  // Calculate next cursor: if we got a full page, use the last item's ID
+  const next_cursor = notifications.length === limit
+    ? notifications[notifications.length - 1].id
+    : null;
+
+  return { notifications: dtos, next_cursor };
 }
 
 /**

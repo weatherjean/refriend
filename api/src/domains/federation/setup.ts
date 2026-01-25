@@ -243,15 +243,19 @@ federation
     if (!actor) return null;
 
     // When cursor is null, return FULL collection for sendActivity({ recipients: "followers" })
+    // Use batched iteration to avoid huge single-query result sets
     if (cursor === null) {
-      const allFollowers = await db.getAllFollowers(actor.id);
-      return {
-        items: allFollowers.map((f) => ({
-          id: new URL(f.uri),
-          inboxId: new URL(f.inbox_url),
-          endpoints: f.shared_inbox_url ? { sharedInbox: new URL(f.shared_inbox_url) } : undefined,
-        })),
-      };
+      const items: { id: URL; inboxId: URL; endpoints?: { sharedInbox: URL } }[] = [];
+      for await (const batch of db.getFollowersBatched(actor.id)) {
+        for (const f of batch) {
+          items.push({
+            id: new URL(f.uri),
+            inboxId: new URL(f.inbox_url),
+            endpoints: f.shared_inbox_url ? { sharedInbox: new URL(f.shared_inbox_url) } : undefined,
+          });
+        }
+      }
+      return { items };
     }
 
     // Parse cursor as offset for paginated browsing

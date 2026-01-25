@@ -61,15 +61,46 @@ export async function removeNotification(
 }
 
 /**
- * Get notifications for an actor with pagination
+ * Get notifications for an actor with cursor-based pagination.
+ * Uses `before` cursor (notification ID) for efficient pagination.
+ * @param db Database instance
+ * @param targetActorId The actor receiving notifications
+ * @param limit Maximum notifications to return
+ * @param before Optional cursor - return notifications with ID less than this value
  */
 export async function getNotifications(
   db: DB,
   targetActorId: number,
   limit: number = 50,
-  offset: number = 0
+  before?: number
 ): Promise<NotificationWithActor[]> {
   return await db.query(async (client) => {
+    // Use cursor-based pagination for O(1) offset regardless of position
+    const query = before
+      ? `SELECT
+          n.id, n.type, n.actor_id, n.target_actor_id, n.post_id, n.read, n.created_at,
+          a.public_id as actor_public_id, a.handle as actor_handle,
+          a.name as actor_name, a.avatar_url as actor_avatar_url,
+          p.public_id as post_public_id, p.content as post_content
+        FROM notifications n
+        JOIN actors a ON a.id = n.actor_id
+        LEFT JOIN posts p ON p.id = n.post_id
+        WHERE n.target_actor_id = $1 AND n.id < $2
+        ORDER BY n.id DESC
+        LIMIT $3`
+      : `SELECT
+          n.id, n.type, n.actor_id, n.target_actor_id, n.post_id, n.read, n.created_at,
+          a.public_id as actor_public_id, a.handle as actor_handle,
+          a.name as actor_name, a.avatar_url as actor_avatar_url,
+          p.public_id as post_public_id, p.content as post_content
+        FROM notifications n
+        JOIN actors a ON a.id = n.actor_id
+        LEFT JOIN posts p ON p.id = n.post_id
+        WHERE n.target_actor_id = $1
+        ORDER BY n.id DESC
+        LIMIT $2`;
+
+    const params = before ? [targetActorId, before, limit] : [targetActorId, limit];
     const result = await client.queryObject<{
       id: number;
       type: NotificationType;
@@ -84,19 +115,7 @@ export async function getNotifications(
       actor_avatar_url: string | null;
       post_public_id: string | null;
       post_content: string | null;
-    }>`
-      SELECT
-        n.id, n.type, n.actor_id, n.target_actor_id, n.post_id, n.read, n.created_at,
-        a.public_id as actor_public_id, a.handle as actor_handle,
-        a.name as actor_name, a.avatar_url as actor_avatar_url,
-        p.public_id as post_public_id, p.content as post_content
-      FROM notifications n
-      JOIN actors a ON a.id = n.actor_id
-      LEFT JOIN posts p ON p.id = n.post_id
-      WHERE n.target_actor_id = ${targetActorId}
-      ORDER BY n.created_at DESC
-      LIMIT ${limit} OFFSET ${offset}
-    `;
+    }>(query, params);
 
     return result.rows.map((row) => ({
       id: row.id,

@@ -22,6 +22,7 @@ export function createNotificationRoutes(): Hono<NotificationsEnv> {
   const routes = new Hono<NotificationsEnv>();
 
   // GET /notifications - Get user's notifications
+  // Supports cursor-based pagination via `before` parameter (notification ID)
   routes.get("/", async (c) => {
     const actor = c.get("actor");
     if (!actor) {
@@ -30,11 +31,12 @@ export function createNotificationRoutes(): Hono<NotificationsEnv> {
 
     const db = c.get("db");
     const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100);
-    const offset = parseInt(c.req.query("offset") || "0");
+    const beforeParam = c.req.query("before");
+    const before = beforeParam ? parseInt(beforeParam) : undefined;
 
-    const notifications = await service.getNotifications(db, actor.id, limit, offset);
+    const { notifications, next_cursor } = await service.getNotifications(db, actor.id, limit, before);
 
-    return c.json({ notifications });
+    return c.json({ notifications, next_cursor });
   });
 
   // GET /notifications/unread/count - Get unread notification count

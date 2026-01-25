@@ -377,8 +377,10 @@ export interface Notification {
 }
 
 export const notifications = {
-  getAll: (limit = 50, offset = 0) =>
-    fetchJson<{ notifications: Notification[] }>(`/notifications?limit=${limit}&offset=${offset}`),
+  getAll: (limit = 50, before?: number) =>
+    fetchJson<{ notifications: Notification[]; next_cursor: number | null }>(
+      `/notifications?limit=${limit}${before ? `&before=${before}` : ''}`
+    ),
   getUnreadCount: () =>
     fetchJson<{ count: number }>('/notifications/unread/count'),
   markAsRead: (ids?: number[]) =>

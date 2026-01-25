@@ -1,6 +1,13 @@
 import { Pool, PoolClient } from "postgres";
 import type { Actor, Post, PostWithActor } from "../../db.ts";
 
+/**
+ * Escape special characters in LIKE patterns to prevent SQL wildcard injection.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
 // Community-specific types
 
 export interface CommunityAdmin {
@@ -480,10 +487,11 @@ export class CommunityDB {
 
   async getMemberCount(communityId: number): Promise<number> {
     return this.query(async (client) => {
-      const result = await client.queryObject<{ count: bigint }>`
-        SELECT COUNT(*) as count FROM follows WHERE following_id = ${communityId}
+      // Use pre-computed follower_count column for O(1) lookup
+      const result = await client.queryObject<{ follower_count: number }>`
+        SELECT follower_count FROM actors WHERE id = ${communityId}
       `;
-      return Number(result.rows[0].count);
+      return result.rows[0]?.follower_count ?? 0;
     });
   }
 
@@ -827,7 +835,8 @@ export class CommunityDB {
   // Search communities
   async searchCommunities(query: string, limit = 20): Promise<Community[]> {
     return this.query(async (client) => {
-      const pattern = `%${query}%`;
+      const escaped = escapeLikePattern(query);
+      const pattern = `%${escaped}%`;
       const result = await client.queryObject<Actor>`
         SELECT * FROM actors
         WHERE actor_type = 'Group'

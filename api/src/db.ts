@@ -1,5 +1,13 @@
 import { Pool, PoolClient } from "postgres";
 
+/**
+ * Escape special characters in LIKE patterns to prevent SQL wildcard injection.
+ * User input like "100%" or "_test" would otherwise match unintended rows.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
 // Types matching our schema
 export interface User {
   id: number;
@@ -386,7 +394,8 @@ export class DB {
 
   async searchActors(query: string, limit = 20, handleOnly = false): Promise<Actor[]> {
     return this.query(async (client) => {
-      const pattern = `%${query}%`;
+      const escaped = escapeLikePattern(query);
+      const pattern = `%${escaped}%`;
       const result = handleOnly
         ? await client.queryObject<Actor>`
             SELECT * FROM actors
@@ -407,7 +416,8 @@ export class DB {
   async searchPosts(query: string, limit = 20): Promise<{ posts: PostWithActor[]; lowConfidence: boolean }> {
     return this.query(async (client) => {
       // Hybrid search: ILIKE for exact matches + trigram similarity for fuzzy
-      const pattern = `%${query}%`;
+      const escaped = escapeLikePattern(query);
+      const pattern = `%${escaped}%`;
       const result = await client.queryObject(`
         SELECT DISTINCT ON (p.id) ${this.postWithActorSelect},
                COALESCE(similarity(p.content, $1), 0) as sim,
@@ -626,6 +636,7 @@ export class DB {
   /**
    * Get all followers for an actor (used by sendActivity for followers delivery).
    * Returns full follower list with inbox URLs for efficient delivery.
+   * WARNING: Can cause OOM with large follower counts. Prefer getFollowersBatched for large accounts.
    */
   async getAllFollowers(actorId: number): Promise<Actor[]> {
     return this.query(async (client) => {
@@ -637,6 +648,23 @@ export class DB {
       `;
       return result.rows;
     });
+  }
+
+  /**
+   * Get followers in batches using an async generator.
+   * Memory-safe alternative to getAllFollowers for accounts with large follower counts.
+   * @param actorId The actor whose followers to retrieve
+   * @param batchSize Number of followers per batch (default 1000)
+   */
+  async *getFollowersBatched(actorId: number, batchSize = 1000): AsyncGenerator<Actor[]> {
+    let offset = 0;
+    while (true) {
+      const batch = await this.getFollowersPaginated(actorId, batchSize, offset);
+      if (batch.length === 0) break;
+      yield batch;
+      if (batch.length < batchSize) break;
+      offset += batchSize;
+    }
   }
 
   async getFollowersPaginated(actorId: number, limit: number, offset: number): Promise<Actor[]> {
@@ -1188,8 +1216,9 @@ export class DB {
   /**
    * Delete a post and ALL its replies recursively (cascade delete).
    * Returns the URIs of all deleted posts (for ActivityPub) and their media URLs.
+   * @param maxDepth Maximum recursion depth to prevent runaway queries (default 100)
    */
-  async cascadeDeletePost(id: number): Promise<{ deletedUris: string[]; deletedCount: number; mediaUrls: string[] }> {
+  async cascadeDeletePost(id: number, maxDepth = 100): Promise<{ deletedUris: string[]; deletedCount: number; mediaUrls: string[] }> {
     return this.query(async (client) => {
       await client.queryArray`BEGIN`;
       try {
@@ -1199,13 +1228,14 @@ export class DB {
         `;
         const parentId = parentResult.rows[0]?.in_reply_to_id;
 
-        // Find all descendant posts using recursive CTE - get id and uri for ActivityPub
+        // Find all descendant posts using recursive CTE with depth limit
         const descendantsResult = await client.queryObject<{ id: number; uri: string }>`
           WITH RECURSIVE descendants AS (
-            SELECT id, uri FROM posts WHERE id = ${id}
+            SELECT id, uri, 0 as depth FROM posts WHERE id = ${id}
             UNION ALL
-            SELECT p.id, p.uri FROM posts p
+            SELECT p.id, p.uri, d.depth + 1 FROM posts p
             JOIN descendants d ON p.in_reply_to_id = d.id
+            WHERE d.depth < ${maxDepth}
           )
           SELECT id, uri FROM descendants
         `;
@@ -1225,12 +1255,8 @@ export class DB {
         `;
         const mediaUrls = mediaResult.rows.map(r => r.url);
 
-        // Delete posts in reverse order (leaf nodes first) to satisfy FK constraints
-        // The recursive CTE returns them in traversal order, so we reverse
-        const reversedIds = [...allPostIds].reverse();
-        for (const postId of reversedIds) {
-          await client.queryArray`DELETE FROM posts WHERE id = ${postId}`;
-        }
+        // Bulk delete all posts in a single query (FK constraints handled by CASCADE)
+        await client.queryArray`DELETE FROM posts WHERE id = ANY(${allPostIds})`;
 
         // Update parent's replies_count if the root post was a reply
         if (parentId) {
@@ -1296,10 +1322,11 @@ export class DB {
 
   async getRepliesCount(postId: number): Promise<number> {
     return this.query(async (client) => {
-      const result = await client.queryObject<{ count: bigint }>`
-        SELECT COUNT(*) as count FROM posts WHERE in_reply_to_id = ${postId}
+      // Use pre-computed replies_count column for O(1) lookup
+      const result = await client.queryObject<{ replies_count: number }>`
+        SELECT replies_count FROM posts WHERE id = ${postId}
       `;
-      return Number(result.rows[0].count);
+      return result.rows[0]?.replies_count ?? 0;
     });
   }
 
@@ -1367,8 +1394,9 @@ export class DB {
     const normalized = query.toLowerCase().replace(/^#/, "");
     if (!normalized) return [];
     return this.query(async (client) => {
-      const pattern = `%${normalized}%`;
-      const startPattern = `${normalized}%`;
+      const escaped = escapeLikePattern(normalized);
+      const pattern = `%${escaped}%`;
+      const startPattern = `${escaped}%`;
       const result = await client.queryObject<{ name: string; count: bigint }>`
         SELECT h.name, COUNT(ph.post_id) as count
         FROM hashtags h
@@ -1455,10 +1483,11 @@ export class DB {
 
   async getLikesCount(postId: number): Promise<number> {
     return this.query(async (client) => {
-      const result = await client.queryObject<{ count: bigint }>`
-        SELECT COUNT(*) as count FROM likes WHERE post_id = ${postId}
+      // Use pre-computed likes_count column for O(1) lookup
+      const result = await client.queryObject<{ likes_count: number }>`
+        SELECT likes_count FROM posts WHERE id = ${postId}
       `;
-      return Number(result.rows[0].count);
+      return result.rows[0]?.likes_count ?? 0;
     });
   }
 
@@ -1548,10 +1577,11 @@ export class DB {
 
   async getBoostsCount(postId: number): Promise<number> {
     return this.query(async (client) => {
-      const result = await client.queryObject<{ count: bigint }>`
-        SELECT COUNT(*) as count FROM boosts WHERE post_id = ${postId}
+      // Use pre-computed boosts_count column for O(1) lookup
+      const result = await client.queryObject<{ boosts_count: number }>`
+        SELECT boosts_count FROM posts WHERE id = ${postId}
       `;
-      return Number(result.rows[0].count);
+      return result.rows[0]?.boosts_count ?? 0;
     });
   }
 

@@ -11,6 +11,8 @@ import { PageHeader } from '../components/PageHeader';
 export function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
 
@@ -20,8 +22,9 @@ export function NotificationsPage() {
 
   const loadNotifications = async () => {
     try {
-      const { notifications } = await notificationsApi.getAll();
+      const { notifications, next_cursor } = await notificationsApi.getAll();
       setNotifications(notifications);
+      setNextCursor(next_cursor);
       // Mark all as read when viewing
       if (notifications.some(n => !n.read)) {
         await notificationsApi.markAsRead();
@@ -30,6 +33,20 @@ export function NotificationsPage() {
       // Error handled by global toast
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const { notifications: moreNotifications, next_cursor } = await notificationsApi.getAll(50, nextCursor);
+      setNotifications(prev => [...prev, ...moreNotifications]);
+      setNextCursor(next_cursor);
+    } catch {
+      // Error handled by global toast
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -141,6 +158,24 @@ export function NotificationsPage() {
               </Link>
             );
           })}
+
+          {/* Load more button */}
+          {nextCursor && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="btn btn-outline-secondary w-100 mt-2"
+            >
+              {loadingMore ? (
+                <>
+                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  Loading...
+                </>
+              ) : (
+                'Load more'
+              )}
+            </button>
+          )}
         </div>
       )}
 

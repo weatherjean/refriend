@@ -94,7 +94,7 @@ export function Layout({ children }: LayoutProps) {
         {/* Left Sidebar */}
         <div className={`col-lg-4 sidebar py-4 px-3 ${mobileMenuOpen ? 'mobile-open' : ''}`}>
           {/* Branding */}
-          <Link to="/" className="d-flex align-items-center mb-4 text-decoration-none text-reset sidebar-logo" style={{ paddingLeft: '0.75rem' }} onClick={() => setMobileMenuOpen(false)}>
+          <Link to="/" className="d-flex align-items-center mb-2 text-decoration-none text-reset sidebar-logo" style={{ paddingLeft: '0.75rem' }} onClick={() => setMobileMenuOpen(false)}>
             <img src="/icon.svg" alt="riff" height="36" />
           </Link>
 
