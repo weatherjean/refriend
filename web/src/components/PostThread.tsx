@@ -15,19 +15,23 @@ interface PostThreadProps {
   post: Post;
   ancestors?: Post[];
   linkMainPost?: boolean;
+  isCommunityAdmin?: boolean;
+  communityName?: string;
 }
 
 export function PostThread({
   post,
   ancestors = [],
   linkMainPost = false,
+  isCommunityAdmin,
+  communityName,
 }: PostThreadProps) {
   if (ancestors.length === 0) {
-    return <PostCard post={post} linkToPost={linkMainPost} />;
+    return <PostCard post={post} linkToPost={linkMainPost} isCommunityAdmin={isCommunityAdmin} communityName={communityName} />;
   }
 
   // Build from inside out - start with current post, wrap with ancestors' lines
-  let content = <PostCard post={post} linkToPost={linkMainPost} />;
+  let content = <PostCard post={post} linkToPost={linkMainPost} isCommunityAdmin={isCommunityAdmin} communityName={communityName} />;
 
   // Wrap from last ancestor to first (reverse order for nesting)
   // Each ancestor's PostCard is OUTSIDE the wrapper, line wraps what comes after
@@ -36,7 +40,7 @@ export function PostThread({
     const color = THREAD_COLORS[i % THREAD_COLORS.length];
     content = (
       <div key={ancestor.id}>
-        <PostCard post={ancestor} />
+        <PostCard post={ancestor} isCommunityAdmin={isCommunityAdmin} communityName={communityName} />
         <div
           style={{
             borderLeft: `3px solid ${color}`,

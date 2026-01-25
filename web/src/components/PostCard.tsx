@@ -27,9 +27,12 @@ interface PostCardProps {
   onCommunityPin?: () => void;
   canUnboost?: boolean;
   onUnboost?: () => void;
+  isCommunityAdmin?: boolean;
+  onDelete?: () => void;
+  communityName?: string;
 }
 
-export function PostCard({ post, linkToPost = true, community: communityProp, isOP, pinnedInCommunity, canPinInCommunity, onCommunityPin, canUnboost, onUnboost }: PostCardProps) {
+export function PostCard({ post, linkToPost = true, community: communityProp, isOP, pinnedInCommunity, canPinInCommunity, onCommunityPin, canUnboost, onUnboost, isCommunityAdmin, onDelete, communityName: communityNameProp }: PostCardProps) {
   const navigate = useNavigate();
   const { user, actor } = useAuth();
   const [liked, setLiked] = useState(post.liked ?? false);
@@ -441,7 +444,15 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
             </button>
           )}
 
-          {user && <PostMenu postId={post.id} isOwnPost={post.author?.id === actor?.id} />}
+          {user && (
+            <PostMenu
+              postId={post.id}
+              isOwnPost={post.author?.id === actor?.id}
+              isCommunityAdmin={isCommunityAdmin}
+              communityName={community?.name || communityNameProp}
+              onDelete={onDelete}
+            />
+          )}
         </div>
       </div>
     </div>

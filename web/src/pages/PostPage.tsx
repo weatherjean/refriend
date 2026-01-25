@@ -1,32 +1,28 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { posts as postsApi, communities as communitiesApi, Post, AttachmentInput } from '../api';
 import { PostCard } from '../components/PostCard';
 import { PostThread } from '../components/PostThread';
 import { PostComposer } from '../components/PostComposer';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { LoadMoreButton } from '../components/LoadMoreButton';
-import { LoadingButton } from '../components/LoadingButton';
-import { ConfirmModal } from '../components/ConfirmModal';
 import { SortToggle } from '../components/SortToggle';
 import { useAuth } from '../context/AuthContext';
 import { usePagination } from '../hooks';
 
 export function PostPage() {
   const { id } = useParams<{ id: string }>();
-  const { user, actor } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [post, setPost] = useState<Post | null>(null);
   const [ancestors, setAncestors] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [deleting, setDeleting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [replySort, setReplySort] = useState<'new' | 'hot'>('hot');
   const [opAuthorId, setOpAuthorId] = useState<string | null>(null);
   const [showReplyComposer, setShowReplyComposer] = useState(false);
   const [isCommunityAdmin, setIsCommunityAdmin] = useState(false);
+  const [communityName, setCommunityName] = useState<string | null>(null);
 
   const fetchReplies = useCallback(async (cursor?: number) => {
     const data = await postsApi.getReplies(id!, replySort, cursor);
@@ -49,18 +45,22 @@ export function PostPage() {
       setLoading(true);
       setPost(null); // Clear post to trigger reply reload
       setIsCommunityAdmin(false);
+      setCommunityName(null);
       try {
         const postData = await postsApi.get(id!);
         setPost(postData.post);
         setAncestors(postData.ancestors || []);
 
         // Check if user is admin of the post's community
-        const community = postData.post.community;
+        // For replies, the community may be on an ancestor, not the post itself
+        const community = postData.post.community
+          || postData.ancestors?.find(a => a.community)?.community;
         if (community && user) {
           try {
             // Handle format: @name@domain - extract the name part
-            const communityName = community.handle.replace(/^@/, '').split('@')[0];
-            const { moderation } = await communitiesApi.get(communityName);
+            const cName = community.handle.replace(/^@/, '').split('@')[0];
+            setCommunityName(cName);
+            const { moderation } = await communitiesApi.get(cName);
             setIsCommunityAdmin(moderation?.isAdmin || false);
           } catch {
             // Ignore - user is not admin
@@ -83,27 +83,6 @@ export function PostPage() {
     }
   }, [post, replySort, resetReplies, fetchReplies, setReplies]);
 
-  const handleDelete = async () => {
-    if (!post) return;
-    setDeleting(true);
-    try {
-      // Use community delete endpoint if admin, otherwise regular delete
-      if (isCommunityAdmin && post.community) {
-        const communityName = post.community.handle.replace(/^@/, '').split('@')[0];
-        await communitiesApi.deletePost(communityName, post.id);
-      } else {
-        await postsApi.delete(post.id);
-      }
-      setShowDeleteConfirm(false);
-      navigate(-1);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete post');
-    } finally {
-      setDeleting(false);
-      setShowDeleteConfirm(false);
-    }
-  };
-
   const handleReply = async (content: string, attachments: AttachmentInput[], sensitive: boolean, linkUrl?: string) => {
     if (!post) return;
     const { post: newReply } = await postsApi.create(content, post.id, attachments, sensitive, linkUrl);
@@ -120,36 +99,9 @@ export function PostPage() {
     );
   }
 
-  const isOwner = actor && post.author && actor.id === post.author.id;
-  const canDelete = isOwner || isCommunityAdmin;
-
   return (
     <div>
-      <PostThread post={post} ancestors={ancestors} />
-
-      {canDelete && (
-        <div className="mt-3">
-          <LoadingButton
-            variant="danger"
-            size="sm"
-            loading={deleting}
-            loadingText="Deleting..."
-            onClick={() => setShowDeleteConfirm(true)}
-          >
-            Delete Post
-          </LoadingButton>
-        </div>
-      )}
-
-      <ConfirmModal
-        show={showDeleteConfirm}
-        title="Delete Post"
-        message="Are you sure you want to delete this post? This action cannot be undone."
-        confirmText={deleting ? 'Deleting...' : 'Delete'}
-        confirmVariant="danger"
-        onConfirm={handleDelete}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
+      <PostThread post={post} ancestors={ancestors} isCommunityAdmin={isCommunityAdmin} communityName={communityName || undefined} />
 
       {user && (
         <div className="mt-4">
@@ -197,6 +149,9 @@ export function PostPage() {
               key={reply.id}
               post={reply}
               isOP={reply.author?.id === opAuthorId}
+              isCommunityAdmin={isCommunityAdmin}
+              communityName={communityName || undefined}
+              onDelete={() => setReplies(prev => prev.filter(r => r.id !== reply.id))}
             />
           ))}
           {hasMore && (

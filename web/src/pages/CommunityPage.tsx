@@ -270,12 +270,13 @@ export function CommunityPage() {
           </li>
         )}
         {moderation?.isAdmin && (
-          <li className="nav-item">
+          <li className="nav-item ms-auto">
             <button
               className={`nav-link ${activeTab === 'modlogs' ? 'active' : ''}`}
               onClick={() => setActiveTab('modlogs')}
+              title="Moderation Log"
             >
-              Log
+              <i className="bi bi-journal-text"></i>
             </button>
           </li>
         )}
@@ -284,8 +285,9 @@ export function CommunityPage() {
             <button
               className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`}
               onClick={() => setActiveTab('settings')}
+              title="Settings"
             >
-              Settings
+              <i className="bi bi-gear-fill"></i>
             </button>
           </li>
         )}
@@ -318,6 +320,11 @@ export function CommunityPage() {
                   onCommunityPin={() => handleUnpin(post.id)}
                   canUnboost={moderation?.isAdmin && post.is_announcement}
                   onUnboost={() => handleUnboost(post.id)}
+                  isCommunityAdmin={moderation?.isAdmin}
+                  onDelete={() => {
+                    setPinnedPosts(prev => prev.filter(p => p.id !== post.id));
+                    setPosts(prev => prev.filter(p => p.id !== post.id));
+                  }}
                 />
               ))}
               {/* Regular posts (excluding pinned) */}
@@ -329,6 +336,8 @@ export function CommunityPage() {
                   onCommunityPin={() => handlePin(post.id)}
                   canUnboost={moderation?.isAdmin && post.is_announcement}
                   onUnboost={() => handleUnboost(post.id)}
+                  isCommunityAdmin={moderation?.isAdmin}
+                  onDelete={() => setPosts(prev => prev.filter(p => p.id !== post.id))}
                 />
               ))}
             </div>
@@ -377,7 +386,12 @@ export function CommunityPage() {
                     </div>
 
                     {/* Full post card */}
-                    <PostCard post={post} linkToPost={true} />
+                    <PostCard
+                      post={post}
+                      linkToPost={true}
+                      isCommunityAdmin={moderation?.isAdmin}
+                      onDelete={() => setPendingPosts(prev => prev.filter(p => p.id !== post.id))}
+                    />
 
                     {/* Moderation actions */}
                     <div className="pending-post-actions">
