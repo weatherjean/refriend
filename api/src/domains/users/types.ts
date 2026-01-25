@@ -72,6 +72,7 @@ export interface ProfileResponse {
     following: number;
   };
   is_following: boolean;
+  follow_status: 'pending' | 'accepted' | null;
   is_own_profile: boolean;
 }
 

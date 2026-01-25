@@ -25,6 +25,7 @@ export function ActorPage() {
   const [stats, setStats] = useState({ followers: 0, following: 0 });
   const [pinnedPosts, setPinnedPosts] = useState<Post[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [followStatus, setFollowStatus] = useState<'pending' | 'accepted' | null>(null);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   const [isLocalUser, setIsLocalUser] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -121,6 +122,7 @@ export function ActorPage() {
         setActor(profileData.actor);
         setStats(profileData.stats);
         setIsFollowing(profileData.is_following);
+        setFollowStatus(profileData.follow_status ?? null);
         setIsOwnProfile(profileData.is_own_profile);
         setIsLocalUser(true);
 
@@ -143,10 +145,11 @@ export function ActorPage() {
         setIsLocalUser(false);
 
         const [actorData] = await Promise.all([
-          actors.get(remoteActor.id).catch(() => ({ is_following: false, is_own_profile: false })),
+          actors.get(remoteActor.id).catch(() => ({ is_following: false, follow_status: null, is_own_profile: false })),
         ]);
 
         setIsFollowing(actorData.is_following);
+        setFollowStatus(actorData.follow_status ?? null);
         setIsOwnProfile(actorData.is_own_profile);
 
         actors.getPinned(remoteActor.id).then(data => setPinnedPosts(data.posts)).catch(() => {});
@@ -210,16 +213,24 @@ export function ActorPage() {
 
     setFollowLoading(true);
     try {
-      if (isFollowing) {
+      if (isFollowing || followStatus === 'pending') {
         await follows.unfollow(actor.id);
         setIsFollowing(false);
-        setStats(s => ({ ...s, followers: Math.max(0, s.followers - 1) }));
+        setFollowStatus(null);
+        if (isFollowing) {
+          setStats(s => ({ ...s, followers: Math.max(0, s.followers - 1) }));
+        }
         toast.info('Unfollowed');
       } else {
         const response = await follows.follow(actor.handle);
-        setIsFollowing(true);
-        setStats(s => ({ ...s, followers: s.followers + 1 }));
-        toast.info(response.message || 'Now following!');
+        // For remote actors, start as pending; for local, immediately accepted
+        const newStatus = actor.is_local ? 'accepted' : 'pending';
+        setIsFollowing(newStatus === 'accepted');
+        setFollowStatus(newStatus);
+        if (newStatus === 'accepted') {
+          setStats(s => ({ ...s, followers: s.followers + 1 }));
+        }
+        toast.info(response.message || (newStatus === 'pending' ? 'Follow request sent!' : 'Now following!'));
       }
     } catch {
       // Error handled by global toast
@@ -245,6 +256,7 @@ export function ActorPage() {
         username={username}
         stats={stats}
         isFollowing={isFollowing}
+        followStatus={followStatus}
         isOwnProfile={isOwnProfile}
         followLoading={followLoading}
         loggedIn={!!user}

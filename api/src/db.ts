@@ -529,11 +529,11 @@ export class DB {
 
   // ============ Follows ============
 
-  async addFollow(followerId: number, followingId: number): Promise<void> {
+  async addFollow(followerId: number, followingId: number, status: 'pending' | 'accepted' = 'accepted'): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`
-        INSERT INTO follows (follower_id, following_id) VALUES (${followerId}, ${followingId})
-        ON CONFLICT DO NOTHING
+        INSERT INTO follows (follower_id, following_id, status) VALUES (${followerId}, ${followingId}, ${status})
+        ON CONFLICT (follower_id, following_id) DO UPDATE SET status = ${status}
       `;
     });
   }
@@ -547,9 +547,18 @@ export class DB {
   async isFollowing(followerId: number, followingId: number): Promise<boolean> {
     return this.query(async (client) => {
       const result = await client.queryArray`
-        SELECT 1 FROM follows WHERE follower_id = ${followerId} AND following_id = ${followingId}
+        SELECT 1 FROM follows WHERE follower_id = ${followerId} AND following_id = ${followingId} AND status = 'accepted'
       `;
       return result.rows.length > 0;
+    });
+  }
+
+  async getFollowStatus(followerId: number, followingId: number): Promise<'pending' | 'accepted' | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ status: string }>`
+        SELECT status FROM follows WHERE follower_id = ${followerId} AND following_id = ${followingId}
+      `;
+      return result.rows[0]?.status as 'pending' | 'accepted' | null ?? null;
     });
   }
 

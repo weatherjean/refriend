@@ -6,6 +6,7 @@ interface ProfileHeaderProps {
   username: string;
   stats: { followers: number; following: number };
   isFollowing: boolean;
+  followStatus: 'pending' | 'accepted' | null;
   isOwnProfile: boolean;
   followLoading: boolean;
   loggedIn: boolean;
@@ -19,6 +20,7 @@ export function ProfileHeader({
   username,
   stats,
   isFollowing,
+  followStatus,
   isOwnProfile,
   followLoading,
   loggedIn,
@@ -26,6 +28,9 @@ export function ProfileHeader({
   onShowFollowers,
   onShowFollowing,
 }: ProfileHeaderProps) {
+  const isPending = followStatus === 'pending';
+  const buttonText = isFollowing ? 'Following' : isPending ? 'Requested' : 'Follow';
+  const buttonClass = isFollowing ? 'btn-outline-primary' : isPending ? 'btn-outline-secondary' : 'btn-primary';
   const displayName = actor.name || username;
 
   return (
@@ -73,16 +78,14 @@ export function ProfileHeader({
           {loggedIn && !isOwnProfile && (
             <div className="mt-3">
               <button
-                className={`btn ${isFollowing ? 'btn-outline-primary' : 'btn-primary'}`}
+                className={`btn ${buttonClass}`}
                 onClick={onFollow}
-                disabled={followLoading}
+                disabled={followLoading || isPending}
               >
                 {followLoading ? (
                   <span className="spinner-border spinner-border-sm"></span>
-                ) : isFollowing ? (
-                  'Following'
                 ) : (
-                  'Follow'
+                  buttonText
                 )}
               </button>
             </div>
@@ -134,16 +137,14 @@ export function ProfileHeader({
           {loggedIn && !isOwnProfile && (
             <div>
               <button
-                className={`btn ${isFollowing ? 'btn-outline-primary' : 'btn-primary'}`}
+                className={`btn ${buttonClass}`}
                 onClick={onFollow}
-                disabled={followLoading}
+                disabled={followLoading || isPending}
               >
                 {followLoading ? (
                   <span className="spinner-border spinner-border-sm"></span>
-                ) : isFollowing ? (
-                  'Following'
                 ) : (
-                  'Follow'
+                  buttonText
                 )}
               </button>
             </div>

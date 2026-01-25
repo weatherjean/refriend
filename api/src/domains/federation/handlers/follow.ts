@@ -52,13 +52,23 @@ export async function processFollow(
     return;
   }
 
-  // Add the follow relationship
-  await db.addFollow(followerActor.id, targetActor.id);
-  await createNotification(db, 'follow', followerActor.id, targetActor.id);
-  console.log(`[Follow] ${followerActor.handle} -> ${targetActor.handle}`);
+  // Determine if target is local
+  const isLocalTarget = targetActor.user_id || targetActor.actor_type === 'Group';
+  const isOutboundToRemote = direction === "outbound" && !isLocalTarget;
+
+  // Add the follow relationship:
+  // - Inbound follows / local-to-local: status = 'accepted'
+  // - Outbound to remote: status = 'pending' (wait for Accept)
+  if (isOutboundToRemote) {
+    await db.addFollow(followerActor.id, targetActor.id, 'pending');
+    console.log(`[Follow] ${followerActor.handle} -> ${targetActor.handle} (pending)`);
+  } else {
+    await db.addFollow(followerActor.id, targetActor.id, 'accepted');
+    await createNotification(db, 'follow', followerActor.id, targetActor.id);
+    console.log(`[Follow] ${followerActor.handle} -> ${targetActor.handle}`);
+  }
 
   // For inbound: if target is local (user or community), send Accept
-  const isLocalTarget = targetActor.user_id || targetActor.actor_type === 'Group';
   if (direction === "inbound" && isLocalTarget && followerActor.inbox_url) {
     const username = targetActor.handle.match(/@([^@]+)@/)?.[1];
     if (username) {
@@ -93,6 +103,6 @@ export async function processFollow(
       },
       follow
     );
-    console.log(`[Follow] Sent to ${targetActor.handle}`);
+    console.log(`[Follow] Sent request to ${targetActor.handle} (pending acceptance)`);
   }
 }

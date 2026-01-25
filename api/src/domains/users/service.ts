@@ -304,9 +304,9 @@ export async function getProfile(
     return null;
   }
 
-  const isFollowing = currentActorId
-    ? await db.isFollowing(currentActorId, actor.id)
-    : false;
+  const followStatus = currentActorId
+    ? await db.getFollowStatus(currentActorId, actor.id)
+    : null;
   const isOwnProfile = currentActorId === actor.id;
 
   return {
@@ -315,7 +315,8 @@ export async function getProfile(
       followers: await db.getFollowersCount(actor.id),
       following: await db.getFollowingCount(actor.id),
     },
-    is_following: isFollowing,
+    is_following: followStatus === 'accepted',
+    follow_status: followStatus,
     is_own_profile: isOwnProfile,
   };
 }
@@ -565,18 +566,19 @@ export async function getActorById(
   publicId: string,
   currentActorId?: number,
   domain?: string
-): Promise<{ actor: SanitizedActor; is_following: boolean; is_own_profile: boolean } | null> {
+): Promise<{ actor: SanitizedActor; is_following: boolean; follow_status: 'pending' | 'accepted' | null; is_own_profile: boolean } | null> {
   const actor = await db.getActorByPublicId(publicId);
   if (!actor) {
     return null;
   }
 
-  const isFollowing = currentActorId ? await db.isFollowing(currentActorId, actor.id) : false;
+  const followStatus = currentActorId ? await db.getFollowStatus(currentActorId, actor.id) : null;
   const isOwnProfile = currentActorId === actor.id;
 
   return {
     actor: sanitizeActor(actor, domain),
-    is_following: isFollowing,
+    is_following: followStatus === 'accepted',
+    follow_status: followStatus,
     is_own_profile: isOwnProfile,
   };
 }
