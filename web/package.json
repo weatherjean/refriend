@@ -13,17 +13,17 @@
     "@popperjs/core": "^2.11.8",
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.1",
-    "react": "^18.3.1",
+    "react": "^19.2.3",
     "react-bootstrap": "^2.10.10",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0",
-    "sass": "^1.97.2"
+    "react-dom": "^19.2.3",
+    "react-router-dom": "^7.13.0",
+    "sass": "^1.97.3"
   },
   "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.3",
-    "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "@types/react": "^19.2.9",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
   }
 }

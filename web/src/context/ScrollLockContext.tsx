@@ -14,7 +14,7 @@ export function ScrollLockProvider({ children }: { children: ReactNode }) {
   const locksRef = useRef<Set<string>>(new Set());
   const [activeLocks, setActiveLocks] = useState<string[]>([]);
   const escapeCountRef = useRef(0);
-  const escapeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const escapeTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const updateBodyScroll = useCallback(() => {
     if (locksRef.current.size > 0) {
