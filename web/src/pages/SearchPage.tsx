@@ -158,7 +158,7 @@ export function SearchPage() {
                               )}
                               <small className="text-muted d-block text-truncate">{actor.handle}</small>
                               {actor.bio && (
-                                <small className="text-muted d-none d-md-block text-truncate mt-1">{actor.bio}</small>
+                                <small className="text-muted d-none d-md-block text-truncate mt-1">{actor.bio.replace(/<[^>]*>/g, '')}</small>
                               )}
                             </div>
                             {user && !isSelf && (

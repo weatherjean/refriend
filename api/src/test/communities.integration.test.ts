@@ -193,10 +193,10 @@ Deno.test({
 
         assertEquals(res.status, 400);
         const data = await res.json();
-        assertEquals(data.error, "Invalid name (lowercase alphanumeric and underscore only, max 50 chars)");
+        assertEquals(data.error, "Invalid name (lowercase, numbers, underscore only, max 26 chars)");
       });
 
-      await t.step("rejects name over 50 chars", async () => {
+      await t.step("rejects name over 26 chars", async () => {
         await cleanDatabase();
         const api = await createTestApi();
 
@@ -205,7 +205,7 @@ Deno.test({
 
         const res = await testRequest(api, "POST", "/communities", {
           cookie,
-          body: { name: "a".repeat(51) },
+          body: { name: "a".repeat(27) },
         });
 
         assertEquals(res.status, 400);

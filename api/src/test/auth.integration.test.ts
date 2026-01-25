@@ -97,16 +97,16 @@ Deno.test({
 
         assertEquals(res.status, 400);
         const data = await res.json();
-        assertEquals(data.error, "Invalid username (lowercase alphanumeric and underscore only)");
+        assertEquals(data.error, "Invalid username (lowercase, numbers, underscore only, max 26 chars)");
       });
 
-      await t.step("rejects username over 50 chars", async () => {
+      await t.step("rejects username over 26 chars", async () => {
         await cleanDatabase();
         const api = await createTestApi();
 
         const res = await testRequest(api, "POST", "/auth/register", {
           body: {
-            username: "a".repeat(51),
+            username: "a".repeat(27),
             email: "test@example.com",
             password: "password123",
           },

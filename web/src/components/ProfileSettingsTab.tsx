@@ -167,9 +167,9 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               placeholder="Tell people about yourself..."
-              maxLength={500}
+              maxLength={200}
             />
-            <div className="form-text">{bio.length}/500 characters</div>
+            <div className="form-text">{bio.length}/200 characters</div>
           </div>
 
           <LoadingButton

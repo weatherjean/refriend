@@ -445,7 +445,7 @@ Deno.test({
         assertEquals(data.error, "Name too long (max 100 characters)");
       });
 
-      await t.step("rejects bio over 500 characters", async () => {
+      await t.step("rejects bio over 200 characters", async () => {
         await cleanDatabase();
         const api = await createTestApi();
 
@@ -454,12 +454,12 @@ Deno.test({
 
         const res = await testRequest(api, "PUT", "/profile", {
           cookie,
-          body: { bio: "a".repeat(501) },
+          body: { bio: "a".repeat(201) },
         });
 
         assertEquals(res.status, 400);
         const data = await res.json();
-        assertEquals(data.error, "Bio too long (max 500 characters)");
+        assertEquals(data.error, "Bio too long (max 200 characters)");
       });
 
       await t.step("allows partial updates", async () => {

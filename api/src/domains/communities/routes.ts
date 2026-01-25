@@ -173,6 +173,11 @@ export function createCommunityRoutes(
       return c.json({ error: "Invalid name (lowercase, numbers, underscore only, max 26 chars)" }, 400);
     }
 
+    // Validate bio length
+    if (bio && bio.length > 200) {
+      return c.json({ error: "Bio must be 200 characters or less" }, 400);
+    }
+
     const communityDb = c.get("communityDb");
     const domain = c.get("domain");
 
@@ -240,6 +245,11 @@ export function createCommunityRoutes(
       avatar_url?: string;
       require_approval?: boolean;
     }>();
+
+    // Validate bio length
+    if (updates.bio && updates.bio.length > 200) {
+      return c.json({ error: "Bio must be 200 characters or less" }, 400);
+    }
 
     const updated = await communityDb.updateCommunity(community.id, updates, actor.id);
     return c.json({ community: updated ? sanitizeCommunity(updated) : null });

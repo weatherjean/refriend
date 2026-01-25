@@ -132,10 +132,10 @@ export function SettingsTab({
               rows={3}
               value={bio}
               onChange={(e) => setBio(e.target.value)}
-              maxLength={500}
+              maxLength={200}
               placeholder="What is this community about?"
             />
-            <div className="form-text">{bio.length}/500 characters</div>
+            <div className="form-text">{bio.length}/200 characters</div>
           </div>
 
           <div className="mb-3">

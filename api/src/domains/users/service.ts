@@ -380,8 +380,8 @@ export async function updateProfile(
   if (name && name.length > 100) {
     return { success: false, error: "Name too long (max 100 characters)" };
   }
-  if (bio && bio.length > 500) {
-    return { success: false, error: "Bio too long (max 500 characters)" };
+  if (bio && bio.length > 200) {
+    return { success: false, error: "Bio too long (max 200 characters)" };
   }
 
   const updated = await db.updateActorProfile(actorId, { name, bio });
