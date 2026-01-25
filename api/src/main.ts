@@ -90,6 +90,42 @@ app.route("/api", createApiRoutes(db, federation, communityDb));
 // Health check
 app.get("/health", (c) => c.json({ ok: true }));
 
+// Cache control middleware for static assets
+app.use("/*", async (c, next) => {
+  await next();
+
+  // Only apply caching to successful static file responses
+  if (c.res.status !== 200) return;
+
+  const path = c.req.path;
+  let cacheControl: string | null = null;
+
+  // Vite-hashed assets (js, css) - cache for 1 year (immutable)
+  if (path.startsWith("/assets/")) {
+    cacheControl = "public, max-age=31536000, immutable";
+  }
+  // HTML files - no cache (always revalidate to get latest asset hashes)
+  else if (path.endsWith(".html") || path === "/") {
+    cacheControl = "no-cache";
+  }
+  // Static files (images, fonts, manifest) - cache for 1 week
+  else if (
+    path.match(/\.(png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|json)$/)
+  ) {
+    cacheControl = "public, max-age=604800";
+  }
+
+  if (cacheControl) {
+    const newHeaders = new Headers(c.res.headers);
+    newHeaders.set("Cache-Control", cacheControl);
+    c.res = new Response(c.res.body, {
+      status: c.res.status,
+      statusText: c.res.statusText,
+      headers: newHeaders,
+    });
+  }
+});
+
 // Serve static files from web/dist (built frontend)
 // Hash router handles client-side routing, so we just serve static files
 app.use("/*", serveStatic({ root: STATIC_DIR }));

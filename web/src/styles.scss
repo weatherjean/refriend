@@ -60,6 +60,12 @@ h1, h2, h3, h4, .display-1, .display-2, .display-3, .display-4, .display-5, .dis
   --bs-secondary-color: #a1a1aa;
 }
 
+// Toast override - use dark background instead of Bootstrap's white
+.toast {
+  --bs-toast-bg: #0f0f0f;
+  background-color: #0f0f0f !important;
+}
+
 // Subtle gradient background
 body {
   background:

@@ -12,4 +12,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split vendor chunks for better caching
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('react')) return 'vendor-react';
+            if (id.includes('bootstrap')) return 'vendor-bootstrap';
+          }
+        },
+      },
+    },
+  },
 })
