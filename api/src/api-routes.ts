@@ -11,6 +11,7 @@ import { getCookie } from "@hono/hono/cookie";
 import type { Federation } from "@fedify/fedify";
 import type { DB, User, Actor } from "./db.ts";
 import type { CommunityDB } from "./domains/communities/repository.ts";
+import { generalRateLimit } from "./middleware/rate-limit.ts";
 
 // Domain routes
 import { createNotificationRoutes } from "./domains/notifications/routes.ts";
@@ -38,17 +39,27 @@ export function createApiRoutes(
 ): Hono<Env> {
   const api = new Hono<Env>();
 
-  // CORS
-  const allowedOrigins = Deno.env.get("ALLOWED_ORIGINS")?.split(",") ?? [];
+  // CORS - explicit origin matching only (no wildcards)
+  const allowedOrigins = Deno.env.get("ALLOWED_ORIGINS")?.split(",").map(o => o.trim()).filter(Boolean) ?? [];
+  // Also allow the configured domain
+  const configuredDomain = Deno.env.get("DOMAIN");
+  if (configuredDomain) {
+    allowedOrigins.push(`https://${configuredDomain}`);
+    allowedOrigins.push(`http://${configuredDomain}`); // For local dev
+  }
+
   api.use("/*", cors({
     origin: (origin) => {
       if (!origin) return null;
-      if (origin.includes(".ngrok")) return origin;
+      // Exact match only - no wildcards for security
       if (allowedOrigins.includes(origin)) return origin;
       return null;
     },
     credentials: true,
   }));
+
+  // General rate limiting for all API requests
+  api.use("/*", generalRateLimit());
 
   // Inject db, domain, and session user
   api.use("/*", async (c, next) => {

@@ -20,17 +20,27 @@ Deno.test({
   async fn(t) {
     await cleanDatabase();
 
-    // ============ GET /posts ============
-    await t.step("GET /posts", async (t) => {
-      await t.step("returns public timeline", async () => {
+    // ============ GET /timeline ============
+    await t.step("GET /timeline", async (t) => {
+      await t.step("returns timeline for authenticated user", async () => {
         await cleanDatabase();
         const api = await createTestApi();
+        const db = await getTestDB();
 
-        const { actor } = await createTestUser({ username: "poster", email: "poster@test.com" });
-        await createTestPost(actor, { content: "Hello world!" });
-        await createTestPost(actor, { content: "Second post" });
+        // Create a user who will view the timeline
+        await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
+        const cookie = await loginUser(api, "viewer@test.com", "password123");
 
-        const res = await testRequest(api, "GET", "/posts");
+        // Create another user who posts content
+        const { actor: poster } = await createTestUser({ username: "poster", email: "poster@test.com" });
+        await createTestPost(poster, { content: "Hello world!" });
+        await createTestPost(poster, { content: "Second post" });
+
+        // Viewer follows poster (timeline shows posts from followed users)
+        const viewer = await db.getActorByUsername("viewer");
+        await db.addFollow(viewer!.id, poster.id, "accepted");
+
+        const res = await testRequest(api, "GET", "/timeline", { cookie });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.posts);
@@ -40,32 +50,59 @@ Deno.test({
       await t.step("respects limit parameter", async () => {
         await cleanDatabase();
         const api = await createTestApi();
+        const db = await getTestDB();
 
-        const { actor } = await createTestUser({ username: "poster", email: "poster@test.com" });
+        // Create viewer
+        await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
+        const cookie = await loginUser(api, "viewer@test.com", "password123");
+
+        // Create poster with many posts
+        const { actor: poster } = await createTestUser({ username: "poster", email: "poster@test.com" });
         for (let i = 0; i < 10; i++) {
-          await createTestPost(actor, { content: `Post ${i}` });
+          await createTestPost(poster, { content: `Post ${i}` });
         }
 
-        const res = await testRequest(api, "GET", "/posts?limit=5");
+        // Viewer follows poster
+        const viewer = await db.getActorByUsername("viewer");
+        await db.addFollow(viewer!.id, poster.id, "accepted");
+
+        const res = await testRequest(api, "GET", "/timeline?limit=5", { cookie });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.posts.length, 5);
+      });
+
+      await t.step("requires authentication", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+
+        const res = await testRequest(api, "GET", "/timeline");
+        assertEquals(res.status, 401);
       });
     });
 
     // ============ GET /posts/hot ============
     await t.step("GET /posts/hot", async (t) => {
-      await t.step("returns hot posts", async () => {
+      await t.step("returns hot posts for authenticated user", async () => {
         await cleanDatabase();
         const api = await createTestApi();
 
-        const { actor } = await createTestUser({ username: "poster", email: "poster@test.com" });
+        const { actor } = await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
+        const cookie = await loginUser(api, "poster@test.com", "password123");
         await createTestPost(actor, { content: "Hot post!" });
 
-        const res = await testRequest(api, "GET", "/posts/hot");
+        const res = await testRequest(api, "GET", "/posts/hot", { cookie });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.posts);
+      });
+
+      await t.step("requires authentication", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+
+        const res = await testRequest(api, "GET", "/posts/hot");
+        assertEquals(res.status, 401);
       });
     });
 

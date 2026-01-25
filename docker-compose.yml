@@ -58,22 +58,31 @@ services:
       - 8.8.4.4
     environment:
       DATABASE_URL: postgres://riff:riff@db:5432/riff
-      DOMAIN: unresigned-fruticose-wallace.ngrok-free.dev
+      # Set DOMAIN via .env file or override in production
+      DOMAIN: ${DOMAIN:-localhost:8000}
       STATIC_DIR: /app/static
       PORT: "8000"
-      # S3 Storage (MinIO)
-      S3_BUCKET: riff-uploads
-      S3_REGION: us-east-1
-      S3_ENDPOINT: http://minio:9000
-      S3_PUBLIC_URL: http://localhost:9000/riff-uploads
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin
+      # CORS - set via .env in production
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8000,http://localhost:5173}
+      # S3 Storage (MinIO for dev, override in production)
+      S3_BUCKET: ${S3_BUCKET:-riff-uploads}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL:-http://localhost:9000/riff-uploads}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       DENO_KV_PATH: /data/kv.sqlite
     depends_on:
       db:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "deno", "eval", "const r = await fetch('http://localhost:8000/health'); Deno.exit(r.ok ? 0 : 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     volumes:
       - ./api/src:/app/src:ro
       - ./web/dist:/app/static:ro

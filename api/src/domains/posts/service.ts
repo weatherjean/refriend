@@ -44,8 +44,9 @@ export function decodeHtmlEntities(text: string): string {
 
 /**
  * Process post content: escape HTML, convert newlines, linkify mentions and hashtags
+ * Looks up mentions in database to determine if they're communities or users
  */
-export function processContent(text: string, domain: string): { html: string; mentions: string[] } {
+export async function processContent(db: DB, text: string, domain: string): Promise<{ html: string; mentions: string[] }> {
   // First escape HTML
   let html = escapeHtml(text);
 
@@ -53,12 +54,45 @@ export function processContent(text: string, domain: string): { html: string; me
   const mentionMatches = text.match(/@[\w.-]+(?:@[\w.-]+)?/g) || [];
   const mentions = [...new Set(mentionMatches.map(m => m.startsWith('@') ? m : `@${m}`))];
 
+  // Extract local mention names for lookup (only local domain or no domain specified)
+  const localMentionNames: string[] = [];
+  for (const mention of mentions) {
+    const match = mention.match(/^@([\w.-]+)(?:@([\w.-]+))?$/);
+    if (match) {
+      const name = match[1];
+      const mentionDomain = match[2];
+      // Only lookup local mentions (no domain or matching our domain)
+      if (!mentionDomain || mentionDomain === domain) {
+        localMentionNames.push(name);
+      }
+    }
+  }
+
+  // Batch lookup to determine which mentions are communities
+  const actorLookup = await db.getActorsAndCommunitiesByNames(localMentionNames);
+
   // Convert @mentions to links
   // Match @username or @username@domain
-  html = html.replace(/@([\w.-]+(?:@[\w.-]+)?)/g, (match, handle) => {
+  html = html.replace(/@([\w.-]+(?:@[\w.-]+)?)/g, (_match, handle: string) => {
+    // Parse the handle
+    const parts = handle.split('@');
+    const name = parts[0];
+    const mentionDomain = parts[1];
+
     // If it's just @username, assume local domain
     const fullHandle = handle.includes('@') ? `@${handle}` : `@${handle}@${domain}`;
-    return `<a href="/#/u/${fullHandle}" class="mention">@${handle}</a>`;
+
+    // Check if this is a local mention and if it's a community
+    const isLocal = !mentionDomain || mentionDomain === domain;
+    const lookup = isLocal ? actorLookup.get(name.toLowerCase()) : undefined;
+
+    if (lookup?.isCommunity) {
+      // Community - link to /c/name
+      return `<a href="/#/c/${name}" class="mention">@${handle}</a>`;
+    } else {
+      // User (or unknown/remote) - link to /u/handle
+      return `<a href="/#/u/${fullHandle}" class="mention">@${handle}</a>`;
+    }
   });
 
   // Convert #hashtags to links

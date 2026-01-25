@@ -21,6 +21,7 @@ import * as service from "./service.ts";
 import { getCachedHashtagPosts, setCachedHashtagPosts, invalidateProfileCache } from "../../cache.ts";
 import { saveMedia, deleteMedia } from "../../storage.ts";
 import { processActivity } from "../../activities.ts";
+import { rateLimit } from "../../middleware/rate-limit.ts";
 
 interface PostsEnv {
   Variables: {
@@ -208,8 +209,8 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     return c.json({ ok: true, pinned: false });
   });
 
-  // POST /posts/:id/report - Report a post
-  routes.post("/posts/:id/report", async (c) => {
+  // POST /posts/:id/report - Report a post (rate limited)
+  routes.post("/posts/:id/report", rateLimit("report"), async (c) => {
     const publicId = c.req.param("id");
     const user = c.get("user");
     const actor = c.get("actor");
@@ -250,8 +251,8 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     }
   });
 
-  // POST /media - Upload media (expects base64 WebP image)
-  routes.post("/media", async (c) => {
+  // POST /media - Upload media (expects base64 WebP image) - rate limited
+  routes.post("/media", rateLimit("media:upload"), async (c) => {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Not authenticated" }, 401);
@@ -282,8 +283,8 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     return c.json({ url: mediaUrl, media_type: "image/webp" });
   });
 
-  // POST /posts - Create post via ActivityPub Create activity
-  routes.post("/posts", async (c) => {
+  // POST /posts - Create post via ActivityPub Create activity (rate limited)
+  routes.post("/posts", rateLimit("post:create"), async (c) => {
     const user = c.get("user");
     const actor = c.get("actor");
     const domain = c.get("domain");
@@ -328,7 +329,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const { replyToPost, linkPreview, videoEmbed } = validation;
 
     // Process content: escape HTML, linkify mentions and hashtags
-    const { html: processedContent, mentions } = service.processContent(content, domain);
+    const { html: processedContent, mentions } = await service.processContent(db, content, domain);
     // If there's a link or video, append it to content for federation (so other servers can generate their own cards)
     let safeContent = `<p>${processedContent}</p>`;
     if (link_url) {

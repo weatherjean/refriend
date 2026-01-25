@@ -11,6 +11,7 @@ import type { DB } from "../../db.ts";
 import type { User, Actor } from "../../shared/types.ts";
 import type { CommunityDB } from "../communities/repository.ts";
 import { search } from "./service.ts";
+import { rateLimit } from "../../middleware/rate-limit.ts";
 
 interface SearchEnv {
   Variables: {
@@ -25,8 +26,8 @@ interface SearchEnv {
 export function createSearchRoutes(federation: Federation<void>): Hono<SearchEnv> {
   const routes = new Hono<SearchEnv>();
 
-  // GET /search - Unified search endpoint
-  routes.get("/search", async (c) => {
+  // GET /search - Unified search endpoint (rate limited)
+  routes.get("/search", rateLimit("search"), async (c) => {
     const query = c.req.query("q") || "";
     if (!query.trim()) {
       return c.json({ users: [], posts: [], postsLowConfidence: false });

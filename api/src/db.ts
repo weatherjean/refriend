@@ -1663,9 +1663,23 @@ export class DB {
 
   async createSession(userId: number): Promise<string> {
     return this.query(async (client) => {
-      const token = crypto.randomUUID();
+      // Generate cryptographically secure token (32 bytes = 256 bits)
+      const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
+      const token = btoa(String.fromCharCode(...tokenBytes))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
       await client.queryArray`INSERT INTO sessions (token, user_id) VALUES (${token}, ${userId})`;
       return token;
+    });
+  }
+
+  async deleteUserSessions(userId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        DELETE FROM sessions WHERE user_id = ${userId}
+      `;
+      return result.rowCount ?? 0;
     });
   }
 
@@ -1876,6 +1890,44 @@ export class DB {
       for (const row of result.rows) {
         map.set(row.username.toLowerCase(), row);
       }
+      return map;
+    });
+  }
+
+  /**
+   * Batch lookup actors (users and communities) by names.
+   * Returns a map of lowercase name -> { actor, isCommunity }
+   */
+  async getActorsAndCommunitiesByNames(names: string[]): Promise<Map<string, { actor: Actor; isCommunity: boolean }>> {
+    if (names.length === 0) return new Map();
+    return this.query(async (client) => {
+      const lowerNames = names.map(n => n.toLowerCase());
+
+      // Query users by username
+      const usersResult = await client.queryObject<Actor & { lookup_name: string }>`
+        SELECT a.*, LOWER(u.username) as lookup_name FROM actors a
+        JOIN users u ON a.user_id = u.id
+        WHERE LOWER(u.username) = ANY(${lowerNames})
+      `;
+
+      // Query communities by name
+      const communitiesResult = await client.queryObject<Actor & { lookup_name: string }>`
+        SELECT a.*, LOWER(a.name) as lookup_name FROM actors a
+        WHERE a.actor_type = 'Group' AND LOWER(a.name) = ANY(${lowerNames})
+      `;
+
+      const map = new Map<string, { actor: Actor; isCommunity: boolean }>();
+
+      // Add users first
+      for (const row of usersResult.rows) {
+        map.set(row.lookup_name, { actor: row, isCommunity: false });
+      }
+
+      // Communities override users if there's a conflict (unlikely but handle it)
+      for (const row of communitiesResult.rows) {
+        map.set(row.lookup_name, { actor: row, isCommunity: true });
+      }
+
       return map;
     });
   }

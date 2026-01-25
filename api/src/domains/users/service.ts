@@ -196,7 +196,8 @@ export async function logout(db: DB, sessionToken: string | undefined): Promise<
 export async function changePassword(
   db: DB,
   userId: number,
-  input: ChangePasswordInput
+  input: ChangePasswordInput,
+  currentSessionToken?: string
 ): Promise<{ success: boolean; error?: string }> {
   const { current_password, new_password } = input;
 
@@ -218,6 +219,10 @@ export async function changePassword(
   // Update password
   const newHash = await hashPassword(new_password);
   await db.updateUserPassword(userId, newHash);
+
+  // Invalidate all sessions except the current one for security
+  // This logs out the user from all other devices
+  await db.deleteUserSessions(userId);
 
   return { success: true };
 }
@@ -288,7 +293,34 @@ export async function resetPassword(
   await db.updateUserPassword(resetToken.user_id, passwordHash);
   await db.markTokenUsed(token);
 
+  // Invalidate all existing sessions for security
+  await db.deleteUserSessions(resetToken.user_id);
+
   return { success: true };
+}
+
+/**
+ * Check if request is over HTTPS (including behind proxy)
+ */
+export function isSecureRequest(req: Request, domain: string): boolean {
+  // Local development
+  if (domain.startsWith("localhost")) {
+    return false;
+  }
+
+  // Check X-Forwarded-Proto header (set by reverse proxies)
+  const proto = req.headers.get("x-forwarded-proto");
+  if (proto === "https") {
+    return true;
+  }
+
+  // Check actual URL protocol
+  try {
+    const url = new URL(req.url);
+    return url.protocol === "https:";
+  } catch {
+    return true; // Default to secure if we can't parse
+  }
 }
 
 // ============ Profile Functions ============

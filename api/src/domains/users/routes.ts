@@ -12,6 +12,7 @@ import type { CommunityDB } from "../communities/repository.ts";
 import * as service from "./service.ts";
 import { sanitizeUser, sanitizeActor } from "./types.ts";
 import { saveAvatar } from "../../storage.ts";
+import { rateLimit } from "../../middleware/rate-limit.ts";
 
 interface UsersEnv {
   Variables: {
@@ -28,8 +29,8 @@ export function createUserRoutes(): Hono<UsersEnv> {
 
   // ============ Auth Routes ============
 
-  // POST /auth/register
-  routes.post("/auth/register", async (c) => {
+  // POST /auth/register - rate limited to prevent spam registrations
+  routes.post("/auth/register", rateLimit("auth:register"), async (c) => {
     const body = await c.req.json<{ username: string; password: string; email: string }>();
     const db = c.get("db");
     const domain = c.get("domain");
@@ -42,7 +43,7 @@ export function createUserRoutes(): Hono<UsersEnv> {
 
     setCookie(c, "session", result.sessionToken!, {
       httpOnly: true,
-      secure: domain !== "localhost:8000",
+      secure: service.isSecureRequest(c.req.raw, domain),
       sameSite: "Lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
@@ -54,8 +55,8 @@ export function createUserRoutes(): Hono<UsersEnv> {
     });
   });
 
-  // POST /auth/login
-  routes.post("/auth/login", async (c) => {
+  // POST /auth/login - rate limited to prevent brute force
+  routes.post("/auth/login", rateLimit("auth:login"), async (c) => {
     const body = await c.req.json<{ email: string; password: string }>();
     const db = c.get("db");
     const domain = c.get("domain");
@@ -68,7 +69,7 @@ export function createUserRoutes(): Hono<UsersEnv> {
 
     setCookie(c, "session", result.sessionToken!, {
       httpOnly: true,
-      secure: domain !== "localhost:8000",
+      secure: service.isSecureRequest(c.req.raw, domain),
       sameSite: "Lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
@@ -118,8 +119,8 @@ export function createUserRoutes(): Hono<UsersEnv> {
     return c.json({ ok: true });
   });
 
-  // POST /auth/forgot-password
-  routes.post("/auth/forgot-password", async (c) => {
+  // POST /auth/forgot-password - rate limited to prevent email spam
+  routes.post("/auth/forgot-password", rateLimit("auth:password-reset"), async (c) => {
     const { email } = await c.req.json<{ email: string }>();
     const result = await service.requestPasswordReset(c.get("db"), email);
 

@@ -20,6 +20,7 @@ import type { User, Actor } from "../../shared/types.ts";
 import { processActivity, persistActor } from "../../activities.ts";
 import * as service from "./service.ts";
 import { sanitizeActor } from "../users/types.ts";
+import { rateLimit } from "../../middleware/rate-limit.ts";
 
 interface SocialEnv {
   Variables: {
@@ -65,8 +66,8 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
     return c.json(result);
   });
 
-  // POST /follow - Follow a user
-  routes.post("/follow", async (c) => {
+  // POST /follow - Follow a user (rate limited)
+  routes.post("/follow", rateLimit("follow"), async (c) => {
     const user = c.get("user");
     const actor = c.get("actor");
     const db = c.get("db");
@@ -175,8 +176,8 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
 
   // ============ Like Routes ============
 
-  // POST /posts/:id/like
-  routes.post("/posts/:id/like", async (c) => {
+  // POST /posts/:id/like (rate limited)
+  routes.post("/posts/:id/like", rateLimit("post:like"), async (c) => {
     const publicId = c.req.param("id");
     const user = c.get("user");
     const actor = c.get("actor");
@@ -257,8 +258,8 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
 
   // ============ Boost Routes ============
 
-  // POST /posts/:id/boost
-  routes.post("/posts/:id/boost", async (c) => {
+  // POST /posts/:id/boost (rate limited)
+  routes.post("/posts/:id/boost", rateLimit("post:boost"), async (c) => {
     const publicId = c.req.param("id");
     const user = c.get("user");
     const actor = c.get("actor");
