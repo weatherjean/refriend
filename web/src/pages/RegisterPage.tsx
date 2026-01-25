@@ -62,9 +62,8 @@ export function RegisterPage() {
               type="text"
               className="form-control"
               value={username}
-              onChange={(e) => setUsername(e.target.value.toLowerCase())}
-              pattern="[a-z0-9_]+"
-              title="Lowercase letters, numbers, and underscores only"
+              onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+              maxLength={26}
               required
             />
           </div>

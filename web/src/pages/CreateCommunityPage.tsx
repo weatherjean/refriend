@@ -79,7 +79,7 @@ export function CreateCommunityPage() {
                   placeholder="my_community"
                   value={name}
                   onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                  maxLength={50}
+                  maxLength={26}
                   required
                 />
               </div>

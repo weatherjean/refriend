@@ -65,8 +65,8 @@ export function validateUsername(username: string): string | null {
   if (!username) {
     return "Username is required";
   }
-  if (!/^[a-z0-9_]+$/.test(username) || username.length > 50) {
-    return "Invalid username (lowercase alphanumeric and underscore only)";
+  if (!/^[a-z0-9_]+$/.test(username) || username.length > 26) {
+    return "Invalid username (lowercase, numbers, underscore only, max 26 chars)";
   }
   return null;
 }

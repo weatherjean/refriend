@@ -134,7 +134,7 @@ export function createCommunityRoutes(
     }
 
     const communityDb = c.get("communityDb");
-    const communities = await communityDb.getTrendingCommunities(5);
+    const communities = await communityDb.getTrendingCommunities(20);
     const result = {
       communities: communities.map(community => ({
         id: community.public_id,
@@ -169,8 +169,8 @@ export function createCommunityRoutes(
     }
 
     // Validate name format (lowercase alphanumeric and underscore)
-    if (!/^[a-z0-9_]+$/.test(name) || name.length > 50) {
-      return c.json({ error: "Invalid name (lowercase alphanumeric and underscore only, max 50 chars)" }, 400);
+    if (!/^[a-z0-9_]+$/.test(name) || name.length > 26) {
+      return c.json({ error: "Invalid name (lowercase, numbers, underscore only, max 26 chars)" }, 400);
     }
 
     const communityDb = c.get("communityDb");

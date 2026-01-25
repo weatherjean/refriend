@@ -183,10 +183,10 @@ export function Layout({ children }: LayoutProps) {
           {/* Rising Communities */}
           {trendingCommunities.length > 0 && (
             <div className="card mb-4">
-              <div className="card-body py-2 px-3">
-                <h6 className="card-title mb-2 small text-muted">Rising</h6>
+              <div className="card-body">
+                <h6 className="card-title mb-3">Rising Communities</h6>
                 <div className="d-flex flex-column">
-                  {trendingCommunities.map((community) => {
+                  {trendingCommunities.slice(0, 3).map((community) => {
                     const slug = community.handle.replace(/^@/, '').split('@')[0];
                     return (
                       <Link
