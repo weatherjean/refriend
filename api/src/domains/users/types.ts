@@ -99,9 +99,8 @@ export function sanitizeUser(user: User): SanitizedUser {
 /**
  * Sanitize actor for API response
  */
-export function sanitizeActor(actor: Actor, domain?: string): SanitizedActor {
-  const handleDomain = actor.handle?.split("@").pop();
-  const isLocal = domain ? handleDomain === domain : actor.user_id !== null;
+export function sanitizeActor(actor: Actor, _domain?: string): SanitizedActor {
+  const isLocal = actor.user_id !== null;
 
   return {
     id: actor.public_id,

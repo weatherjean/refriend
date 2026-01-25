@@ -347,7 +347,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
 
     // Build attachments for ActivityPub Note
     const noteAttachments = (attachments ?? []).map(att => new Document({
-      url: new URL(`https://${domain}${att.url}`),
+      url: new URL(att.url.startsWith("http") ? att.url : `https://${domain}${att.url}`),
       mediaType: "image/webp",
       name: att.alt_text ?? null,
       width: att.width,

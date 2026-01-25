@@ -1,103 +1,148 @@
 /**
- * Storage module for file uploads (avatars, etc.)
+ * Storage module for file uploads (avatars, media)
  *
- * Currently uses local filesystem storage.
- *
- * TODO: Implement S3 storage for production:
- * - Add S3 client (e.g., @aws-sdk/client-s3)
- * - Create S3Storage class implementing same interface
- * - Switch based on environment variable (STORAGE_TYPE=s3)
- * - Required S3 config: AWS_REGION, AWS_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
- * - Consider using presigned URLs for direct uploads from client
+ * Uses AWS S3 or S3-compatible storage (MinIO for local dev).
  */
 
-import { join } from "@std/path";
-import { ensureDir } from "@std/fs";
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 
-// Local storage directory (gitignored)
-const UPLOADS_DIR = "./uploads";
+// S3 configuration from environment
+const S3_BUCKET = Deno.env.get("S3_BUCKET") || "";
+const S3_REGION = Deno.env.get("S3_REGION") || "us-east-1";
+const S3_ENDPOINT = Deno.env.get("S3_ENDPOINT"); // For S3-compatible services like MinIO
+const S3_PUBLIC_URL = Deno.env.get("S3_PUBLIC_URL"); // CDN or custom domain for public URLs
 
-export interface StorageConfig {
-  type: "local" | "s3";
-  // TODO: Add S3 config options
-  // s3Bucket?: string;
-  // s3Region?: string;
+let s3Client: S3Client | null = null;
+
+/**
+ * Get or create S3 client
+ */
+function getS3Client(): S3Client {
+  if (!s3Client) {
+    const config: ConstructorParameters<typeof S3Client>[0] = {
+      region: S3_REGION,
+    };
+    if (S3_ENDPOINT) {
+      config.endpoint = S3_ENDPOINT;
+      config.forcePathStyle = true; // Required for MinIO and most S3-compatible services
+    }
+    s3Client = new S3Client(config);
+  }
+  return s3Client;
 }
 
 /**
- * Initialize storage - creates uploads directory if needed
+ * Get the public URL for an S3 object
+ */
+function getS3Url(key: string): string {
+  if (S3_PUBLIC_URL) {
+    return `${S3_PUBLIC_URL.replace(/\/$/, "")}/${key}`;
+  }
+  if (S3_ENDPOINT) {
+    return `${S3_ENDPOINT}/${S3_BUCKET}/${key}`;
+  }
+  return `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${key}`;
+}
+
+/**
+ * Get content type from filename
+ */
+function getContentType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const types: Record<string, string> = {
+    webp: "image/webp",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    mp4: "video/mp4",
+    webm: "video/webm",
+  };
+  return types[ext || ""] || "application/octet-stream";
+}
+
+/**
+ * Initialize storage - validates S3 config
  */
 export async function initStorage(): Promise<void> {
-  await ensureDir(join(UPLOADS_DIR, "avatars"));
-  await ensureDir(join(UPLOADS_DIR, "media"));
-  console.log("[Storage] Initialized local storage at:", UPLOADS_DIR);
+  if (!S3_BUCKET) {
+    throw new Error("S3_BUCKET environment variable is required");
+  }
+  console.log(`[Storage] S3 bucket=${S3_BUCKET}, region=${S3_REGION}`);
+  if (S3_ENDPOINT) {
+    console.log(`[Storage] S3 endpoint: ${S3_ENDPOINT}`);
+  }
+  if (S3_PUBLIC_URL) {
+    console.log(`[Storage] S3 public URL: ${S3_PUBLIC_URL}`);
+  }
 }
 
 /**
  * Save an avatar image
- * @param filename - The filename to save as (e.g., "user-123.webp")
- * @param data - The image data as Uint8Array
- * @returns The public URL path to the image
- *
- * TODO: For S3 implementation:
- * - Use PutObjectCommand to upload to S3
- * - Return the S3 URL or CloudFront URL
- * - Set appropriate Content-Type and Cache-Control headers
  */
 export async function saveAvatar(filename: string, data: Uint8Array): Promise<string> {
-  const filepath = join(UPLOADS_DIR, "avatars", filename);
-  await Deno.writeFile(filepath, data);
-
-  // Return URL path (relative to server root)
-  return `/uploads/avatars/${filename}`;
+  const key = `avatars/${filename}`;
+  await getS3Client().send(
+    new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: key,
+      Body: data,
+      ContentType: getContentType(filename),
+      CacheControl: "public, max-age=31536000",
+    })
+  );
+  return getS3Url(key);
 }
 
 /**
  * Delete an avatar image
- * @param filename - The filename to delete
- *
- * TODO: For S3 implementation:
- * - Use DeleteObjectCommand to remove from S3
  */
 export async function deleteAvatar(filename: string): Promise<void> {
   try {
-    const filepath = join(UPLOADS_DIR, "avatars", filename);
-    await Deno.remove(filepath);
+    await getS3Client().send(
+      new DeleteObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: `avatars/${filename}`,
+      })
+    );
   } catch {
-    // Ignore if file doesn't exist
+    // Ignore errors - file may not exist
   }
 }
 
 /**
  * Save a media file (post attachment)
- * @param filename - The filename to save as (e.g., "uuid.webp")
- * @param data - The file data as Uint8Array
- * @returns The public URL path to the file
  */
 export async function saveMedia(filename: string, data: Uint8Array): Promise<string> {
-  const filepath = join(UPLOADS_DIR, "media", filename);
-  await Deno.writeFile(filepath, data);
-
-  // Return URL path (relative to server root)
-  return `/uploads/media/${filename}`;
+  const key = `media/${filename}`;
+  await getS3Client().send(
+    new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: key,
+      Body: data,
+      ContentType: getContentType(filename),
+      CacheControl: "public, max-age=31536000",
+    })
+  );
+  return getS3Url(key);
 }
 
 /**
  * Delete a media file
- * @param filename - The filename to delete
  */
 export async function deleteMedia(filename: string): Promise<void> {
   try {
-    const filepath = join(UPLOADS_DIR, "media", filename);
-    await Deno.remove(filepath);
+    await getS3Client().send(
+      new DeleteObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: `media/${filename}`,
+      })
+    );
   } catch {
-    // Ignore if file doesn't exist
+    // Ignore errors - file may not exist
   }
-}
-
-/**
- * Get the full filesystem path for serving static files
- */
-export function getUploadsDir(): string {
-  return UPLOADS_DIR;
 }

@@ -5,7 +5,7 @@ import { behindProxy } from "@hongminhee/x-forwarded-fetch";
 import { DB } from "./db.ts";
 import { federation, setDomain, setDB } from "./domains/federation/setup.ts";
 import { createApiRoutes } from "./api-routes.ts";
-import { initStorage, getUploadsDir } from "./storage.ts";
+import { initStorage } from "./storage.ts";
 import { initCache } from "./cache.ts";
 import { CommunityDB } from "./domains/communities/repository.ts";
 import { addCommunityFederationRoutes, setCommunityDB as setCommunityDBFed } from "./domains/communities/federation.ts";
@@ -89,9 +89,6 @@ app.route("/api", createApiRoutes(db, federation, communityDb));
 
 // Health check
 app.get("/health", (c) => c.json({ ok: true }));
-
-// Serve uploaded files (avatars, etc.)
-app.use("/uploads/*", serveStatic({ root: getUploadsDir(), rewriteRequestPath: (path) => path.replace("/uploads", "") }));
 
 // Serve static files from web/dist (built frontend)
 // Hash router handles client-side routing, so we just serve static files

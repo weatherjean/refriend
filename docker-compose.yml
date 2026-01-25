@@ -1,3 +1,5 @@
+# Development compose - uses MinIO for S3-compatible storage
+# MinIO Console: http://localhost:9001 (login: minioadmin/minioadmin)
 services:
   db:
     image: postgres:16-alpine
@@ -16,6 +18,36 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/riff-uploads --ignore-existing;
+      mc anonymous set download myminio/riff-uploads;
+      exit 0;
+      "
+
   api:
     build:
       context: ./api
@@ -26,17 +58,26 @@ services:
       - 8.8.4.4
     environment:
       DATABASE_URL: postgres://riff:riff@db:5432/riff
-      DOMAIN: unresigned-fruticose-wallace.ngrok-free.app
+      DOMAIN: unresigned-fruticose-wallace.ngrok-free.dev
       STATIC_DIR: /app/static
       PORT: "8000"
+      # S3 Storage (MinIO)
+      S3_BUCKET: riff-uploads
+      S3_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_URL: http://localhost:9000/riff-uploads
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
     depends_on:
       db:
         condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
     volumes:
       - ./api/src:/app/src:ro
       - ./web/dist:/app/static:ro
-      - ./api/uploads:/app/uploads
     command: ["deno", "run", "--allow-all", "--unstable-kv", "--unstable-temporal", "--watch", "src/main.ts"]
 
 volumes:
   pgdata:
+  minio_data:
