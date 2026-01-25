@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Post, posts as postsApi } from '../api';
-import { formatTimeAgo, getUsername } from '../utils';
+import { formatTimeAgo, getUsername, sanitizeHtml } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import { TagBadge } from './TagBadge';
 import { Avatar } from './Avatar';
@@ -256,7 +256,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
             <div
               ref={contentRef}
               className={`post-content ${linkToPost ? 'post-content-truncated' : ''}`}
-              dangerouslySetInnerHTML={{ __html: post.content }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }}
             />
             {linkToPost && isTruncated && (
               <button

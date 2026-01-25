@@ -100,6 +100,7 @@ export interface RegisterResult {
   user?: User;
   actor?: Actor;
   sessionToken?: string;
+  csrfToken?: string;
 }
 
 export async function register(
@@ -160,9 +161,9 @@ export async function register(
   });
 
   // Create session
-  const sessionToken = await db.createSession(user.id);
+  const { token: sessionToken, csrfToken } = await db.createSession(user.id);
 
-  return { success: true, user, actor, sessionToken };
+  return { success: true, user, actor, sessionToken, csrfToken };
 }
 
 export interface LoginResult {
@@ -171,6 +172,7 @@ export interface LoginResult {
   user?: User;
   actor?: Actor | null;
   sessionToken?: string;
+  csrfToken?: string;
 }
 
 export async function login(db: DB, input: LoginInput): Promise<LoginResult> {
@@ -186,9 +188,9 @@ export async function login(db: DB, input: LoginInput): Promise<LoginResult> {
   }
 
   const actor = await db.getActorByUserId(user.id);
-  const sessionToken = await db.createSession(user.id);
+  const { token: sessionToken, csrfToken } = await db.createSession(user.id);
 
-  return { success: true, user, actor, sessionToken };
+  return { success: true, user, actor, sessionToken, csrfToken };
 }
 
 export async function logout(db: DB, sessionToken: string | undefined): Promise<void> {

@@ -119,6 +119,7 @@ export interface Hashtag {
 export interface Session {
   token: string;
   user_id: number;
+  csrf_token: string;
   created_at: string;
   expires_at: string;
 }
@@ -1662,16 +1663,24 @@ export class DB {
 
   // ============ Sessions ============
 
-  async createSession(userId: number): Promise<string> {
+  async createSession(userId: number): Promise<{ token: string; csrfToken: string }> {
     return this.query(async (client) => {
-      // Generate cryptographically secure token (32 bytes = 256 bits)
+      // Generate cryptographically secure session token (32 bytes = 256 bits)
       const tokenBytes = crypto.getRandomValues(new Uint8Array(32));
       const token = btoa(String.fromCharCode(...tokenBytes))
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=/g, '');
-      await client.queryArray`INSERT INTO sessions (token, user_id) VALUES (${token}, ${userId})`;
-      return token;
+
+      // Generate CSRF token (32 bytes = 256 bits)
+      const csrfBytes = crypto.getRandomValues(new Uint8Array(32));
+      const csrfToken = btoa(String.fromCharCode(...csrfBytes))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+
+      await client.queryArray`INSERT INTO sessions (token, user_id, csrf_token) VALUES (${token}, ${userId}, ${csrfToken})`;
+      return { token, csrfToken };
     });
   }
 
@@ -1690,6 +1699,25 @@ export class DB {
         SELECT * FROM sessions WHERE token = ${token} AND expires_at > NOW()
       `;
       return result.rows[0] || null;
+    });
+  }
+
+  /**
+   * Generate and store a CSRF token for a legacy session that doesn't have one.
+   * Returns the newly generated CSRF token.
+   */
+  async generateSessionCsrfToken(sessionToken: string): Promise<string> {
+    return this.query(async (client) => {
+      const csrfBytes = crypto.getRandomValues(new Uint8Array(32));
+      const csrfToken = btoa(String.fromCharCode(...csrfBytes))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+
+      await client.queryArray`
+        UPDATE sessions SET csrf_token = ${csrfToken} WHERE token = ${sessionToken}
+      `;
+      return csrfToken;
     });
   }
 

@@ -1,5 +1,6 @@
 import { Actor } from '../api';
 import { Avatar } from './Avatar';
+import { sanitizeHtml } from '../utils';
 
 interface ProfileHeaderProps {
   actor: Actor;
@@ -53,7 +54,7 @@ export function ProfileHeader({
           )}
 
           {actor.bio && (
-            <div className="mt-2" dangerouslySetInnerHTML={{ __html: actor.bio }} />
+            <div className="mt-2" dangerouslySetInnerHTML={{ __html: sanitizeHtml(actor.bio) }} />
           )}
 
           {actor.is_local && (
@@ -111,7 +112,7 @@ export function ProfileHeader({
             )}
 
             {actor.bio && (
-              <div className="mt-2" dangerouslySetInnerHTML={{ __html: actor.bio }} />
+              <div className="mt-2" dangerouslySetInnerHTML={{ __html: sanitizeHtml(actor.bio) }} />
             )}
 
             {actor.is_local && (

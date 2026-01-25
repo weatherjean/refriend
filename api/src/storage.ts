@@ -66,6 +66,47 @@ function getContentType(filename: string): string {
 }
 
 /**
+ * Magic byte signatures for validating file types.
+ * Each type can have multiple valid signatures.
+ */
+const MAGIC_BYTES: Record<string, number[][]> = {
+  "image/png": [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
+  "image/jpeg": [[0xff, 0xd8, 0xff]],
+  "image/gif": [
+    [0x47, 0x49, 0x46, 0x38, 0x37, 0x61], // GIF87a
+    [0x47, 0x49, 0x46, 0x38, 0x39, 0x61], // GIF89a
+  ],
+  "image/webp": [[0x52, 0x49, 0x46, 0x46]], // RIFF header (WebP uses RIFF container)
+  "video/mp4": [[0x00, 0x00, 0x00]], // ftyp box starts at offset 4, but first 3 bytes are size
+  "video/webm": [[0x1a, 0x45, 0xdf, 0xa3]], // EBML header
+};
+
+/**
+ * Validate that file content matches the expected type based on magic bytes.
+ * Returns true if the file's magic bytes match the expected content type.
+ */
+function validateMagicBytes(data: Uint8Array, expectedType: string): boolean {
+  const signatures = MAGIC_BYTES[expectedType];
+  if (!signatures) {
+    // Unknown type - allow it (will use extension-based type)
+    return true;
+  }
+
+  for (const sig of signatures) {
+    let match = true;
+    for (let i = 0; i < sig.length; i++) {
+      if (data[i] !== sig[i]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+
+  return false;
+}
+
+/**
  * Initialize storage - validates S3 config
  */
 export async function initStorage(): Promise<void> {
@@ -85,13 +126,20 @@ export async function initStorage(): Promise<void> {
  * Save an avatar image
  */
 export async function saveAvatar(filename: string, data: Uint8Array): Promise<string> {
+  const contentType = getContentType(filename);
+
+  // Validate magic bytes to prevent file type spoofing
+  if (!validateMagicBytes(data, contentType)) {
+    throw new Error("File content does not match extension");
+  }
+
   const key = `avatars/${filename}`;
   await getS3Client().send(
     new PutObjectCommand({
       Bucket: S3_BUCKET,
       Key: key,
       Body: data,
-      ContentType: getContentType(filename),
+      ContentType: contentType,
       CacheControl: "public, max-age=31536000",
     })
   );
@@ -118,13 +166,20 @@ export async function deleteAvatar(filename: string): Promise<void> {
  * Save a media file (post attachment)
  */
 export async function saveMedia(filename: string, data: Uint8Array): Promise<string> {
+  const contentType = getContentType(filename);
+
+  // Validate magic bytes to prevent file type spoofing
+  if (!validateMagicBytes(data, contentType)) {
+    throw new Error("File content does not match extension");
+  }
+
   const key = `media/${filename}`;
   await getS3Client().send(
     new PutObjectCommand({
       Bucket: S3_BUCKET,
       Key: key,
       Body: data,
-      ContentType: getContentType(filename),
+      ContentType: contentType,
       CacheControl: "public, max-age=31536000",
     })
   );

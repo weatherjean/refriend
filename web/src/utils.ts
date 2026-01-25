@@ -1,3 +1,16 @@
+import DOMPurify from 'dompurify';
+
+/**
+ * Sanitize HTML content to prevent XSS attacks.
+ * Only allows safe tags and attributes for user-generated content.
+ */
+export function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['a', 'p', 'br', 'span', 'strong', 'em', 'b', 'i'],
+    ALLOWED_ATTR: ['href', 'class', 'target', 'rel'],
+  });
+}
+
 export function formatTimeAgo(dateString: string): string {
   // Handle both ISO format (from API) and old SQLite format
   const date = new Date(dateString);

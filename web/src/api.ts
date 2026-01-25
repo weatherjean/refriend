@@ -8,6 +8,17 @@ export function setGlobalErrorHandler(handler: ErrorHandler | null) {
   globalErrorHandler = handler;
 }
 
+// CSRF token management
+let csrfToken: string | null = null;
+
+export function setCsrfToken(token: string | null) {
+  csrfToken = token;
+}
+
+export function getCsrfToken(): string | null {
+  return csrfToken;
+}
+
 export interface User {
   id: number;
   username: string;
@@ -98,13 +109,23 @@ interface FetchOptions extends RequestInit {
 
 async function fetchJson<T>(url: string, options?: FetchOptions): Promise<T> {
   const { silent, ...fetchOptions } = options || {};
+  const method = fetchOptions.method || 'GET';
+
+  // Build headers, including CSRF token for mutation requests
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...fetchOptions?.headers as Record<string, string>,
+  };
+
+  // Add CSRF token for state-changing requests
+  if (csrfToken && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase())) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+
   const res = await fetch(API_BASE + url, {
     ...fetchOptions,
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...fetchOptions?.headers,
-    },
+    headers,
   });
   const data = await res.json();
   if (!res.ok) {
@@ -158,14 +179,14 @@ export const media = {
 
 // Auth
 export const auth = {
-  me: () => fetchJson<{ user: User | null; actor: Actor | null }>('/auth/me'),
+  me: () => fetchJson<{ user: User | null; actor: Actor | null; csrfToken: string | null }>('/auth/me'),
   login: (email: string, password: string) =>
-    fetchJson<{ user: User; actor: Actor }>('/auth/login', {
+    fetchJson<{ user: User; actor: Actor; csrfToken: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
   register: (username: string, email: string, password: string) =>
-    fetchJson<{ user: User; actor: Actor }>('/auth/register', {
+    fetchJson<{ user: User; actor: Actor; csrfToken: string }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ username, email, password }),
     }),

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { auth, User, Actor } from '../api';
+import { auth, User, Actor, setCsrfToken } from '../api';
 
 interface AuthContextType {
   user: User | null;
@@ -20,31 +20,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     auth.me()
-      .then(({ user, actor }) => {
+      .then(({ user, actor, csrfToken }) => {
         setUser(user);
         setActor(actor);
+        if (csrfToken) {
+          setCsrfToken(csrfToken);
+        }
       })
       .catch(() => {
         setUser(null);
         setActor(null);
+        setCsrfToken(null);
       })
       .finally(() => setLoading(false));
   }, []);
 
   const login = async (email: string, password: string) => {
-    const { user, actor } = await auth.login(email, password);
+    const { user, actor, csrfToken } = await auth.login(email, password);
+    setCsrfToken(csrfToken);
     setUser(user);
     setActor(actor);
   };
 
   const register = async (username: string, email: string, password: string) => {
-    const { user, actor } = await auth.register(username, email, password);
+    const { user, actor, csrfToken } = await auth.register(username, email, password);
+    setCsrfToken(csrfToken);
     setUser(user);
     setActor(actor);
   };
 
   const logout = async () => {
     await auth.logout();
+    setCsrfToken(null);
     setUser(null);
     setActor(null);
   };

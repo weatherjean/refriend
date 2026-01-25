@@ -87,7 +87,7 @@ services:
       - ./api/src:/app/src:ro
       - ./web/dist:/app/static:ro
       - kvdata:/data
-    command: ["deno", "run", "--allow-all", "--unstable-kv", "--unstable-temporal", "--watch", "src/main.ts"]
+    command: ["deno", "run", "--allow-net", "--allow-env", "--allow-read", "--unstable-kv", "--unstable-temporal", "--watch", "src/main.ts"]
 
 volumes:
   pgdata:

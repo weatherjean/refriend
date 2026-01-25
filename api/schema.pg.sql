@@ -3,6 +3,9 @@
 -- Enable pg_trgm for fuzzy text search
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
+-- Enable pgcrypto for secure random generation (used in migrations)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- Users: Local accounts that can authenticate
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
@@ -142,9 +145,21 @@ CREATE TABLE IF NOT EXISTS pinned_posts (
 CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  csrf_token TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
 );
+
+-- Migration: Add csrf_token column if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sessions' AND column_name = 'csrf_token') THEN
+    ALTER TABLE sessions ADD COLUMN csrf_token TEXT;
+    -- Backfill existing sessions with random tokens
+    UPDATE sessions SET csrf_token = encode(gen_random_bytes(32), 'base64') WHERE csrf_token IS NULL;
+    ALTER TABLE sessions ALTER COLUMN csrf_token SET NOT NULL;
+  END IF;
+END $$;
 
 -- Activities
 CREATE TABLE IF NOT EXISTS activities (

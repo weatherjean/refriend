@@ -8,6 +8,7 @@ import { Avatar, CommunityAvatar } from '../components/Avatar';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { SortToggle } from '../components/SortToggle';
+import { sanitizeHtml } from '../utils';
 
 export function CommunityPage() {
   const { name } = useParams<{ name: string }>();
@@ -166,7 +167,7 @@ export function CommunityPage() {
             <h4 className="mb-0 mt-3">{community.name}</h4>
             <div className="text-muted small" style={{ wordBreak: 'break-all' }}>{community.handle}</div>
 
-            {community.bio && <div className="mt-2 mb-0" dangerouslySetInnerHTML={{ __html: community.bio }} />}
+            {community.bio && <div className="mt-2 mb-0" dangerouslySetInnerHTML={{ __html: sanitizeHtml(community.bio) }} />}
 
             <div className="mt-3 d-flex justify-content-center gap-3 text-muted small flex-wrap">
               <span><strong>{community.member_count}</strong> members</span>
@@ -228,7 +229,7 @@ export function CommunityPage() {
                   </button>
                 )}
               </div>
-              {community.bio && <div className="mb-2" dangerouslySetInnerHTML={{ __html: community.bio }} />}
+              {community.bio && <div className="mb-2" dangerouslySetInnerHTML={{ __html: sanitizeHtml(community.bio) }} />}
               <div className="d-flex gap-3 text-muted small">
                 <span><strong>{community.member_count}</strong> members</span>
                 {community.require_approval && (

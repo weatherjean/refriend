@@ -52,6 +52,7 @@ export function createUserRoutes(): Hono<UsersEnv> {
     return c.json({
       user: sanitizeUser(result.user!),
       actor: sanitizeActor(result.actor!, domain),
+      csrfToken: result.csrfToken,
     });
   });
 
@@ -78,6 +79,7 @@ export function createUserRoutes(): Hono<UsersEnv> {
     return c.json({
       user: sanitizeUser(result.user!),
       actor: result.actor ? sanitizeActor(result.actor, domain) : null,
+      csrfToken: result.csrfToken,
     });
   });
 
@@ -90,16 +92,28 @@ export function createUserRoutes(): Hono<UsersEnv> {
   });
 
   // GET /auth/me
-  routes.get("/auth/me", (c) => {
+  routes.get("/auth/me", async (c) => {
     const user = c.get("user");
     const actor = c.get("actor");
     const domain = c.get("domain");
+    const db = c.get("db");
 
     const result = service.getCurrentUser(user, actor, domain);
     if (!result) {
-      return c.json({ user: null, actor: null });
+      return c.json({ user: null, actor: null, csrfToken: null });
     }
-    return c.json(result);
+
+    // Get CSRF token from session
+    const sessionToken = getCookie(c, "session");
+    let csrfToken: string | null = null;
+    if (sessionToken) {
+      const session = await db.getSession(sessionToken);
+      if (session) {
+        csrfToken = session.csrf_token;
+      }
+    }
+
+    return c.json({ ...result, csrfToken });
   });
 
   // PUT /auth/password

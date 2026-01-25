@@ -12,6 +12,7 @@ import type { Federation } from "@fedify/fedify";
 import type { DB, User, Actor } from "./db.ts";
 import type { CommunityDB } from "./domains/communities/repository.ts";
 import { generalRateLimit } from "./middleware/rate-limit.ts";
+import { csrfMiddleware } from "./middleware/csrf.ts";
 
 // Domain routes
 import { createNotificationRoutes } from "./domains/notifications/routes.ts";
@@ -87,6 +88,9 @@ export function createApiRoutes(
 
     await next();
   });
+
+  // CSRF protection for mutation requests
+  api.use("/*", csrfMiddleware);
 
   // ============ Mount New Domain Routes ============
   // These handle the migrated endpoints and take precedence

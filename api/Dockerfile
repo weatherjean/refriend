@@ -17,4 +17,4 @@ COPY schema.pg.sql ./
 
 EXPOSE 8000
 
-CMD ["deno", "run", "--allow-all", "--unstable-kv", "--unstable-temporal", "src/main.ts"]
+CMD ["deno", "run", "--allow-net", "--allow-env", "--allow-read", "--unstable-kv", "--unstable-temporal", "src/main.ts"]
