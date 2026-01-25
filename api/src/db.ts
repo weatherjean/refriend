@@ -564,6 +564,17 @@ export class DB {
     });
   }
 
+  async acceptPendingFollowsTo(followingId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryArray`
+        UPDATE follows SET status = 'accepted'
+        WHERE following_id = ${followingId} AND status = 'pending'
+        RETURNING follower_id
+      `;
+      return result.rows.length;
+    });
+  }
+
   async getFollowers(actorId: number, limit = 200): Promise<Actor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
