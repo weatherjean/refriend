@@ -111,10 +111,10 @@ export function ContentPolicyPage() {
               When we identify policy violations, we may take the following actions:
             </p>
             <ul className="legal-list mb-0">
-              <li><strong>Content removal</strong> — Individual posts or media that violate our policies will be removed</li>
-              <li><strong>Account warning</strong> — A formal notice that you've violated our policies</li>
-              <li><strong>Temporary suspension</strong> — Your account may be temporarily disabled</li>
-              <li><strong>Permanent suspension</strong> — Severe or repeated violations may result in permanent account termination</li>
+              <li><strong>Content removal:</strong> Individual posts or media that violate our policies will be removed</li>
+              <li><strong>Account warning:</strong> A formal notice that you've violated our policies</li>
+              <li><strong>Temporary suspension:</strong> Your account may be temporarily disabled</li>
+              <li><strong>Permanent suspension:</strong> Severe or repeated violations may result in permanent account termination</li>
             </ul>
           </div>
         </div>

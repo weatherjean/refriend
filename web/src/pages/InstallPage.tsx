@@ -71,14 +71,13 @@ export function InstallPage() {
           <div className="card-body">
             <h5 className="mb-3">Why a PWA?</h5>
             <p className="landing-text mb-3">
-              Progressive Web Apps give you the best of both worlds — the reach of a website
-              with the experience of a native app.
+              Progressive Web Apps combine the reach of a website with the experience of a native app.
             </p>
             <ul className="landing-list mb-0">
-              <li>No app store required — install directly from your browser</li>
-              <li>Always up to date — no manual updates needed</li>
-              <li>Works offline — cached content available without internet</li>
-              <li>Lightweight — takes up less storage than native apps</li>
+              <li>No app store required: install directly from your browser</li>
+              <li>Always up to date: no manual updates needed</li>
+              <li>Works offline: cached content available without internet</li>
+              <li>Lightweight: takes up less storage than native apps</li>
             </ul>
           </div>
         </div>

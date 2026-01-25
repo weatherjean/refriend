@@ -44,7 +44,7 @@ export function TermsPage() {
               <li>You must provide accurate information when creating your account</li>
               <li>You are responsible for maintaining the security of your account and password</li>
               <li>You are responsible for all activity that occurs under your account</li>
-              <li>One account per person — creating multiple accounts to evade moderation or manipulate the platform is prohibited</li>
+              <li>One account per person. Creating multiple accounts to evade moderation or manipulate the platform is prohibited</li>
               <li>Notify us immediately if you suspect unauthorized access to your account</li>
             </ul>
           </div>
@@ -160,7 +160,7 @@ export function TermsPage() {
           <div className="card-body">
             <h5 className="mb-3">Service Availability</h5>
             <ul className="legal-list mb-0">
-              <li>Riff is currently in beta — features may change, break, or be removed</li>
+              <li>Riff is currently in beta. Features may change, break, or be removed</li>
               <li>We don't guarantee 100% uptime or availability</li>
               <li>We may modify, suspend, or discontinue features at any time</li>
               <li>We'll try to give notice before major changes, but can't always guarantee it</li>

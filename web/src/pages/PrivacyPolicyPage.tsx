@@ -16,7 +16,7 @@ export function PrivacyPolicyPage() {
           <div className="card-body">
             <h5 className="mb-3">Who We Are</h5>
             <p className="legal-text mb-3">
-              Riff is a social platform that's part of the fediverse — a network of interconnected
+              Riff is a social platform that's part of the fediverse, a network of interconnected
               servers using the ActivityPub protocol. Our servers are hosted in Europe.
             </p>
             <p className="legal-text mb-0">

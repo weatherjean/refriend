@@ -24,7 +24,7 @@ function LandingPage() {
           </p>
           <p className="landing-subtitle mb-4">
             One platform, fully connected to the fediverse. No servers to choose,
-            no complexity — just sign up and start posting.
+            no complexity. Just sign up and start posting.
           </p>
           <div className="d-flex gap-2 justify-content-center">
             <Link to="/register" className="btn btn-primary">
@@ -139,12 +139,12 @@ function LandingPage() {
             <div className="card-body">
               <h5 className="mb-3">Core Features</h5>
               <ul className="landing-list mb-0">
-                <li><strong>Posts</strong> — Share text, images, and links with your followers</li>
-                <li><strong>Communities</strong> — Topic-based spaces with their own moderators and rules</li>
-                <li><strong>Hashtags</strong> — Discover and follow topics with tag pages</li>
-                <li><strong>Likes & Boosts</strong> — Engage with content and share it with your followers</li>
-                <li><strong>Following</strong> — Build your own timeline by following people and communities</li>
-                <li><strong>Federation</strong> — Connect with millions of users across the fediverse</li>
+                <li><strong>Posts:</strong> Share text, images, and links with your followers</li>
+                <li><strong>Communities:</strong> Topic-based spaces with their own moderators and rules</li>
+                <li><strong>Hashtags:</strong> Discover and follow topics with tag pages</li>
+                <li><strong>Likes & Boosts:</strong> Engage with content and share it with your followers</li>
+                <li><strong>Following:</strong> Build your own timeline by following people and communities</li>
+                <li><strong>Federation:</strong> Connect with millions of users across the fediverse</li>
               </ul>
             </div>
           </div>
