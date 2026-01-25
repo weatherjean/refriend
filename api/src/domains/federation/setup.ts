@@ -319,7 +319,10 @@ federation
       })
     )).filter((a): a is Activity => a !== null);
 
-    return { items };
+    // Get total count of Create activities (posts) for the profile
+    const postCount = await db.getPostCountByActor(actor.id);
+
+    return { items, totalItems: postCount };
   });
 
 // ============ Object Dispatcher (Notes/Posts) ============

@@ -8,6 +8,7 @@ import { tags, notifications as notificationsApi, communities, type TrendingComm
 import { TagBadge } from './TagBadge';
 import { Avatar, CommunityAvatar } from './Avatar';
 import { ToastContainer } from './ToastContainer';
+import { CookieBanner } from './CookieBanner';
 
 interface LayoutProps {
   children: ReactNode;
@@ -257,6 +258,13 @@ export function Layout({ children }: LayoutProps) {
             <Link to="/install" onClick={() => setMobileMenuOpen(false)}>
               Install App
             </Link>
+            <div className="sidebar-footer-legal">
+              <Link to="/policy" onClick={() => setMobileMenuOpen(false)}>Content Policy</Link>
+              <span className="sidebar-footer-sep">·</span>
+              <Link to="/privacy" onClick={() => setMobileMenuOpen(false)}>Privacy</Link>
+              <span className="sidebar-footer-sep">·</span>
+              <Link to="/terms" onClick={() => setMobileMenuOpen(false)}>Terms</Link>
+            </div>
           </div>
 
           <div className="text-center mb-5 pb-5">
@@ -304,6 +312,7 @@ export function Layout({ children }: LayoutProps) {
       </nav>
 
       <ToastContainer />
+      <CookieBanner />
     </div>
   );
 }

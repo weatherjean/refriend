@@ -27,7 +27,7 @@ export function InstallPage() {
           <div className="card-body">
             <h5 className="mb-3">iPhone & iPad</h5>
             <ol className="install-steps mb-0">
-              <li>Open <strong>riff.social</strong> in Safari</li>
+              <li>Open <strong>riff-social.com</strong> in Safari</li>
               <li>Tap the <strong>Share</strong> button <i className="bi bi-box-arrow-up"></i> at the bottom of the screen</li>
               <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
               <li>Tap <strong>"Add"</strong> in the top right</li>
@@ -43,7 +43,7 @@ export function InstallPage() {
           <div className="card-body">
             <h5 className="mb-3">Android</h5>
             <ol className="install-steps mb-0">
-              <li>Open <strong>riff.social</strong> in Chrome</li>
+              <li>Open <strong>riff-social.com</strong> in Chrome</li>
               <li>Tap the <strong>menu</strong> button <i className="bi bi-three-dots-vertical"></i> in the top right</li>
               <li>Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong></li>
               <li>Tap <strong>"Install"</strong> to confirm</li>
@@ -59,7 +59,7 @@ export function InstallPage() {
           <div className="card-body">
             <h5 className="mb-3">Desktop (Chrome, Edge)</h5>
             <ol className="install-steps mb-0">
-              <li>Open <strong>riff.social</strong> in Chrome or Edge</li>
+              <li>Open <strong>riff-social.com</strong> in Chrome or Edge</li>
               <li>Look for the <strong>install icon</strong> <i className="bi bi-plus-square"></i> in the address bar</li>
               <li>Click it and select <strong>"Install"</strong></li>
             </ol>

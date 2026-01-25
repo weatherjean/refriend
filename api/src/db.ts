@@ -1615,6 +1615,16 @@ export class DB {
     });
   }
 
+  async getPostCountByActor(actorId: number): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM posts
+        WHERE actor_id = ${actorId} AND in_reply_to_id IS NULL
+      `;
+      return Number(result.rows[0].count);
+    });
+  }
+
   // ============ Stats (for NodeInfo) ============
 
   async getLocalUserCount(): Promise<number> {

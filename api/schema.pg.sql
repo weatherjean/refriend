@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL UNIQUE CHECK (username ~ '^[a-z0-9_]+$' AND length(username) <= 50),
   email TEXT UNIQUE,
   password_hash TEXT NOT NULL,
+  suspended BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -346,3 +347,6 @@ CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_created ON password_re
 CREATE INDEX IF NOT EXISTS idx_reports_post ON reports(post_id);
 CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(reporter_id);
 CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status) WHERE status = 'pending';
+
+-- Users
+CREATE INDEX IF NOT EXISTS idx_users_suspended ON users(suspended) WHERE suspended = TRUE;

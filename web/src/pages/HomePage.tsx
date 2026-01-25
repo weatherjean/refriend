@@ -22,10 +22,18 @@ function LandingPage() {
           <p className="landing-tagline mb-4">
             Social networking made simple
           </p>
-          <p className="landing-subtitle mb-0">
+          <p className="landing-subtitle mb-4">
             One platform, fully connected to the fediverse. No servers to choose,
             no complexity — just sign up and start posting.
           </p>
+          <div className="d-flex gap-2 justify-content-center">
+            <Link to="/register" className="btn btn-primary">
+              <i className="bi bi-person-plus me-1"></i> Sign up
+            </Link>
+            <Link to="/login" className="btn btn-outline-secondary">
+              Login
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -166,7 +174,7 @@ function LandingPage() {
             <div className="card-body">
               <h5 className="mb-3">Our Organisation</h5>
               <p className="landing-text mb-3">
-                Our goal is to become a nonprofit organisation, similar to Signal.
+                Our goal is to become a nonprofit organisation, similar to <a href="https://signalfoundation.org/" target="_blank" rel="noopener noreferrer" className="landing-link">Signal</a>.
                 We aim to be completely apolitical — we're not here to push any agenda.
               </p>
               <p className="landing-text mb-3">
@@ -175,27 +183,13 @@ function LandingPage() {
                 that removes all your data from our servers.
               </p>
               <p className="landing-text mb-0">
-                For serious issues, contact us at <a href="mailto:contact@riff.social" className="landing-link">contact@riff.social</a>.
+                For serious issues, contact us at <a href="mailto:contact@riff-social.com" className="landing-link">contact@riff-social.com</a>.
               </p>
             </div>
           </div>
         </>
       )}
 
-      {/* CTA Card */}
-      <div className="card landing-card landing-cta">
-        <div className="card-body text-center py-4">
-          <p className="mb-3">Ready to join?</p>
-          <div className="d-flex gap-2 justify-content-center">
-            <Link to="/register" className="btn btn-primary">
-              <i className="bi bi-person-plus me-1"></i> Sign up
-            </Link>
-            <Link to="/login" className="btn btn-outline-secondary">
-              Login
-            </Link>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
