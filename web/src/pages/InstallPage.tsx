@@ -8,7 +8,7 @@ export function InstallPage() {
       <div className="install-page">
         <p className="install-intro">
           Riff works as a Progressive Web App (PWA). Install it on your device for
-          the best experience — it works just like a native app, with home screen
+          the best experience. It works just like a native app, with home screen
           access and fullscreen mode.
         </p>
 

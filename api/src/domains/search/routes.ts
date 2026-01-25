@@ -33,6 +33,11 @@ export function createSearchRoutes(federation: Federation<void>): Hono<SearchEnv
       return c.json({ users: [], posts: [], postsLowConfidence: false });
     }
 
+    // Validate query length to prevent abuse
+    if (query.length > 500) {
+      return c.json({ error: "Search query too long (max 500 characters)" }, 400);
+    }
+
     const db = c.get("db");
     const communityDb = c.get("communityDb");
     const domain = c.get("domain");

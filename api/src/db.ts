@@ -179,6 +179,15 @@ export class DB {
     }
   }
 
+  /**
+   * Health check - verify database connectivity
+   */
+  async healthCheck(): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`SELECT 1`;
+    });
+  }
+
   // ============ Users ============
 
   async createUser(username: string, passwordHash: string, email?: string): Promise<User> {

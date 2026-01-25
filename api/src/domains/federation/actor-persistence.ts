@@ -58,13 +58,21 @@ export async function persistActor(db: DB, domain: string, actor: APActor): Prom
   const inboxUrl = actor.inboxId?.href;
   if (!inboxUrl) return null;
 
-  const name = typeof actor.name === "string"
+  // Extract and truncate name (max 200 chars)
+  let name = typeof actor.name === "string"
     ? actor.name
     : actor.name?.toString() ?? null;
+  if (name && name.length > 200) {
+    name = name.slice(0, 200);
+  }
 
-  const bio = typeof actor.summary === "string"
+  // Extract and truncate bio (max 5000 chars for remote actors)
+  let bio = typeof actor.summary === "string"
     ? actor.summary
     : actor.summary?.toString() ?? null;
+  if (bio && bio.length > 5000) {
+    bio = bio.slice(0, 5000);
+  }
 
   let avatarUrl: string | null = null;
   const icon = await actor.getIcon();

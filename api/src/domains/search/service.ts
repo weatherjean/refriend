@@ -74,6 +74,35 @@ export async function search(
             );
 
             if (selfLink?.href) {
+              // SECURITY: Validate that the actor URI domain matches the requested domain
+              // This prevents SSRF attacks where a malicious WebFinger response could
+              // redirect to internal services
+              try {
+                const actorUrl = new URL(selfLink.href);
+                if (actorUrl.host !== handleDomain) {
+                  console.warn(`[search] WebFinger returned actor from different domain: ${actorUrl.host} != ${handleDomain}`);
+                  // Skip this result - potential SSRF attempt
+                  throw new Error("Domain mismatch");
+                }
+                // Also block private/internal IPs
+                const hostname = actorUrl.hostname;
+                if (
+                  hostname === "localhost" ||
+                  hostname === "127.0.0.1" ||
+                  hostname.startsWith("192.168.") ||
+                  hostname.startsWith("10.") ||
+                  hostname.startsWith("172.") ||
+                  hostname === "::1" ||
+                  hostname === "0.0.0.0"
+                ) {
+                  console.warn(`[search] WebFinger returned private/internal IP: ${hostname}`);
+                  throw new Error("Private IP not allowed");
+                }
+              } catch (urlErr) {
+                console.error("[search] Invalid actor URL from WebFinger:", urlErr);
+                throw urlErr;
+              }
+
               let documentLoader = ctx.documentLoader;
 
               // Use current user's identity to sign requests (for secure mode instances)

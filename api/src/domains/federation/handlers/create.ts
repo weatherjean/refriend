@@ -15,7 +15,7 @@ import {
 } from "@fedify/fedify";
 import type { DB, Actor } from "../../../db.ts";
 import { persistActor, getCommunityDb } from "../actor-persistence.ts";
-import { extractHashtags } from "../utils/content.ts";
+import { extractHashtags, validateAndSanitizeContent, MAX_CONTENT_SIZE } from "../utils/content.ts";
 import { safeSendActivity } from "../utils/send.ts";
 import { fetchAndStoreNote } from "../utils/notes.ts";
 import { invalidateProfileCache } from "../../../cache.ts";
@@ -74,9 +74,20 @@ export async function processCreate(
   if (existingPost) return;
 
   // Get content
-  const content = typeof object.content === "string"
+  const rawContent = typeof object.content === "string"
     ? object.content
     : object.content?.toString() ?? "";
+
+  // For inbound content, validate size and sanitize HTML
+  let content = rawContent;
+  if (direction === "inbound") {
+    const sanitized = validateAndSanitizeContent(rawContent);
+    if (sanitized === null) {
+      console.log(`[Create] Rejected post from ${authorActor.handle}: content exceeds ${MAX_CONTENT_SIZE} bytes`);
+      return;
+    }
+    content = sanitized;
+  }
 
   // Get URL
   const objectUrl = object.url;

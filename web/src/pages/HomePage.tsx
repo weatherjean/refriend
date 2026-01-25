@@ -99,7 +99,7 @@ function LandingPage() {
               </p>
               <p className="landing-text mb-0">
                 Everything you post can be seen by users on Mastodon, Threads, and
-                other fediverse platforms — and you can follow and interact with
+                other fediverse platforms, and you can follow and interact with
                 them too.
               </p>
             </div>
@@ -157,10 +157,10 @@ function LandingPage() {
                 Each community has its own moderators who keep discussions healthy and on-topic.
               </p>
               <ul className="landing-list mb-3">
-                <li><strong>Community rules</strong> — Each community sets its own guidelines</li>
-                <li><strong>Post approval</strong> — Moderators can review posts before they go live</li>
-                <li><strong>Content removal</strong> — Off-topic or rule-breaking content can be removed</li>
-                <li><strong>Moderation logs</strong> — Transparent logs of all moderation actions</li>
+                <li><strong>Community rules:</strong> Each community sets its own guidelines</li>
+                <li><strong>Post approval:</strong> Moderators can review posts before they go live</li>
+                <li><strong>Content removal:</strong> Off-topic or rule-breaking content can be removed</li>
+                <li><strong>Moderation logs:</strong> Transparent logs of all moderation actions</li>
               </ul>
               <p className="landing-text mb-0">
                 We recognise that strong moderation for user feeds is equally important.
@@ -175,7 +175,7 @@ function LandingPage() {
               <h5 className="mb-3">Our Organisation</h5>
               <p className="landing-text mb-3">
                 Our goal is to become a nonprofit organisation, similar to <a href="https://signalfoundation.org/" target="_blank" rel="noopener noreferrer" className="landing-link">Signal</a>.
-                We aim to be completely apolitical — we're not here to push any agenda.
+                We aim to be completely apolitical. We're not here to push any agenda.
               </p>
               <p className="landing-text mb-3">
                 The source code is currently closed, but we plan to make it publicly available

@@ -145,6 +145,10 @@ export async function checkRateLimit(
 /**
  * Get the client identifier for rate limiting.
  * Uses IP address, preferring X-Forwarded-For for proxied requests.
+ *
+ * SECURITY NOTE: X-Forwarded-For should only be trusted when running behind
+ * a trusted reverse proxy that overwrites the header. In production, configure
+ * TRUST_PROXY=true only if behind nginx/cloudflare/etc that sets the header.
  */
 export function getRateLimitIdentifier(req: Request, userId?: number): string {
   // If user is authenticated, use their ID for more accurate limiting
@@ -152,14 +156,29 @@ export function getRateLimitIdentifier(req: Request, userId?: number): string {
     return `user:${userId}`;
   }
 
-  // Otherwise use IP address
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    // X-Forwarded-For can contain multiple IPs, use the first (original client)
-    return `ip:${forwarded.split(",")[0].trim()}`;
+  // Only trust X-Forwarded-For if explicitly configured (behind trusted proxy)
+  const trustProxy = Deno.env.get("TRUST_PROXY") === "true";
+  if (trustProxy) {
+    const forwarded = req.headers.get("x-forwarded-for");
+    if (forwarded) {
+      // X-Forwarded-For can contain multiple IPs, use the first (original client)
+      // Note: A trusted proxy should strip any client-provided X-Forwarded-For
+      const clientIp = forwarded.split(",")[0].trim();
+      // Validate it looks like an IP address (basic check)
+      if (clientIp && /^[\d.:a-fA-F]+$/.test(clientIp)) {
+        return `ip:${clientIp}`;
+      }
+    }
   }
 
-  // Fallback - this won't work well behind a proxy
+  // Try to get IP from X-Real-IP (set by nginx)
+  const realIp = req.headers.get("x-real-ip");
+  if (trustProxy && realIp && /^[\d.:a-fA-F]+$/.test(realIp)) {
+    return `ip:${realIp}`;
+  }
+
+  // Fallback for development or direct connections
+  // In production behind a proxy, this will be the proxy's IP
   return `ip:unknown`;
 }
 

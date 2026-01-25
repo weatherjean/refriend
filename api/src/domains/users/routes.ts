@@ -116,8 +116,8 @@ export function createUserRoutes(): Hono<UsersEnv> {
     return c.json({ ...result, csrfToken });
   });
 
-  // PUT /auth/password
-  routes.put("/auth/password", async (c) => {
+  // PUT /auth/password - rate limited for security
+  routes.put("/auth/password", rateLimit("auth:password-reset"), async (c) => {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Not authenticated" }, 401);
@@ -360,8 +360,8 @@ export function createUserRoutes(): Hono<UsersEnv> {
 
   // ============ Profile Update Routes ============
 
-  // PUT /profile - Update profile (name, bio)
-  routes.put("/profile", async (c) => {
+  // PUT /profile - Update profile (name, bio) - rate limited
+  routes.put("/profile", rateLimit("api:general"), async (c) => {
     const user = c.get("user");
     const actor = c.get("actor");
 
@@ -373,6 +373,14 @@ export function createUserRoutes(): Hono<UsersEnv> {
     const domain = c.get("domain");
     const body = await c.req.json();
 
+    // Validate input types at route level
+    if (body.name !== undefined && typeof body.name !== "string") {
+      return c.json({ error: "Name must be a string" }, 400);
+    }
+    if (body.bio !== undefined && typeof body.bio !== "string") {
+      return c.json({ error: "Bio must be a string" }, 400);
+    }
+
     const result = await service.updateProfile(db, actor.id, body, domain);
 
     if (!result.success) {
@@ -382,8 +390,8 @@ export function createUserRoutes(): Hono<UsersEnv> {
     return c.json({ actor: result.actor });
   });
 
-  // POST /profile/avatar - Upload avatar
-  routes.post("/profile/avatar", async (c) => {
+  // POST /profile/avatar - Upload avatar (rate limited)
+  routes.post("/profile/avatar", rateLimit("media:upload"), async (c) => {
     const user = c.get("user");
     const actor = c.get("actor");
 

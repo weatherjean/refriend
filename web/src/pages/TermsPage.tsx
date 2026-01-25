@@ -58,7 +58,7 @@ export function TermsPage() {
               When you post content on Riff:
             </p>
             <ul className="legal-list mb-3">
-              <li><strong>You retain ownership</strong> of your content — we don't claim any ownership rights</li>
+              <li><strong>You retain ownership</strong> of your content. We don't claim any ownership rights</li>
               <li><strong>You grant us a license</strong> to host, display, and distribute your content on Riff and to federated servers via ActivityPub</li>
               <li><strong>You are responsible</strong> for your content and ensuring it doesn't violate our policies or applicable laws</li>
               <li><strong>You can delete</strong> your content at any time, though we cannot guarantee removal from federated servers</li>
@@ -116,7 +116,7 @@ export function TermsPage() {
             </ul>
             <p className="legal-text mb-0">
               <strong>Moderation exception:</strong> We may use AI tools to assist with content
-              moderation — for example, to help identify policy violations in reported content.
+              moderation, for example to help identify policy violations in reported content.
               This is limited to enforcing our Content Policy and is not used to train external models.
             </p>
           </div>

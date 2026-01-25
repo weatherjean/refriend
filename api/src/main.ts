@@ -44,10 +44,43 @@ await initCache();
 // Create Hono app
 const app = new Hono();
 
+// Security headers middleware - must be early in the chain
+app.use("*", async (c, next) => {
+  await next();
+
+  // Add security headers to all responses
+  c.header("X-Frame-Options", "DENY");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-XSS-Protection", "1; mode=block");
+  c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+  c.header("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+
+  // HSTS - only on production (non-localhost)
+  const domain = c.get("domain") || "";
+  if (!domain.startsWith("localhost")) {
+    c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+
+  // CSP - allow inline styles for React, but restrict scripts
+  // img-src allows http: for local dev (MinIO) and federated content
+  c.header(
+    "Content-Security-Policy",
+    "default-src 'self'; " +
+    "script-src 'self'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: https: http: blob:; " +
+    "media-src 'self' https: http: blob:; " +
+    "font-src 'self'; " +
+    "connect-src 'self' https: http:; " +
+    "frame-ancestors 'none';"
+  );
+});
+
 // Global error handler - prevents crashes from unhandled errors
 app.onError((err, c) => {
-  console.error("[Error]", err);
-  return c.json({ error: "Internal server error" }, 500);
+  const errorId = crypto.randomUUID().slice(0, 8);
+  console.error(`[Error ${errorId}]`, err);
+  return c.json({ error: "Internal server error", errorId }, 500);
 });
 
 // Domain configuration - use DOMAIN env var if set, otherwise detect from request
@@ -102,8 +135,36 @@ setActivityCommunityDb(communityDb);
 // API routes for the React frontend - pass domain dynamically
 app.route("/api", createApiRoutes(db, federation, communityDb));
 
-// Health check
-app.get("/health", (c) => c.json({ ok: true }));
+// Health check - comprehensive check of all services
+app.get("/health", async (c) => {
+  const checks: Record<string, "ok" | "error"> = {};
+  let allOk = true;
+
+  // Check database
+  try {
+    await db.healthCheck();
+    checks.database = "ok";
+  } catch (err) {
+    console.error("[Health] Database check failed:", err);
+    checks.database = "error";
+    allOk = false;
+  }
+
+  // Check Deno KV cache
+  try {
+    const kvPath = Deno.env.get("DENO_KV_PATH") || undefined;
+    const kv = await Deno.openKv(kvPath);
+    await kv.get(["health-check"]);
+    checks.cache = "ok";
+  } catch (err) {
+    console.error("[Health] KV cache check failed:", err);
+    checks.cache = "error";
+    allOk = false;
+  }
+
+  const status = allOk ? 200 : 503;
+  return c.json({ ok: allOk, checks, timestamp: new Date().toISOString() }, status);
+});
 
 // Cache control middleware for static assets
 app.use("/*", async (c, next) => {
