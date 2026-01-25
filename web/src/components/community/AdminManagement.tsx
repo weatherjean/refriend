@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { communities } from '../../api';
+import { communities, search } from '../../api';
 import { ConfirmModal } from '../ConfirmModal';
 import { Avatar } from '../Avatar';
 
@@ -43,15 +43,18 @@ export function AdminManagement({ communityName, isOwner }: { communityName: str
     setAdding(true);
     setError(null);
     try {
-      const searchResult = await fetch(`/api/search?q=${encodeURIComponent(newAdminHandle)}`);
-      const { results } = await searchResult.json();
+      const { users } = await search.query(newAdminHandle, 'users');
 
-      if (!results || results.length === 0) {
+      if (users.length === 0) {
         setError('User not found');
         return;
       }
 
-      const actor = results[0];
+      const actor = users[0];
+      if (admins.some(a => a.actor.id === actor.id)) {
+        setError('User is already an admin');
+        return;
+      }
       await communities.addAdmin(communityName, actor.id, 'admin');
       setNewAdminHandle('');
       await loadAdmins();
@@ -125,7 +128,7 @@ export function AdminManagement({ communityName, isOwner }: { communityName: str
                   <div className="fw-semibold">{admin.actor.name || admin.actor.handle}</div>
                   <small className="text-muted">{admin.actor.handle}</small>
                 </div>
-                <span className={`badge ms-2 ${admin.role === 'owner' ? 'bg-warning text-dark' : 'bg-primary'}`}>
+                <span className={`badge ms-2 ${admin.role === 'owner' ? 'bg-warning text-dark' : 'bg-success'}`}>
                   {admin.role}
                 </span>
               </div>

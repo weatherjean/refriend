@@ -8,7 +8,7 @@ import { announcePost, getCommunityActorUri } from "./federation.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
 import { processActivity } from "../../activities.ts";
 import { deleteMedia } from "../../storage.ts";
-import { getCachedTrendingCommunities, setCachedTrendingCommunities } from "../../cache.ts";
+import { getCachedTrendingCommunities, setCachedTrendingCommunities, clearCachedTrendingCommunities } from "../../cache.ts";
 import { formatDate } from "../../shared/formatting.ts";
 import { parseIntSafe } from "../../shared/utils.ts";
 
@@ -253,6 +253,8 @@ export function createCommunityRoutes(
     }
 
     const updated = await communityDb.updateCommunity(community.id, updates, actor.id);
+    // Clear trending cache so updated avatar shows immediately
+    await clearCachedTrendingCommunities();
     return c.json({ community: updated ? sanitizeCommunity(updated) : null });
   });
 

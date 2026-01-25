@@ -80,6 +80,11 @@ export async function setCachedTrendingCommunities(value: unknown): Promise<void
   await kv.set(["trending", "communities"], value, { expireIn: TRENDING_COMMUNITIES_TTL_MS });
 }
 
+export async function clearCachedTrendingCommunities(): Promise<void> {
+  if (!kv) return;
+  await kv.delete(["trending", "communities"]);
+}
+
 // ============ Rate Limiting ============
 
 /**

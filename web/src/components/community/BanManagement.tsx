@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { communities, type Actor } from '../../api';
+import { communities, search, type Actor } from '../../api';
 import { ConfirmModal } from '../ConfirmModal';
 import { Avatar } from '../Avatar';
 
@@ -39,11 +39,10 @@ export function BanManagement({ communityName }: { communityName: string }) {
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
-        const { results } = await res.json();
+        const { users } = await search.query(searchQuery, 'users');
         // Filter out already banned users
         const bannedIds = new Set(bans.map(b => b.actor.id));
-        setSearchResults((results || []).filter((r: Actor) => !bannedIds.has(r.id)));
+        setSearchResults(users.filter((u) => !bannedIds.has(u.id)));
       } catch {
         // Error handled by global toast
       } finally {
