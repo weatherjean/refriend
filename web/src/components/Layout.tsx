@@ -253,7 +253,13 @@ export function Layout({ children }: LayoutProps) {
             </div>
           )}
 
-          <div className="text-center mt-3 mb-5 pb-5">
+          <div className="sidebar-footer-links text-center mt-3 mb-3">
+            <Link to="/install" onClick={() => setMobileMenuOpen(false)}>
+              Install App
+            </Link>
+          </div>
+
+          <div className="text-center mb-5 pb-5">
             <img src="/logo-mono.svg" alt="riff" height="24" style={{ opacity: 0.6 }} />
           </div>
         </div>

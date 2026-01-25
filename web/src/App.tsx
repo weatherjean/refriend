@@ -15,6 +15,7 @@ import { ActorByIdPage } from './pages/ActorByIdPage';
 import { CommunitiesPage } from './pages/CommunitiesPage';
 import { CommunityPage } from './pages/CommunityPage';
 import { CreateCommunityPage } from './pages/CreateCommunityPage';
+import { InstallPage } from './pages/InstallPage';
 import { useAuth } from './context/AuthContext';
 import { StackedModals } from './components/StackedModals';
 import { useModalStack } from './context/ModalStackContext';
@@ -36,6 +37,7 @@ export const modalRoutes = [
   { path: '/communities', element: <CommunitiesPage /> },
   { path: '/communities/new', element: <CreateCommunityPage /> },
   { path: '/c/:name', element: <CommunityPage /> },
+  { path: '/install', element: <InstallPage /> },
 ];
 
 function App() {

@@ -104,9 +104,9 @@ app.use("/*", async (c, next) => {
   if (path.startsWith("/assets/")) {
     cacheControl = "public, max-age=31536000, immutable";
   }
-  // HTML files - no cache (always revalidate to get latest asset hashes)
+  // HTML files - never cache (always fetch fresh to get latest asset hashes)
   else if (path.endsWith(".html") || path === "/") {
-    cacheControl = "no-cache";
+    cacheControl = "no-store, no-cache, must-revalidate";
   }
   // Static files (images, fonts, manifest) - cache for 1 week
   else if (
