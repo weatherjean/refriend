@@ -123,9 +123,24 @@ That's it. Caddy handles SSL automatically.
 
 ## Capacity
 
-- **Concurrent users:** 50-100 comfortable, 200-300 degraded
-- **Registered users:** 1,000-5,000
-- **Posts/day:** 500-1,000
+- **Users with app open:** 500-2,000 (not all actively requesting)
+- **Active requests/sec:** 50-100 sustained, 200+ bursts
+- **Registered users:** 5,000-10,000
+- **Posts/day:** 1,000-2,000
+
+Note: "100 concurrent users" = 100 users making requests *at the same instant*, not 100 users with the app open. Normal browsing generates ~1 request every few seconds per user.
+
+## Database Scaling
+
+When upgrading the database tier, update `DB_POOL_SIZE` in docker-compose.prod.yml:
+
+| DB Tier | Cost | Max Connections | `DB_POOL_SIZE` |
+|---------|------|-----------------|----------------|
+| DB-DEV-S | ~€12 | ~50 | 40 |
+| DB-DEV-M | ~€24 | ~100 | 80 |
+| DB-GP-XS | ~€48 | ~200 | 150 |
+
+Then restart: `docker compose -f docker-compose.prod.yml up -d`
 
 ## Why Scaleway
 

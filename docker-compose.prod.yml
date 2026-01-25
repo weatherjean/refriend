@@ -1,0 +1,67 @@
+# Production compose - single server deployment
+# Requires: .env file with production credentials
+# Frontend must be pre-built: cd web && npm run build
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - riff
+
+  api:
+    build:
+      context: ./api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      # Increase pool size - DB-DEV-S allows ~50 connections, leave 10 for admin
+      DB_POOL_SIZE: "40"
+      DOMAIN: ${DOMAIN}
+      PORT: "8000"
+      STATIC_DIR: /app/static
+      ALLOWED_ORIGINS: https://${DOMAIN}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      SCW_SECRET_KEY: ${SCW_SECRET_KEY}
+      SCW_PROJECT_ID: ${SCW_PROJECT_ID}
+      SCW_REGION: ${SCW_REGION:-fr-par}
+      EMAIL_FROM: ${EMAIL_FROM}
+      APP_URL: https://${DOMAIN}
+      DENO_KV_PATH: /data/kv.sqlite
+      ENV: production
+      # Trust Caddy's X-Forwarded-For headers for rate limiting
+      TRUST_PROXY: "true"
+    volumes:
+      - ./web/dist:/app/static:ro
+      - kvdata:/data
+    healthcheck:
+      test: ["CMD", "deno", "eval", "const r = await fetch('http://localhost:8000/health'); Deno.exit(r.ok ? 0 : 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - riff
+
+volumes:
+  caddy_data:
+  caddy_config:
+  kvdata:
+
+networks:
+  riff:

@@ -1,7 +1,7 @@
 /// <reference lib="deno.unstable" />
 // Deno KV-based cache for profile posts and hashtag pages
 
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes (increased for production load)
 
 let kv: Deno.Kv | null = null;
 
