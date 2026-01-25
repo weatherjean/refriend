@@ -17,6 +17,7 @@ import { initCache } from "./cache.ts";
 import { CommunityDB } from "./domains/communities/repository.ts";
 import { addCommunityFederationRoutes, setCommunityDB as setCommunityDBFed } from "./domains/communities/federation.ts";
 import { setCommunityDb as setActivityCommunityDb } from "./activities.ts";
+import { logger } from "./logger.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
 const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://riff:riff@localhost:5432/riff";
@@ -78,8 +79,7 @@ app.use("*", async (c, next) => {
 
 // Global error handler - prevents crashes from unhandled errors
 app.onError((err, c) => {
-  const errorId = crypto.randomUUID().slice(0, 8);
-  console.error(`[Error ${errorId}]`, err);
+  const errorId = logger.error("Request error", { path: c.req.path, method: c.req.method }, err);
   return c.json({ error: "Internal server error", errorId }, 500);
 });
 
@@ -206,7 +206,24 @@ app.use("/*", async (c, next) => {
 // Hash router handles client-side routing, so we just serve static files
 app.use("/*", serveStatic({ root: STATIC_DIR }));
 
-console.log(`Riff running on http://localhost:${PORT}`);
+// Graceful shutdown handling
+let shuttingDown = false;
+
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info(`${signal} received, shutting down...`);
+  // Allow 5 seconds for in-flight requests to drain
+  await new Promise((r) => setTimeout(r, 5000));
+  await db.close();
+  logger.info("Shutdown complete");
+  Deno.exit(0);
+}
+
+Deno.addSignalListener("SIGTERM", () => shutdown("SIGTERM"));
+Deno.addSignalListener("SIGINT", () => shutdown("SIGINT"));
+
+logger.info(`Riff running on http://localhost:${PORT}`);
 console.log(`Use 'ngrok http ${PORT}' to expose to the internet`);
 
 // Use behindProxy to handle X-Forwarded-* headers from tunnel

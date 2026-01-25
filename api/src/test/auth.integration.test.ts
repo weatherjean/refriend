@@ -275,9 +275,12 @@ Deno.test({
           password: "password123",
         });
 
-        const cookie = await loginUser(api, "test@test.com", "password123");
+        const session = await loginUser(api, "test@test.com", "password123");
 
-        const res = await testRequest(api, "POST", "/auth/logout", { cookie });
+        const res = await testRequest(api, "POST", "/auth/logout", {
+          cookie: session.cookie,
+          csrfToken: session.csrfToken
+        });
 
         assertEquals(res.status, 200);
         const data = await res.json();
@@ -307,9 +310,9 @@ Deno.test({
           password: "password123",
         });
 
-        const cookie = await loginUser(api, "test@test.com", "password123");
+        const session = await loginUser(api, "test@test.com", "password123");
 
-        const res = await testRequest(api, "GET", "/auth/me", { cookie });
+        const res = await testRequest(api, "GET", "/auth/me", { cookie: session.cookie });
 
         assertEquals(res.status, 200);
         const data = await res.json();
@@ -341,10 +344,11 @@ Deno.test({
           password: "password123",
         });
 
-        const cookie = await loginUser(api, "test@test.com", "password123");
+        const session = await loginUser(api, "test@test.com", "password123");
 
         const res = await testRequest(api, "PUT", "/auth/password", {
-          cookie,
+          cookie: session.cookie,
+          csrfToken: session.csrfToken,
           body: {
             current_password: "password123",
             new_password: "newpassword456",
@@ -389,10 +393,11 @@ Deno.test({
           password: "password123",
         });
 
-        const cookie = await loginUser(api, "test@test.com", "password123");
+        const session = await loginUser(api, "test@test.com", "password123");
 
         const res = await testRequest(api, "PUT", "/auth/password", {
-          cookie,
+          cookie: session.cookie,
+          csrfToken: session.csrfToken,
           body: {
             current_password: "wrongpassword",
             new_password: "newpassword456",
@@ -414,10 +419,11 @@ Deno.test({
           password: "password123",
         });
 
-        const cookie = await loginUser(api, "test@test.com", "password123");
+        const session = await loginUser(api, "test@test.com", "password123");
 
         const res = await testRequest(api, "PUT", "/auth/password", {
-          cookie,
+          cookie: session.cookie,
+          csrfToken: session.csrfToken,
           body: {
             current_password: "password123",
             new_password: "short",

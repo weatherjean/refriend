@@ -8,6 +8,7 @@ import { Hono } from "@hono/hono";
 import type { DB } from "../../db.ts";
 import type { User, Actor } from "../../shared/types.ts";
 import * as service from "./service.ts";
+import { parseIntSafe } from "../../shared/utils.ts";
 
 interface NotificationsEnv {
   Variables: {
@@ -30,9 +31,8 @@ export function createNotificationRoutes(): Hono<NotificationsEnv> {
     }
 
     const db = c.get("db");
-    const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100);
-    const beforeParam = c.req.query("before");
-    const before = beforeParam ? parseInt(beforeParam) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 50, 100);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
     const { notifications, next_cursor } = await service.getNotifications(db, actor.id, limit, before);
 

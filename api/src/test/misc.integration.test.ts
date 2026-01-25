@@ -29,9 +29,9 @@ Deno.test({
         await createTestUser({ username: "tofollow", email: "tofollow@test.com" });
         await createTestUser({ username: "follower", email: "follower@test.com", password: "password123" });
 
-        const cookie = await loginUser(api, "follower@test.com", "password123");
+        const session = await loginUser(api, "follower@test.com", "password123");
         const res = await testRequest(api, "POST", "/follow", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { handle: "@tofollow@test.local" },
         });
 
@@ -60,9 +60,9 @@ Deno.test({
 
         await createTestUser({ username: "self", email: "self@test.com", password: "password123" });
 
-        const cookie = await loginUser(api, "self@test.com", "password123");
+        const session = await loginUser(api, "self@test.com", "password123");
         const res = await testRequest(api, "POST", "/follow", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { handle: "@self@test.local" },
         });
 
@@ -77,9 +77,9 @@ Deno.test({
 
         await createTestUser({ username: "user", email: "user@test.com", password: "password123" });
 
-        const cookie = await loginUser(api, "user@test.com", "password123");
+        const session = await loginUser(api, "user@test.com", "password123");
         const res = await testRequest(api, "POST", "/follow", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: {},
         });
 
@@ -102,9 +102,9 @@ Deno.test({
         // Follow first
         await db.addFollow(follower.id, toUnfollow.id);
 
-        const cookie = await loginUser(api, "follower@test.com", "password123");
+        const session = await loginUser(api, "follower@test.com", "password123");
         const res = await testRequest(api, "POST", "/unfollow", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { actor_id: toUnfollow.public_id },
         });
 
@@ -244,9 +244,9 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "user", email: "user@test.com", password: "password123" });
-        const cookie = await loginUser(api, "user@test.com", "password123");
+        const session = await loginUser(api, "user@test.com", "password123");
 
-        const res = await testRequest(api, "GET", "/notifications", { cookie });
+        const res = await testRequest(api, "GET", "/notifications", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.notifications);
@@ -268,9 +268,9 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "user", email: "user@test.com", password: "password123" });
-        const cookie = await loginUser(api, "user@test.com", "password123");
+        const session = await loginUser(api, "user@test.com", "password123");
 
-        const res = await testRequest(api, "GET", "/notifications/unread/count", { cookie });
+        const res = await testRequest(api, "GET", "/notifications/unread/count", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.count);
@@ -293,11 +293,11 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "user", email: "user@test.com", password: "password123" });
-        const cookie = await loginUser(api, "user@test.com", "password123");
+        const session = await loginUser(api, "user@test.com", "password123");
 
         // The endpoint expects a JSON body with optional ids array
         const res = await testRequest(api, "POST", "/notifications/read", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: {},
         });
         assertEquals(res.status, 200);
@@ -323,9 +323,9 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "user", email: "user@test.com", password: "password123" });
-        const cookie = await loginUser(api, "user@test.com", "password123");
+        const session = await loginUser(api, "user@test.com", "password123");
 
-        const res = await testRequest(api, "DELETE", "/notifications", { cookie });
+        const res = await testRequest(api, "DELETE", "/notifications", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -358,10 +358,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "user", email: "user@test.com", password: "password123" });
-        const cookie = await loginUser(api, "user@test.com", "password123");
+        const session = await loginUser(api, "user@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/media", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: {},
         });
 
@@ -375,13 +375,13 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "user", email: "user@test.com", password: "password123" });
-        const cookie = await loginUser(api, "user@test.com", "password123");
+        const session = await loginUser(api, "user@test.com", "password123");
 
         // Create a base64 string that decodes to > 5MB
         const largeData = "A".repeat(7 * 1024 * 1024); // 7MB of base64 = ~5.25MB decoded
 
         const res = await testRequest(api, "POST", "/media", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { image: `data:image/webp;base64,${largeData}` },
         });
 
@@ -396,13 +396,13 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "user", email: "user@test.com", password: "password123" });
-        const cookie = await loginUser(api, "user@test.com", "password123");
+        const session = await loginUser(api, "user@test.com", "password123");
 
         // A small valid base64 image (just for testing the flow)
         const smallImage = btoa("fake image data for testing");
 
         const res = await testRequest(api, "POST", "/media", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { image: `data:image/webp;base64,${smallImage}` },
         });
 

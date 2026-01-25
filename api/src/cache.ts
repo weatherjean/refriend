@@ -96,6 +96,7 @@ export const RATE_LIMITS: Record<string, RateLimitConfig> = {
   "auth:login": { windowMs: 15 * 60 * 1000, maxRequests: 20 },  // 20 attempts per 15 min
   "auth:register": { windowMs: 60 * 60 * 1000, maxRequests: 5 },  // 5 registrations per hour per IP
   "auth:password-reset": { windowMs: 60 * 60 * 1000, maxRequests: 5 },  // 5 reset requests per hour
+  "auth:delete": { windowMs: 60 * 60 * 1000, maxRequests: 5 },  // 5 delete attempts per hour
 
   // Content creation - generous for active users
   "post:create": { windowMs: 60 * 1000, maxRequests: 10 },  // 10 posts per minute

@@ -97,8 +97,8 @@ Deno.test({
         const community = await createTestCommunity(creator, { name: "testcommunity" });
         await db.addFollow(member.id, community.id);
 
-        const cookie = await loginUser(api, "member@test.com", "password123");
-        const res = await testRequest(api, "GET", "/communities/joined", { cookie });
+        const session = await loginUser(api, "member@test.com", "password123");
+        const res = await testRequest(api, "GET", "/communities/joined", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.communities);
@@ -137,10 +137,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "creator", email: "creator@test.com", password: "password123" });
-        const cookie = await loginUser(api, "creator@test.com", "password123");
+        const session = await loginUser(api, "creator@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/communities", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { name: "newcommunity", bio: "A test community" },
         });
 
@@ -167,10 +167,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "creator", email: "creator@test.com", password: "password123" });
-        const cookie = await loginUser(api, "creator@test.com", "password123");
+        const session = await loginUser(api, "creator@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/communities", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { bio: "No name provided" },
         });
 
@@ -184,10 +184,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "creator", email: "creator@test.com", password: "password123" });
-        const cookie = await loginUser(api, "creator@test.com", "password123");
+        const session = await loginUser(api, "creator@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/communities", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { name: "Invalid Name!" },
         });
 
@@ -201,10 +201,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "creator", email: "creator@test.com", password: "password123" });
-        const cookie = await loginUser(api, "creator@test.com", "password123");
+        const session = await loginUser(api, "creator@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/communities", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { name: "a".repeat(27) },
         });
 
@@ -217,10 +217,10 @@ Deno.test({
 
         const { actor } = await createTestUser({ username: "creator", email: "creator@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "existingcommunity" });
-        const cookie = await loginUser(api, "creator@test.com", "password123");
+        const session = await loginUser(api, "creator@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/communities", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { name: "existingcommunity" },
         });
 
@@ -263,9 +263,9 @@ Deno.test({
 
         const { actor } = await createTestUser({ username: "creator", email: "creator@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "testcommunity" });
-        const cookie = await loginUser(api, "creator@test.com", "password123");
+        const session = await loginUser(api, "creator@test.com", "password123");
 
-        const res = await testRequest(api, "GET", "/communities/testcommunity", { cookie });
+        const res = await testRequest(api, "GET", "/communities/testcommunity", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.moderation);
@@ -282,10 +282,10 @@ Deno.test({
 
         const { actor } = await createTestUser({ username: "creator", email: "creator@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "testcommunity" });
-        const cookie = await loginUser(api, "creator@test.com", "password123");
+        const session = await loginUser(api, "creator@test.com", "password123");
 
         const res = await testRequest(api, "PUT", "/communities/testcommunity", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { bio: "Updated bio" },
         });
 
@@ -317,9 +317,9 @@ Deno.test({
         await createTestUser({ username: "other", email: "other@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
+        const session = await loginUser(api, "other@test.com", "password123");
         const res = await testRequest(api, "PUT", "/communities/testcommunity", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { bio: "Updated bio" },
         });
 
@@ -333,10 +333,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "creator", email: "creator@test.com", password: "password123" });
-        const cookie = await loginUser(api, "creator@test.com", "password123");
+        const session = await loginUser(api, "creator@test.com", "password123");
 
         const res = await testRequest(api, "PUT", "/communities/nonexistent", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { bio: "Updated bio" },
         });
 
@@ -352,9 +352,9 @@ Deno.test({
 
         const { actor } = await createTestUser({ username: "creator", email: "creator@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "testcommunity" });
-        const cookie = await loginUser(api, "creator@test.com", "password123");
+        const session = await loginUser(api, "creator@test.com", "password123");
 
-        const res = await testRequest(api, "DELETE", "/communities/testcommunity", { cookie });
+        const res = await testRequest(api, "DELETE", "/communities/testcommunity", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -376,8 +376,8 @@ Deno.test({
         // Make admin an admin but not owner
         await communityDb.addCommunityAdmin(community.id, admin.id, "admin", owner.id);
 
-        const cookie = await loginUser(api, "admin@test.com", "password123");
-        const res = await testRequest(api, "DELETE", "/communities/testcommunity", { cookie });
+        const session = await loginUser(api, "admin@test.com", "password123");
+        const res = await testRequest(api, "DELETE", "/communities/testcommunity", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
         const data = await res.json();
         assertEquals(data.error, "Owner access required");
@@ -394,8 +394,8 @@ Deno.test({
         await createTestUser({ username: "member", email: "member@test.com", password: "password123" });
         await createTestCommunity(owner, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "member@test.com", "password123");
-        const res = await testRequest(api, "POST", "/communities/testcommunity/join", { cookie });
+        const session = await loginUser(api, "member@test.com", "password123");
+        const res = await testRequest(api, "POST", "/communities/testcommunity/join", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -424,8 +424,8 @@ Deno.test({
 
         await communityDb.banActor(community.id, banned.id, "Spamming", owner.id);
 
-        const cookie = await loginUser(api, "banned@test.com", "password123");
-        const res = await testRequest(api, "POST", "/communities/testcommunity/join", { cookie });
+        const session = await loginUser(api, "banned@test.com", "password123");
+        const res = await testRequest(api, "POST", "/communities/testcommunity/join", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
         const data = await res.json();
         assertEquals(data.error, "You are banned from this community");
@@ -445,8 +445,8 @@ Deno.test({
 
         await db.addFollow(member.id, community.id);
 
-        const cookie = await loginUser(api, "member@test.com", "password123");
-        const res = await testRequest(api, "POST", "/communities/testcommunity/leave", { cookie });
+        const session = await loginUser(api, "member@test.com", "password123");
+        const res = await testRequest(api, "POST", "/communities/testcommunity/leave", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -460,8 +460,8 @@ Deno.test({
         const { actor } = await createTestUser({ username: "owner", email: "owner@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "POST", "/communities/testcommunity/leave", { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "POST", "/communities/testcommunity/leave", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
         const data = await res.json();
         assertEquals(data.error, "Owners cannot leave. Transfer ownership first.");
@@ -534,9 +534,9 @@ Deno.test({
         const { actor: newAdmin } = await createTestUser({ username: "newadmin", email: "newadmin@test.com" });
         await createTestCommunity(owner, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
+        const session = await loginUser(api, "owner@test.com", "password123");
         const res = await testRequest(api, "POST", "/communities/testcommunity/admins", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { actor_id: newAdmin.public_id, role: "admin" },
         });
 
@@ -557,9 +557,9 @@ Deno.test({
 
         await communityDb.addCommunityAdmin(community.id, admin.id, "admin", owner.id);
 
-        const cookie = await loginUser(api, "admin@test.com", "password123");
+        const session = await loginUser(api, "admin@test.com", "password123");
         const res = await testRequest(api, "POST", "/communities/testcommunity/admins", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { actor_id: newAdmin.public_id, role: "admin" },
         });
 
@@ -573,9 +573,9 @@ Deno.test({
         const { actor } = await createTestUser({ username: "owner", email: "owner@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
+        const session = await loginUser(api, "owner@test.com", "password123");
         const res = await testRequest(api, "POST", "/communities/testcommunity/admins", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { role: "admin" },
         });
 
@@ -598,8 +598,8 @@ Deno.test({
 
         await communityDb.addCommunityAdmin(community.id, admin.id, "admin", owner.id);
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "DELETE", `/communities/testcommunity/admins/${admin.public_id}`, { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "DELETE", `/communities/testcommunity/admins/${admin.public_id}`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -618,8 +618,8 @@ Deno.test({
         await communityDb.addCommunityAdmin(community.id, admin1.id, "admin", owner.id);
         await communityDb.addCommunityAdmin(community.id, admin2.id, "admin", owner.id);
 
-        const cookie = await loginUser(api, "admin1@test.com", "password123");
-        const res = await testRequest(api, "DELETE", `/communities/testcommunity/admins/${admin2.public_id}`, { cookie });
+        const session = await loginUser(api, "admin1@test.com", "password123");
+        const res = await testRequest(api, "DELETE", `/communities/testcommunity/admins/${admin2.public_id}`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
     });
@@ -637,8 +637,8 @@ Deno.test({
 
         await communityDb.banActor(community.id, banned.id, "Spamming", owner.id);
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "GET", "/communities/testcommunity/bans", { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "GET", "/communities/testcommunity/bans", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.bans);
@@ -653,8 +653,8 @@ Deno.test({
         await createTestUser({ username: "other", email: "other@test.com", password: "password123" });
         await createTestCommunity(owner, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
-        const res = await testRequest(api, "GET", "/communities/testcommunity/bans", { cookie });
+        const session = await loginUser(api, "other@test.com", "password123");
+        const res = await testRequest(api, "GET", "/communities/testcommunity/bans", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
     });
@@ -669,9 +669,9 @@ Deno.test({
         const { actor: toBan } = await createTestUser({ username: "toban", email: "toban@test.com" });
         await createTestCommunity(owner, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
+        const session = await loginUser(api, "owner@test.com", "password123");
         const res = await testRequest(api, "POST", "/communities/testcommunity/bans", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { actor_id: toBan.public_id, reason: "Spamming" },
         });
 
@@ -689,9 +689,9 @@ Deno.test({
         await createTestUser({ username: "other", email: "other@test.com", password: "password123" });
         await createTestCommunity(owner, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
+        const session = await loginUser(api, "other@test.com", "password123");
         const res = await testRequest(api, "POST", "/communities/testcommunity/bans", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { actor_id: toBan.public_id, reason: "Spamming" },
         });
 
@@ -712,8 +712,8 @@ Deno.test({
 
         await communityDb.banActor(community.id, banned.id, "Spamming", owner.id);
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "DELETE", `/communities/testcommunity/bans/${banned.public_id}`, { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "DELETE", `/communities/testcommunity/bans/${banned.public_id}`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -731,8 +731,8 @@ Deno.test({
 
         await communityDb.banActor(community.id, banned.id, "Spamming", owner.id);
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
-        const res = await testRequest(api, "DELETE", `/communities/testcommunity/bans/${banned.public_id}`, { cookie });
+        const session = await loginUser(api, "other@test.com", "password123");
+        const res = await testRequest(api, "DELETE", `/communities/testcommunity/bans/${banned.public_id}`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
     });
@@ -791,8 +791,8 @@ Deno.test({
         const { actor } = await createTestUser({ username: "owner", email: "owner@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "GET", "/communities/testcommunity/posts/pending", { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "GET", "/communities/testcommunity/posts/pending", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.posts);
@@ -806,8 +806,8 @@ Deno.test({
         await createTestUser({ username: "other", email: "other@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
-        const res = await testRequest(api, "GET", "/communities/testcommunity/posts/pending", { cookie });
+        const session = await loginUser(api, "other@test.com", "password123");
+        const res = await testRequest(api, "GET", "/communities/testcommunity/posts/pending", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
     });
@@ -825,9 +825,9 @@ Deno.test({
         const post = await createTestPost(actor, { content: "Hello community!" });
 
         // Owner is auto-joined, so they should be able to submit
-        const cookie = await loginUser(api, "owner@test.com", "password123");
+        const session = await loginUser(api, "owner@test.com", "password123");
         const res = await testRequest(api, "POST", "/communities/testcommunity/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { post_id: post.public_id },
         });
 
@@ -858,9 +858,9 @@ Deno.test({
         const { actor } = await createTestUser({ username: "owner", email: "owner@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
+        const session = await loginUser(api, "owner@test.com", "password123");
         const res = await testRequest(api, "POST", "/communities/testcommunity/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: {},
         });
 
@@ -880,9 +880,9 @@ Deno.test({
         // Create a post by the non-member
         const post = await createTestPost(nonmember, { content: "Hello!" });
 
-        const cookie = await loginUser(api, "nonmember@test.com", "password123");
+        const session = await loginUser(api, "nonmember@test.com", "password123");
         const res = await testRequest(api, "POST", "/communities/testcommunity/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { post_id: post.public_id },
         });
 
@@ -908,9 +908,9 @@ Deno.test({
         await db.addFollow(banned.id, community.id);
         await communityDb.banActor(community.id, banned.id, "Spamming", owner.id);
 
-        const cookie = await loginUser(api, "banned@test.com", "password123");
+        const session = await loginUser(api, "banned@test.com", "password123");
         const res = await testRequest(api, "POST", "/communities/testcommunity/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { post_id: post.public_id },
         });
 
@@ -936,8 +936,8 @@ Deno.test({
         // Suggester needs to be a member
         await db.addFollow(suggester.id, community.id);
 
-        const cookie = await loginUser(api, "suggester@test.com", "password123");
-        const res = await testRequest(api, "POST", `/communities/testcommunity/suggest/${post.public_id}`, { cookie });
+        const session = await loginUser(api, "suggester@test.com", "password123");
+        const res = await testRequest(api, "POST", `/communities/testcommunity/suggest/${post.public_id}`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -972,8 +972,8 @@ Deno.test({
         // Submit post as pending
         await communityDb.submitCommunityPost(community.id, post.id, false);
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/approve`, { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/approve`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -992,8 +992,8 @@ Deno.test({
 
         await communityDb.submitCommunityPost(community.id, post.id, false);
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
-        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/approve`, { cookie });
+        const session = await loginUser(api, "other@test.com", "password123");
+        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/approve`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
     });
@@ -1012,8 +1012,8 @@ Deno.test({
 
         await communityDb.submitCommunityPost(community.id, post.id, false);
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/reject`, { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/reject`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -1032,8 +1032,8 @@ Deno.test({
 
         await communityDb.submitCommunityPost(community.id, post.id, false);
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
-        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/reject`, { cookie });
+        const session = await loginUser(api, "other@test.com", "password123");
+        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/reject`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
     });
@@ -1054,8 +1054,8 @@ Deno.test({
         await communityDb.suggestCommunityPost(community.id, post.id, owner.id);
         await communityDb.approvePost(community.id, post.id, owner.id, post.public_id);
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/unboost`, { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/unboost`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -1076,8 +1076,8 @@ Deno.test({
         await communityDb.suggestCommunityPost(community.id, post.id, owner.id);
         await communityDb.approvePost(community.id, post.id, owner.id, post.public_id);
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
-        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/unboost`, { cookie });
+        const session = await loginUser(api, "other@test.com", "password123");
+        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/unboost`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
     });
@@ -1096,8 +1096,8 @@ Deno.test({
 
         await communityDb.submitCommunityPost(community.id, post.id, true);
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "DELETE", `/communities/testcommunity/posts/${post.public_id}`, { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "DELETE", `/communities/testcommunity/posts/${post.public_id}`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -1116,8 +1116,8 @@ Deno.test({
 
         await communityDb.submitCommunityPost(community.id, post.id, true);
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
-        const res = await testRequest(api, "DELETE", `/communities/testcommunity/posts/${post.public_id}`, { cookie });
+        const session = await loginUser(api, "other@test.com", "password123");
+        const res = await testRequest(api, "DELETE", `/communities/testcommunity/posts/${post.public_id}`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
     });
@@ -1136,8 +1136,8 @@ Deno.test({
 
         await communityDb.submitCommunityPost(community.id, post.id, true);
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/pin`, { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/pin`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -1156,8 +1156,8 @@ Deno.test({
 
         await communityDb.submitCommunityPost(community.id, post.id, true);
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
-        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/pin`, { cookie });
+        const session = await loginUser(api, "other@test.com", "password123");
+        const res = await testRequest(api, "POST", `/communities/testcommunity/posts/${post.public_id}/pin`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
     });
@@ -1177,8 +1177,8 @@ Deno.test({
         await communityDb.submitCommunityPost(community.id, post.id, true);
         await communityDb.pinPost(community.id, post.id, owner.id);
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "DELETE", `/communities/testcommunity/posts/${post.public_id}/pin`, { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "DELETE", `/communities/testcommunity/posts/${post.public_id}/pin`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -1198,8 +1198,8 @@ Deno.test({
         await communityDb.submitCommunityPost(community.id, post.id, true);
         await communityDb.pinPost(community.id, post.id, owner.id);
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
-        const res = await testRequest(api, "DELETE", `/communities/testcommunity/posts/${post.public_id}/pin`, { cookie });
+        const session = await loginUser(api, "other@test.com", "password123");
+        const res = await testRequest(api, "DELETE", `/communities/testcommunity/posts/${post.public_id}/pin`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
     });
@@ -1213,8 +1213,8 @@ Deno.test({
         const { actor } = await createTestUser({ username: "owner", email: "owner@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "owner@test.com", "password123");
-        const res = await testRequest(api, "GET", "/communities/testcommunity/mod-logs", { cookie });
+        const session = await loginUser(api, "owner@test.com", "password123");
+        const res = await testRequest(api, "GET", "/communities/testcommunity/mod-logs", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.logs);
@@ -1228,8 +1228,8 @@ Deno.test({
         await createTestUser({ username: "other", email: "other@test.com", password: "password123" });
         await createTestCommunity(actor, { name: "testcommunity" });
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
-        const res = await testRequest(api, "GET", "/communities/testcommunity/mod-logs", { cookie });
+        const session = await loginUser(api, "other@test.com", "password123");
+        const res = await testRequest(api, "GET", "/communities/testcommunity/mod-logs", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
     });

@@ -233,6 +233,12 @@ export class DB {
     });
   }
 
+  async deleteUser(userId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`DELETE FROM users WHERE id = ${userId}`;
+    });
+  }
+
   // ============ Password Reset Tokens ============
 
   async createPasswordResetToken(userId: number): Promise<string> {

@@ -13,6 +13,7 @@ import * as service from "./service.ts";
 import { sanitizeUser, sanitizeActor } from "./types.ts";
 import { saveAvatar } from "../../storage.ts";
 import { rateLimit } from "../../middleware/rate-limit.ts";
+import { parseIntSafe } from "../../shared/utils.ts";
 
 interface UsersEnv {
   Variables: {
@@ -172,6 +173,27 @@ export function createUserRoutes(): Hono<UsersEnv> {
     return c.json({ ok: true, message: "Password updated successfully" });
   });
 
+  // DELETE /auth/account - Delete user account (rate limited)
+  routes.delete("/auth/account", rateLimit("auth:delete"), async (c) => {
+    const user = c.get("user");
+    if (!user) {
+      return c.json({ error: "Not authenticated" }, 401);
+    }
+
+    const body = await c.req.json<{ password: string }>();
+    if (!body.password) {
+      return c.json({ error: "Password required" }, 400);
+    }
+
+    const result = await service.deleteAccount(c.get("db"), user.id, body.password);
+    if (!result.success) {
+      return c.json({ error: result.error }, 401);
+    }
+
+    deleteCookie(c, "session");
+    return c.json({ ok: true });
+  });
+
   // ============ Profile Routes ============
 
   // GET /users/trending - must be before :username
@@ -205,8 +227,8 @@ export function createUserRoutes(): Hono<UsersEnv> {
     const communityDb = c.get("communityDb");
     const filter = c.req.query("filter");
     const sort = c.req.query("sort") === "hot" ? "hot" : "new";
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
     const result = await service.getUserPosts(db, username, {
       filter,
@@ -249,8 +271,8 @@ export function createUserRoutes(): Hono<UsersEnv> {
     const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
     const result = await service.getUserBoostedPosts(db, username, {
       limit,
@@ -294,8 +316,8 @@ export function createUserRoutes(): Hono<UsersEnv> {
     const communityDb = c.get("communityDb");
     const filter = c.req.query("filter");
     const sort = c.req.query("sort") === "hot" ? "hot" : "new";
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
     const result = await service.getActorPosts(db, publicId, {
       filter,
@@ -340,8 +362,8 @@ export function createUserRoutes(): Hono<UsersEnv> {
     const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
     const result = await service.getActorBoostedPosts(db, publicId, {
       limit,

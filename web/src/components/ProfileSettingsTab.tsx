@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Actor, profile, auth } from '../api';
-import { ConfirmModal } from './ConfirmModal';
 import { Avatar } from './Avatar';
 import { AlertMessage } from './AlertMessage';
 import { LoadingButton } from './LoadingButton';
@@ -9,9 +8,10 @@ import { useAvatarUpload, useMessage } from '../hooks';
 interface ProfileSettingsTabProps {
   actor: Actor;
   onUpdate: (actor: Actor) => void;
+  onLogout: () => void;
 }
 
-export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps) {
+export function ProfileSettingsTab({ actor, onUpdate, onLogout }: ProfileSettingsTabProps) {
   // Profile state
   const [name, setName] = useState(actor.name || '');
   const [bio, setBio] = useState(actor.bio || '');
@@ -36,6 +36,9 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
 
   // Delete account state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const { message: deleteMessage, showError: showDeleteError, clear: clearDeleteMessage } = useMessage();
 
   const handleSaveProfile = async () => {
     setSavingProfile(true);
@@ -89,8 +92,29 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
   };
 
   const handleDeleteAccount = async () => {
-    // TODO: Implement delete account API
+    if (!deletePassword) {
+      showDeleteError('Password is required');
+      return;
+    }
+
+    setDeletingAccount(true);
+    clearDeleteMessage();
+
+    try {
+      await auth.deleteAccount(deletePassword);
+      setShowDeleteConfirm(false);
+      onLogout();
+    } catch (err) {
+      showDeleteError(err instanceof Error ? err.message : 'Failed to delete account');
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const handleCloseDeleteModal = () => {
     setShowDeleteConfirm(false);
+    setDeletePassword('');
+    clearDeleteMessage();
   };
 
   return (
@@ -256,15 +280,50 @@ export function ProfileSettingsTab({ actor, onUpdate }: ProfileSettingsTabProps)
       </div>
 
       {/* Delete Confirmation Modal */}
-      <ConfirmModal
-        show={showDeleteConfirm}
-        title="Delete Account"
-        message="Are you sure you want to delete your account? This action cannot be undone. All your posts, followers, and data will be permanently removed."
-        confirmText="Delete Forever"
-        confirmVariant="danger"
-        onConfirm={handleDeleteAccount}
-        onCancel={() => setShowDeleteConfirm(false)}
-      />
+      {showDeleteConfirm && (
+        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Delete Account</h5>
+                <button type="button" className="btn-close" onClick={handleCloseDeleteModal}></button>
+              </div>
+              <div className="modal-body">
+                <AlertMessage message={deleteMessage} onDismiss={clearDeleteMessage} />
+                <p className="text-muted">
+                  This action cannot be undone. All your posts, followers, and data will be permanently removed.
+                </p>
+                <div className="mb-3">
+                  <label htmlFor="deletePassword" className="form-label">Enter your password to confirm</label>
+                  <input
+                    type="password"
+                    className="form-control"
+                    id="deletePassword"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder="Your password"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={handleCloseDeleteModal}>
+                  Cancel
+                </button>
+                <LoadingButton
+                  variant="danger"
+                  loading={deletingAccount}
+                  loadingText="Deleting..."
+                  disabled={!deletePassword}
+                  onClick={handleDeleteAccount}
+                >
+                  Delete Forever
+                </LoadingButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import type { User, Actor } from "../../shared/types.ts";
 import type { CommunityDB } from "../communities/repository.ts";
 import { search } from "./service.ts";
 import { rateLimit } from "../../middleware/rate-limit.ts";
+import { parseIntSafe } from "../../shared/utils.ts";
 
 interface SearchEnv {
   Variables: {
@@ -46,7 +47,7 @@ export function createSearchRoutes(federation: Federation<void>): Hono<SearchEnv
 
     const type = (c.req.query("type") || "all") as "all" | "users" | "posts";
     const handleOnly = c.req.query("handleOnly") === "true";
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
 
     // Create federation context for remote actor lookups
     const ctx = federation.createContext(c.req.raw, undefined);

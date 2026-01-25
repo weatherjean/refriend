@@ -29,7 +29,7 @@ Deno.test({
 
         // Create a user who will view the timeline
         await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
-        const cookie = await loginUser(api, "viewer@test.com", "password123");
+        const session = await loginUser(api, "viewer@test.com", "password123");
 
         // Create another user who posts content
         const { actor: poster } = await createTestUser({ username: "poster", email: "poster@test.com" });
@@ -40,7 +40,7 @@ Deno.test({
         const viewer = await db.getActorByUsername("viewer");
         await db.addFollow(viewer!.id, poster.id, "accepted");
 
-        const res = await testRequest(api, "GET", "/timeline", { cookie });
+        const res = await testRequest(api, "GET", "/timeline", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.posts);
@@ -54,7 +54,7 @@ Deno.test({
 
         // Create viewer
         await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
-        const cookie = await loginUser(api, "viewer@test.com", "password123");
+        const session = await loginUser(api, "viewer@test.com", "password123");
 
         // Create poster with many posts
         const { actor: poster } = await createTestUser({ username: "poster", email: "poster@test.com" });
@@ -66,7 +66,7 @@ Deno.test({
         const viewer = await db.getActorByUsername("viewer");
         await db.addFollow(viewer!.id, poster.id, "accepted");
 
-        const res = await testRequest(api, "GET", "/timeline?limit=5", { cookie });
+        const res = await testRequest(api, "GET", "/timeline?limit=5", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.posts.length, 5);
@@ -88,10 +88,10 @@ Deno.test({
         const api = await createTestApi();
 
         const { actor } = await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
         await createTestPost(actor, { content: "Hot post!" });
 
-        const res = await testRequest(api, "GET", "/posts/hot", { cookie });
+        const res = await testRequest(api, "GET", "/posts/hot", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertExists(data.posts);
@@ -124,10 +124,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { content: "" },
         });
 
@@ -141,10 +141,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { content: "a".repeat(501) },
         });
 
@@ -158,10 +158,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: {
             content: "Post with attachments",
             attachments: [
@@ -184,10 +184,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: {
             content: "Post",
             link_url: "https://example.com",
@@ -205,10 +205,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: {
             content: "Post with invalid link",
             link_url: "not-a-url",
@@ -225,10 +225,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: {
             content: "Reply to nothing",
             in_reply_to: "non-existent-uuid",
@@ -248,10 +248,10 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { content: "Hello world!" },
         });
 
@@ -267,10 +267,10 @@ Deno.test({
 
         const { actor } = await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
         const parent = await createTestPost(actor, { content: "Parent post" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
         const res = await testRequest(api, "POST", "/posts", {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { content: "Reply!", in_reply_to: parent.public_id },
         });
 
@@ -367,9 +367,9 @@ Deno.test({
         await createTestUser({ username: "other", email: "other@test.com", password: "password123" });
         const post = await createTestPost(author, { content: "Author's post" });
 
-        const cookie = await loginUser(api, "other@test.com", "password123");
+        const session = await loginUser(api, "other@test.com", "password123");
 
-        const res = await testRequest(api, "DELETE", `/posts/${post.public_id}`, { cookie });
+        const res = await testRequest(api, "DELETE", `/posts/${post.public_id}`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 404);
       });
 
@@ -379,9 +379,9 @@ Deno.test({
 
         const { actor } = await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
         const post = await createTestPost(actor, { content: "Delete me" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
-        const res = await testRequest(api, "DELETE", `/posts/${post.public_id}`, { cookie });
+        const res = await testRequest(api, "DELETE", `/posts/${post.public_id}`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -410,9 +410,9 @@ Deno.test({
         const api = await createTestApi();
 
         await createTestUser({ username: "user", email: "user@test.com", password: "password123" });
-        const cookie = await loginUser(api, "user@test.com", "password123");
+        const session = await loginUser(api, "user@test.com", "password123");
 
-        const res = await testRequest(api, "POST", "/posts/non-existent-uuid/like", { cookie });
+        const res = await testRequest(api, "POST", "/posts/non-existent-uuid/like", { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 404);
       });
 
@@ -424,8 +424,8 @@ Deno.test({
         await createTestUser({ username: "liker", email: "liker@test.com", password: "password123" });
         const post = await createTestPost(actor, { content: "Like me!" });
 
-        const cookie = await loginUser(api, "liker@test.com", "password123");
-        const res = await testRequest(api, "POST", `/posts/${post.public_id}/like`, { cookie });
+        const session = await loginUser(api, "liker@test.com", "password123");
+        const res = await testRequest(api, "POST", `/posts/${post.public_id}/like`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -446,8 +446,8 @@ Deno.test({
         // Like first
         await db.addLike(liker.id, post.id);
 
-        const cookie = await loginUser(api, "liker@test.com", "password123");
-        const res = await testRequest(api, "DELETE", `/posts/${post.public_id}/like`, { cookie });
+        const session = await loginUser(api, "liker@test.com", "password123");
+        const res = await testRequest(api, "DELETE", `/posts/${post.public_id}/like`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -484,9 +484,9 @@ Deno.test({
 
         const { actor } = await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
         const post = await createTestPost(actor, { content: "My own post" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
-        const res = await testRequest(api, "POST", `/posts/${post.public_id}/boost`, { cookie });
+        const res = await testRequest(api, "POST", `/posts/${post.public_id}/boost`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 400);
         const data = await res.json();
         assertEquals(data.error, "Cannot boost your own post");
@@ -500,8 +500,8 @@ Deno.test({
         await createTestUser({ username: "booster", email: "booster@test.com", password: "password123" });
         const post = await createTestPost(author, { content: "Boost me!" });
 
-        const cookie = await loginUser(api, "booster@test.com", "password123");
-        const res = await testRequest(api, "POST", `/posts/${post.public_id}/boost`, { cookie });
+        const session = await loginUser(api, "booster@test.com", "password123");
+        const res = await testRequest(api, "POST", `/posts/${post.public_id}/boost`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -522,8 +522,8 @@ Deno.test({
         // Boost first
         await db.addBoost(booster.id, post.id);
 
-        const cookie = await loginUser(api, "booster@test.com", "password123");
-        const res = await testRequest(api, "DELETE", `/posts/${post.public_id}/boost`, { cookie });
+        const session = await loginUser(api, "booster@test.com", "password123");
+        const res = await testRequest(api, "DELETE", `/posts/${post.public_id}/boost`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -561,9 +561,9 @@ Deno.test({
         const { actor: author } = await createTestUser({ username: "author", email: "author@test.com" });
         await createTestUser({ username: "other", email: "other@test.com", password: "password123" });
         const post = await createTestPost(author, { content: "Author's post" });
-        const cookie = await loginUser(api, "other@test.com", "password123");
+        const session = await loginUser(api, "other@test.com", "password123");
 
-        const res = await testRequest(api, "POST", `/posts/${post.public_id}/pin`, { cookie });
+        const res = await testRequest(api, "POST", `/posts/${post.public_id}/pin`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 403);
       });
 
@@ -573,9 +573,9 @@ Deno.test({
 
         const { actor } = await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
         const post = await createTestPost(actor, { content: "My post" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
-        const res = await testRequest(api, "POST", `/posts/${post.public_id}/pin`, { cookie });
+        const res = await testRequest(api, "POST", `/posts/${post.public_id}/pin`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -587,17 +587,17 @@ Deno.test({
         const api = await createTestApi();
 
         const { actor } = await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
         // Pin 5 posts
         for (let i = 0; i < 5; i++) {
           const post = await createTestPost(actor, { content: `Post ${i}` });
-          await testRequest(api, "POST", `/posts/${post.public_id}/pin`, { cookie });
+          await testRequest(api, "POST", `/posts/${post.public_id}/pin`, { cookie: session.cookie, csrfToken: session.csrfToken });
         }
 
         // Try to pin a 6th
         const sixthPost = await createTestPost(actor, { content: "Post 6" });
-        const res = await testRequest(api, "POST", `/posts/${sixthPost.public_id}/pin`, { cookie });
+        const res = await testRequest(api, "POST", `/posts/${sixthPost.public_id}/pin`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 400);
         const data = await res.json();
         assertEquals(data.error, "Cannot pin more than 5 posts");
@@ -612,13 +612,13 @@ Deno.test({
 
         const { actor } = await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
         const post = await createTestPost(actor, { content: "My post" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
         // Pin first
-        await testRequest(api, "POST", `/posts/${post.public_id}/pin`, { cookie });
+        await testRequest(api, "POST", `/posts/${post.public_id}/pin`, { cookie: session.cookie, csrfToken: session.csrfToken });
 
         // Then unpin
-        const res = await testRequest(api, "DELETE", `/posts/${post.public_id}/pin`, { cookie });
+        const res = await testRequest(api, "DELETE", `/posts/${post.public_id}/pin`, { cookie: session.cookie, csrfToken: session.csrfToken });
         assertEquals(res.status, 200);
         const data = await res.json();
         assertEquals(data.ok, true);
@@ -648,10 +648,10 @@ Deno.test({
         const { actor: author } = await createTestUser({ username: "author", email: "author@test.com" });
         await createTestUser({ username: "reporter", email: "reporter@test.com", password: "password123" });
         const post = await createTestPost(author, { content: "Bad post" });
-        const cookie = await loginUser(api, "reporter@test.com", "password123");
+        const session = await loginUser(api, "reporter@test.com", "password123");
 
         const res = await testRequest(api, "POST", `/posts/${post.public_id}/report`, {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { reason: "invalid_reason" },
         });
         assertEquals(res.status, 400);
@@ -665,10 +665,10 @@ Deno.test({
 
         const { actor } = await createTestUser({ username: "poster", email: "poster@test.com", password: "password123" });
         const post = await createTestPost(actor, { content: "My post" });
-        const cookie = await loginUser(api, "poster@test.com", "password123");
+        const session = await loginUser(api, "poster@test.com", "password123");
 
         const res = await testRequest(api, "POST", `/posts/${post.public_id}/report`, {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { reason: "spam" },
         });
         assertEquals(res.status, 400);
@@ -683,10 +683,10 @@ Deno.test({
         const { actor: author } = await createTestUser({ username: "author", email: "author@test.com" });
         await createTestUser({ username: "reporter", email: "reporter@test.com", password: "password123" });
         const post = await createTestPost(author, { content: "Spam post" });
-        const cookie = await loginUser(api, "reporter@test.com", "password123");
+        const session = await loginUser(api, "reporter@test.com", "password123");
 
         const res = await testRequest(api, "POST", `/posts/${post.public_id}/report`, {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { reason: "spam", details: "This is clearly spam" },
         });
         assertEquals(res.status, 200);
@@ -701,17 +701,17 @@ Deno.test({
         const { actor: author } = await createTestUser({ username: "author", email: "author@test.com" });
         await createTestUser({ username: "reporter", email: "reporter@test.com", password: "password123" });
         const post = await createTestPost(author, { content: "Spam post" });
-        const cookie = await loginUser(api, "reporter@test.com", "password123");
+        const session = await loginUser(api, "reporter@test.com", "password123");
 
         // First report
         await testRequest(api, "POST", `/posts/${post.public_id}/report`, {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { reason: "spam" },
         });
 
         // Second report should fail
         const res = await testRequest(api, "POST", `/posts/${post.public_id}/report`, {
-          cookie,
+          cookie: session.cookie, csrfToken: session.csrfToken,
           body: { reason: "harassment" },
         });
         assertEquals(res.status, 400);

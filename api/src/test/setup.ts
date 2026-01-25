@@ -257,6 +257,7 @@ export async function testRequest(
     body?: unknown;
     headers?: Record<string, string>;
     cookie?: string;
+    csrfToken?: string;
   } = {}
 ): Promise<Response> {
   const url = `http://test.local${path}`;
@@ -270,6 +271,11 @@ export async function testRequest(
 
   if (options.cookie) {
     init.headers = { ...init.headers, Cookie: options.cookie };
+  }
+
+  // Add CSRF token for mutation requests
+  if (options.csrfToken && ["POST", "PUT", "DELETE", "PATCH"].includes(method.toUpperCase())) {
+    init.headers = { ...init.headers, "X-CSRF-Token": options.csrfToken };
   }
 
   if (options.body) {
@@ -287,11 +293,16 @@ export function getSessionCookie(res: Response): string | null {
   return match ? `session=${match[1]}` : null;
 }
 
+export interface AuthSession {
+  cookie: string;
+  csrfToken: string;
+}
+
 export async function loginUser(
   api: Awaited<ReturnType<typeof createTestApi>>,
   email: string,
   password: string
-): Promise<string> {
+): Promise<AuthSession> {
   const res = await testRequest(api, "POST", "/auth/login", {
     body: { email, password },
   });
@@ -299,7 +310,8 @@ export async function loginUser(
   if (!cookie) {
     throw new Error(`Login failed: ${await res.text()}`);
   }
-  return cookie;
+  const data = await res.json();
+  return { cookie, csrfToken: data.csrfToken };
 }
 
 export async function createTestCommunity(

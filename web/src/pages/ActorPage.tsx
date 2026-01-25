@@ -18,7 +18,7 @@ import { usePagination } from '../hooks';
 
 export function ActorPage() {
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   // Core profile state
   const [actor, setActor] = useState<Actor | null>(null);
@@ -351,6 +351,7 @@ export function ActorPage() {
         <ProfileSettingsTab
           actor={actor}
           onUpdate={(updated) => setActor(updated)}
+          onLogout={logout}
         />
       )}
 

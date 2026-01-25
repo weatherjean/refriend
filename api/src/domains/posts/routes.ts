@@ -22,6 +22,7 @@ import { getCachedHashtagPosts, setCachedHashtagPosts, invalidateProfileCache } 
 import { saveMedia, deleteMedia } from "../../storage.ts";
 import { processActivity } from "../../activities.ts";
 import { rateLimit } from "../../middleware/rate-limit.ts";
+import { parseIntSafe } from "../../shared/utils.ts";
 
 interface PostsEnv {
   Variables: {
@@ -46,7 +47,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const db = c.get("db");
     const communityDb = c.get("communityDb");
     const domain = c.get("domain");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
 
     const result = await service.getTimelinePosts(db, actor.id, limit, undefined, "hot", domain, communityDb);
     return c.json({ posts: result.posts });
@@ -62,8 +63,8 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const db = c.get("db");
     const communityDb = c.get("communityDb");
     const domain = c.get("domain");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
     const sort = c.req.query("sort") === "hot" ? "hot" : "new";
 
     const result = await service.getTimelinePosts(db, actor.id, limit, before, sort, domain, communityDb);
@@ -106,8 +107,8 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       return c.json({ error: "Post not found" }, 404);
     }
 
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const after = c.req.query("after") ? parseInt(c.req.query("after")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const after = parseIntSafe(c.req.query("after")) ?? undefined;
     const sort = c.req.query("sort") === "hot" ? "hot" : "new";
 
     // Get the parent post's author to identify OP replies
@@ -136,8 +137,8 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
     // Check cache for unauthenticated users
     if (!currentActor && !before) {

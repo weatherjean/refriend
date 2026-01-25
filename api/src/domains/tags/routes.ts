@@ -11,6 +11,7 @@ import type { CommunityDB } from "../communities/repository.ts";
 import * as service from "./service.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
 import { getCachedHashtagPosts, setCachedHashtagPosts } from "../../cache.ts";
+import { parseIntSafe } from "../../shared/utils.ts";
 
 interface TagsEnv {
   Variables: {
@@ -55,8 +56,8 @@ export function createTagRoutes(): Hono<TagsEnv> {
     const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const actor = c.get("actor");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
     const sort = c.req.query("sort") === "hot" ? "hot" : "new";
 
     // Try cache for logged-out users with default sort

@@ -10,6 +10,7 @@ import { processActivity } from "../../activities.ts";
 import { deleteMedia } from "../../storage.ts";
 import { getCachedTrendingCommunities, setCachedTrendingCommunities } from "../../cache.ts";
 import { formatDate } from "../../shared/formatting.ts";
+import { parseIntSafe } from "../../shared/utils.ts";
 
 type Env = {
   Variables: {
@@ -79,8 +80,8 @@ export function createCommunityRoutes(
   // List all communities
   routes.get("/", async (c) => {
     const communityDb = c.get("communityDb");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
     const communities = await communityDb.listCommunities(limit + 1, before);
     const hasMore = communities.length > limit;
@@ -97,7 +98,7 @@ export function createCommunityRoutes(
   routes.get("/search", async (c) => {
     const communityDb = c.get("communityDb");
     const query = c.req.query("q") || "";
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
 
     if (!query) {
       return c.json({ communities: [] });
@@ -118,7 +119,7 @@ export function createCommunityRoutes(
     }
 
     const communityDb = c.get("communityDb");
-    const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100);
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 50, 100);
 
     const communities = await communityDb.getJoinedCommunities(actor.id, limit);
     return c.json({
@@ -343,8 +344,8 @@ export function createCommunityRoutes(
     const name = c.req.param("name");
     const domain = c.get("domain");
     const communityDb = c.get("communityDb");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
     const community = await communityDb.getCommunityByName(name);
     if (!community) {
@@ -481,8 +482,8 @@ export function createCommunityRoutes(
     }
 
     const communityDb = c.get("communityDb");
-    const limit = Math.min(parseInt(c.req.query("limit") || "10"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 10, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
     const community = await communityDb.getCommunityByName(name);
     if (!community) {
@@ -597,8 +598,8 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
     const currentActor = c.get("actor");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
     const sort = c.req.query("sort") === "new" ? "new" : "hot"; // Default to hot
 
     const community = await communityDb.getCommunityByName(name);
@@ -736,7 +737,7 @@ export function createCommunityRoutes(
 
     const communityDb = c.get("communityDb");
     const db = c.get("db");
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
 
     const community = await communityDb.getCommunityByName(name);
     if (!community) {
@@ -1202,8 +1203,8 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
     const domain = c.get("domain");
-    const limit = Math.min(parseInt(c.req.query("limit") || "50"), 100);
-    const before = c.req.query("before") ? parseInt(c.req.query("before")!) : undefined;
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 50, 100);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
     const community = await communityDb.getCommunityByName(name);
     if (!community) {

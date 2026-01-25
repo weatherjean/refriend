@@ -211,6 +211,11 @@ export const auth = {
       method: 'POST',
       body: JSON.stringify({ token, password }),
     }),
+  deleteAccount: (password: string) =>
+    fetchJson<{ ok: boolean }>('/auth/account', {
+      method: 'DELETE',
+      body: JSON.stringify({ password }),
+    }),
 };
 
 // Pagination params

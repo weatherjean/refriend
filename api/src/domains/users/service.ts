@@ -29,7 +29,7 @@ import type { CommunityDB } from "../communities/repository.ts";
 
 // ============ Password Hashing ============
 
-async function hashPassword(password: string): Promise<string> {
+export async function hashPassword(password: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(password);
   const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -44,7 +44,7 @@ async function hashPassword(password: string): Promise<string> {
   return `${saltStr}:${hash}`;
 }
 
-async function verifyPassword(password: string, stored: string): Promise<boolean> {
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [saltStr, storedHash] = stored.split(":");
   const salt = Uint8Array.from(atob(saltStr), (c) => c.charCodeAt(0));
   const encoder = new TextEncoder();
@@ -748,4 +748,19 @@ export async function getActorBoostedPosts(
     posts: postsWithBooster,
     next_cursor: nextCursor,
   };
+}
+
+// ============ Account Deletion ============
+
+export async function deleteAccount(
+  db: DB,
+  userId: number,
+  password: string
+): Promise<{ success: boolean; error?: string }> {
+  const user = await db.getUserById(userId);
+  if (!user || !(await verifyPassword(password, user.password_hash))) {
+    return { success: false, error: "Incorrect password" };
+  }
+  await db.deleteUser(userId);
+  return { success: true };
 }

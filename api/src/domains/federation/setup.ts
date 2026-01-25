@@ -26,6 +26,7 @@ import {
 import { DenoKvStore, DenoKvMessageQueue } from "@fedify/denokv";
 import type { DB } from "../../db.ts";
 import { processActivity } from "./processor.ts";
+import { parseIntSafe } from "../../shared/utils.ts";
 
 // Domain will be set at runtime
 let DOMAIN = "localhost:8000";
@@ -452,7 +453,9 @@ federation.setObjectDispatcher(Note, "/users/{identifier}/posts/{id}", async (ct
   const actor = await db.getActorByUsername(identifier);
   if (!actor) return null;
 
-  const post = await db.getPostById(parseInt(id));
+  const postId = parseIntSafe(id);
+  if (!postId) return null;
+  const post = await db.getPostById(postId);
   if (!post || post.actor_id !== actor.id) return null;
 
   // Get attachments

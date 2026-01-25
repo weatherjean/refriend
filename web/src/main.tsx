@@ -7,22 +7,25 @@ import { FeedProvider } from './context/FeedContext'
 import { ToastProvider } from './context/ToastContext'
 import { ModalStackProvider } from './context/ModalStackContext'
 import { ScrollLockProvider } from './context/ScrollLockContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import './styles.scss'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <HashRouter>
-      <ScrollLockProvider>
-        <ModalStackProvider>
-          <ToastProvider>
-            <AuthProvider>
-              <FeedProvider>
-                <App />
-              </FeedProvider>
-            </AuthProvider>
-          </ToastProvider>
-        </ModalStackProvider>
-      </ScrollLockProvider>
+      <ErrorBoundary>
+        <ScrollLockProvider>
+          <ModalStackProvider>
+            <ToastProvider>
+              <AuthProvider>
+                <FeedProvider>
+                  <App />
+                </FeedProvider>
+              </AuthProvider>
+            </ToastProvider>
+          </ModalStackProvider>
+        </ScrollLockProvider>
+      </ErrorBoundary>
     </HashRouter>
   </React.StrictMode>,
 )
