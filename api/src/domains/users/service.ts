@@ -181,6 +181,10 @@ export async function login(db: DB, input: LoginInput): Promise<LoginResult> {
     return { success: false, error: "Invalid credentials" };
   }
 
+  if (user.suspended) {
+    return { success: false, error: "Account suspended" };
+  }
+
   const actor = await db.getActorByUserId(user.id);
   const sessionToken = await db.createSession(user.id);
 

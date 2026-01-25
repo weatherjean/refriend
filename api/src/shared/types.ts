@@ -12,6 +12,7 @@ export interface User {
   username: string;
   email: string | null;
   password_hash: string;
+  suspended: boolean;
   created_at: string;
 }
 
