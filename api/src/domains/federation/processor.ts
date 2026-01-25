@@ -12,6 +12,7 @@ import {
   Follow,
   Like,
   Note,
+  Reject,
   Tombstone,
   Undo,
   isActor,
@@ -26,6 +27,7 @@ import {
   processAnnounce,
   processFollow,
   processAccept,
+  processReject,
   processUndo,
   processDelete,
 } from "./handlers/index.ts";
@@ -37,7 +39,7 @@ export interface ProcessResult {
   error?: string;
 }
 
-type Activity = Create | Like | Follow | Delete | Undo | Accept | Announce;
+type Activity = Create | Like | Follow | Delete | Undo | Accept | Reject | Announce;
 
 /**
  * Get object info from activity (safe - handles localhost errors)
@@ -83,6 +85,12 @@ async function getObjectInfo(activity: Activity): Promise<{ uri: string | null; 
         return { uri: obj.id?.href ?? null, type: "Follow" };
       }
     }
+    if (activity instanceof Reject) {
+      const obj = await activity.getObject();
+      if (obj instanceof Follow) {
+        return { uri: obj.id?.href ?? null, type: "Follow" };
+      }
+    }
   } catch {
     // In localhost dev environments, getObject might fail
   }
@@ -105,11 +113,14 @@ export async function processActivity(
     return { success: false, error: "Activity has no URI" };
   }
 
-  // Check for duplicate (idempotency)
-  const existing = await db.getActivityByUri(activityUri);
-  if (existing) {
-    console.log(`[${getActivityType(activity)}] Already processed: ${activityUri}`);
-    return { success: true, activity: existing };
+  // Check for duplicate (idempotency) - only for outbound activities
+  // Inbound activities are already deduplicated by Fedify via per-inbox idempotency
+  if (direction === "outbound") {
+    const existing = await db.getActivityByUri(activityUri);
+    if (existing) {
+      console.log(`[${getActivityType(activity)}] Already processed: ${activityUri}`);
+      return { success: true, activity: existing };
+    }
   }
 
   try {
@@ -128,6 +139,8 @@ export async function processActivity(
       await processDelete(ctx, db, domain, activity, direction, localUsername);
     } else if (activity instanceof Accept) {
       await processAccept(ctx, db, domain, activity, direction);
+    } else if (activity instanceof Reject) {
+      await processReject(ctx, db, domain, activity, direction);
     }
 
     // Get actor for storing activity

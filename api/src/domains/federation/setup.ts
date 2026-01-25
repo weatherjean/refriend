@@ -14,7 +14,9 @@ import {
   Follow,
   Like,
   Note,
+  ParallelMessageQueue,
   Person,
+  Reject,
   Undo,
   exportJwk,
   generateCryptoKeyPair,
@@ -60,9 +62,23 @@ export function getDomain(): string {
 // Create the federation instance with persistent storage
 const kvPath = Deno.env.get("DENO_KV_PATH") || undefined;
 const kv = await Deno.openKv(kvPath);
+
+// Parallel message queue for better throughput
+const baseQueue = new DenoKvMessageQueue(kv);
+const parallelWorkers = parseInt(Deno.env.get("QUEUE_WORKERS") || "4");
+const queue = new ParallelMessageQueue(baseQueue, parallelWorkers);
+
+// Check if we should manually start the queue (for web/worker separation)
+// Only enable manual control when NODE_TYPE is explicitly set
+const nodeType = Deno.env.get("NODE_TYPE");
+const manuallyStartQueue = nodeType === "web" || nodeType === "worker";
+
 export const federation = createFederation<void>({
   kv: new DenoKvStore(kv),
-  queue: new DenoKvMessageQueue(kv),
+  queue,
+  manuallyStartQueue,
+  // Use draft-cavage-http-signatures-12 for better compatibility with older servers
+  firstKnock: "draft-cavage-http-signatures-12",
   onOutboxError: (error, activity) => {
     const activityId = activity?.id?.href ?? "unknown";
     console.error(`[Outbox Error] Activity ${activityId}:`, error);
@@ -95,7 +111,8 @@ federation.setNodeInfoDispatcher("/nodeinfo/2.1", async () => {
     usage: {
       users: {
         total: await db.getLocalUserCount(),
-        activeMonth: await db.getLocalUserCount(), // Simplified: all users considered active
+        activeMonth: await db.getActiveUsersLastMonth(),
+        activeHalfYear: await db.getActiveUsersLastSixMonths(),
       },
       localPosts: await db.getLocalPostCount(),
       localComments: 0, // We don't differentiate posts from comments
@@ -136,6 +153,7 @@ federation
         name: actor.name ?? identifier,
         summary: actor.bio ?? undefined,
         icon,
+        published: parseTimestamp(actor.created_at),
         url: new URL(`https://${DOMAIN}/c/${identifier}`),
         inbox: ctx.getInboxUri(identifier),
         endpoints: new Endpoints({
@@ -154,6 +172,7 @@ federation
       name: actor.name ?? undefined,
       summary: actor.bio ?? undefined,
       icon,
+      published: parseTimestamp(actor.created_at),
       url: new URL(`https://${DOMAIN}/@${identifier}`),
       inbox: ctx.getInboxUri(identifier),
       endpoints: new Endpoints({
@@ -223,15 +242,28 @@ federation
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
 
-    // Parse cursor as offset (default to 0)
-    const offset = cursor ? parseInt(cursor, 10) : 0;
+    // When cursor is null, return FULL collection for sendActivity({ recipients: "followers" })
+    if (cursor === null) {
+      const allFollowers = await db.getAllFollowers(actor.id);
+      return {
+        items: allFollowers.map((f) => ({
+          id: new URL(f.uri),
+          inboxId: new URL(f.inbox_url),
+          endpoints: f.shared_inbox_url ? { sharedInbox: new URL(f.shared_inbox_url) } : undefined,
+        })),
+      };
+    }
+
+    // Parse cursor as offset for paginated browsing
+    const offset = parseInt(cursor, 10);
     if (isNaN(offset)) return null;
 
     const followers = await db.getFollowersPaginated(actor.id, COLLECTION_PAGE_SIZE, offset);
-    // Followers collection requires Recipient objects (id + inboxId)
+    // Followers collection requires Recipient objects (id + inboxId + optional endpoints)
     const items = followers.map((f) => ({
       id: new URL(f.uri),
       inboxId: new URL(f.inbox_url),
+      endpoints: f.shared_inbox_url ? { sharedInbox: new URL(f.shared_inbox_url) } : undefined,
     }));
 
     // Calculate next cursor if there are more items
@@ -242,6 +274,15 @@ federation
     return { items, nextCursor };
   })
   .setFirstCursor(async (_ctx, _identifier) => "0")
+  .setLastCursor(async (_ctx, identifier) => {
+    const actor = await db.getActorByUsername(identifier);
+    if (!actor) return null;
+    const count = await db.getFollowersCount(actor.id);
+    if (count === 0) return null;
+    // Last cursor is the offset of the last page
+    const lastOffset = Math.max(0, Math.floor((count - 1) / COLLECTION_PAGE_SIZE) * COLLECTION_PAGE_SIZE);
+    return String(lastOffset);
+  })
   .setCounter(async (_ctx, identifier) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
@@ -271,6 +312,14 @@ federation
     return { items, nextCursor };
   })
   .setFirstCursor(async (_ctx, _identifier) => "0")
+  .setLastCursor(async (_ctx, identifier) => {
+    const actor = await db.getActorByUsername(identifier);
+    if (!actor) return null;
+    const count = await db.getFollowingCount(actor.id);
+    if (count === 0) return null;
+    const lastOffset = Math.max(0, Math.floor((count - 1) / COLLECTION_PAGE_SIZE) * COLLECTION_PAGE_SIZE);
+    return String(lastOffset);
+  })
   .setCounter(async (_ctx, identifier) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
@@ -300,6 +349,14 @@ federation
     return { items, nextCursor };
   })
   .setFirstCursor(async (_ctx, _identifier) => "0")
+  .setLastCursor(async (_ctx, identifier) => {
+    const actor = await db.getActorByUsername(identifier);
+    if (!actor) return null;
+    const count = await db.getLikedPostsCount(actor.id);
+    if (count === 0) return null;
+    const lastOffset = Math.max(0, Math.floor((count - 1) / COLLECTION_PAGE_SIZE) * COLLECTION_PAGE_SIZE);
+    return String(lastOffset);
+  })
   .setCounter(async (_ctx, identifier) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
@@ -440,6 +497,11 @@ federation
   // Handle Accept (follow was accepted)
   .on(Accept, async (ctx, accept) => {
     await processActivity(ctx, db, DOMAIN, accept, "inbound");
+  })
+
+  // Handle Reject (follow was rejected)
+  .on(Reject, async (ctx, reject) => {
+    await processActivity(ctx, db, DOMAIN, reject, "inbound");
   })
 
   // Handle Undo (unfollow, unlike)

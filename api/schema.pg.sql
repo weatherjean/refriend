@@ -10,8 +10,17 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE,
   password_hash TEXT NOT NULL,
   suspended BOOLEAN NOT NULL DEFAULT FALSE,
+  last_active_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Add column if it doesn't exist (for existing databases)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'last_active_at') THEN
+    ALTER TABLE users ADD COLUMN last_active_at TIMESTAMPTZ;
+  END IF;
+END $$;
 
 -- Actors: Both local users and remote ActivityPub actors
 CREATE TABLE IF NOT EXISTS actors (

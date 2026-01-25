@@ -11,11 +11,12 @@ import {
   Delete,
   Follow,
   Like,
+  Reject,
   Undo,
   type Context,
 } from "@fedify/fedify";
 
-type Activity = Create | Like | Follow | Delete | Undo | Accept | Announce;
+type Activity = Create | Like | Follow | Delete | Undo | Accept | Reject | Announce;
 
 /**
  * Serialize an activity to JSON for storage
@@ -79,6 +80,7 @@ export function getActivityType(activity: Activity): string {
   if (activity instanceof Delete) return "Delete";
   if (activity instanceof Undo) return "Undo";
   if (activity instanceof Accept) return "Accept";
+  if (activity instanceof Reject) return "Reject";
   if (activity instanceof Announce) return "Announce";
   return "Unknown";
 }

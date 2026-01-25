@@ -1,7 +1,14 @@
 import { Hono } from "@hono/hono";
 import { serveStatic } from "@hono/hono/deno";
-import { federation as fedifyIntegration } from "@fedify/fedify/x/hono";
+import { federation as fedifyIntegration } from "@fedify/hono";
 import { behindProxy } from "@hongminhee/x-forwarded-fetch";
+
+// Declare Hono context variables for TypeScript
+declare module "@hono/hono" {
+  interface ContextVariableMap {
+    domain: string;
+  }
+}
 import { DB } from "./db.ts";
 import { federation, setDomain, setDB } from "./domains/federation/setup.ts";
 import { createApiRoutes } from "./api-routes.ts";
@@ -77,6 +84,14 @@ app.use(fedifyIntegration(federation, () => undefined));
 
 // Set up database reference for federation
 setDB(db);
+
+// Start the federation queue based on NODE_TYPE:
+// - unset (default): Fedify auto-starts queue (manuallyStartQueue = false)
+// - "web": queue doesn't start (web-only mode)
+// - "worker": we manually start queue (worker-only mode)
+if (Deno.env.get("NODE_TYPE") === "worker") {
+  federation.startQueue();
+}
 
 // Initialize community federation
 const communityDb = new CommunityDB(db.getPool());

@@ -623,6 +623,22 @@ export class DB {
 
   // ============ Paginated Collection Methods (for ActivityPub) ============
 
+  /**
+   * Get all followers for an actor (used by sendActivity for followers delivery).
+   * Returns full follower list with inbox URLs for efficient delivery.
+   */
+  async getAllFollowers(actorId: number): Promise<Actor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        SELECT a.* FROM actors a
+        JOIN follows f ON a.id = f.follower_id
+        WHERE f.following_id = ${actorId} AND f.status = 'accepted'
+        ORDER BY f.created_at DESC
+      `;
+      return result.rows;
+    });
+  }
+
   async getFollowersPaginated(actorId: number, limit: number, offset: number): Promise<Actor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
@@ -1717,6 +1733,34 @@ export class DB {
         WHERE a.user_id IS NOT NULL
       `;
       return Number(result.rows[0].count);
+    });
+  }
+
+  async getActiveUsersLastMonth(): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM users
+        WHERE last_active_at > NOW() - INTERVAL '30 days'
+      `;
+      return Number(result.rows[0].count);
+    });
+  }
+
+  async getActiveUsersLastSixMonths(): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM users
+        WHERE last_active_at > NOW() - INTERVAL '6 months'
+      `;
+      return Number(result.rows[0].count);
+    });
+  }
+
+  async updateUserLastActive(userId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        UPDATE users SET last_active_at = NOW() WHERE id = ${userId}
+      `;
     });
   }
 
