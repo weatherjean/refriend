@@ -2,6 +2,9 @@ FROM denoland/deno:latest
 
 WORKDIR /app
 
+# Create data directory for KV persistence
+RUN mkdir -p /data
+
 # Copy dependency files first for caching
 COPY deno.json deno.lock* ./
 

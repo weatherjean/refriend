@@ -68,6 +68,7 @@ services:
       S3_PUBLIC_URL: http://localhost:9000/riff-uploads
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin
+      DENO_KV_PATH: /data/kv.sqlite
     depends_on:
       db:
         condition: service_healthy
@@ -76,8 +77,10 @@ services:
     volumes:
       - ./api/src:/app/src:ro
       - ./web/dist:/app/static:ro
+      - kvdata:/data
     command: ["deno", "run", "--allow-all", "--unstable-kv", "--unstable-temporal", "--watch", "src/main.ts"]
 
 volumes:
   pgdata:
   minio_data:
+  kvdata:

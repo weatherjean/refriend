@@ -57,7 +57,8 @@ export function getDomain(): string {
 }
 
 // Create the federation instance with persistent storage
-const kv = await Deno.openKv();
+const kvPath = Deno.env.get("DENO_KV_PATH") || undefined;
+const kv = await Deno.openKv(kvPath);
 export const federation = createFederation<void>({
   kv: new DenoKvStore(kv),
   queue: new DenoKvMessageQueue(kv),

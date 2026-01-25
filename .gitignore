@@ -6,6 +6,7 @@ dist/
 
 # Database files
 *.db
+*.sqlite
 
 # Uploads (local storage)
 uploads/

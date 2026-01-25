@@ -6,7 +6,8 @@ const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 let kv: Deno.Kv | null = null;
 
 export async function initCache(): Promise<void> {
-  kv = await Deno.openKv();
+  const kvPath = Deno.env.get("DENO_KV_PATH") || undefined;
+  kv = await Deno.openKv(kvPath);
 }
 
 // ============ Profile Posts Cache ============

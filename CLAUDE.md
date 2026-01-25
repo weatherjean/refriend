@@ -81,3 +81,4 @@ web/
 | `DATABASE_URL` | - | PostgreSQL connection string |
 | `PORT` | `8000` | API server port |
 | `STATIC_DIR` | `../web/dist` | Frontend static files |
+| `DENO_KV_PATH` | - | Path for persistent Deno KV storage (e.g., `/data/kv.sqlite`) |
