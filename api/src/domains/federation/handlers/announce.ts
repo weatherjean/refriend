@@ -69,11 +69,12 @@ export async function processAnnounce(
 
   // For outbound: send to followers and post author
   if (direction === "outbound" && localUsername) {
-    // Send to followers
+    // Send to followers (use shared inbox for efficiency)
     await safeSendActivity(ctx,
       { identifier: localUsername },
       "followers",
-      announce
+      announce,
+      { preferSharedInbox: true }
     );
     console.log(`[Announce] Sent to followers of ${localUsername}`);
 

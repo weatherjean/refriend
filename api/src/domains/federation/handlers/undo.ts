@@ -124,11 +124,12 @@ export async function processUndo(
 
     // For outbound: send to followers and post author
     if (direction === "outbound" && localUsername) {
-      // Send to followers
+      // Send to followers (use shared inbox for efficiency)
       await safeSendActivity(ctx,
         { identifier: localUsername },
         "followers",
-        undo
+        undo,
+        { preferSharedInbox: true }
       );
       console.log(`[Undo Announce] Sent to followers of ${localUsername}`);
 

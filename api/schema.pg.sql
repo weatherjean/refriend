@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS keys (
 CREATE TABLE IF NOT EXISTS follows (
   follower_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
   following_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'accepted' CHECK (status IN ('pending', 'accepted')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (follower_id, following_id)
 );
@@ -252,15 +253,33 @@ CREATE TABLE IF NOT EXISTS reports (
 -- ============ Triggers ============
 
 -- Trigger to maintain follower_count and following_count
+-- Only counts 'accepted' follows
 CREATE OR REPLACE FUNCTION update_follow_counts()
 RETURNS TRIGGER AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    UPDATE actors SET follower_count = follower_count + 1 WHERE id = NEW.following_id;
-    UPDATE actors SET following_count = following_count + 1 WHERE id = NEW.follower_id;
+    -- Only increment if the new follow is accepted
+    IF NEW.status = 'accepted' THEN
+      UPDATE actors SET follower_count = follower_count + 1 WHERE id = NEW.following_id;
+      UPDATE actors SET following_count = following_count + 1 WHERE id = NEW.follower_id;
+    END IF;
+  ELSIF TG_OP = 'UPDATE' THEN
+    -- Handle status changes
+    IF OLD.status = 'pending' AND NEW.status = 'accepted' THEN
+      -- Pending -> Accepted: increment counts
+      UPDATE actors SET follower_count = follower_count + 1 WHERE id = NEW.following_id;
+      UPDATE actors SET following_count = following_count + 1 WHERE id = NEW.follower_id;
+    ELSIF OLD.status = 'accepted' AND NEW.status = 'pending' THEN
+      -- Accepted -> Pending: decrement counts (edge case)
+      UPDATE actors SET follower_count = GREATEST(0, follower_count - 1) WHERE id = OLD.following_id;
+      UPDATE actors SET following_count = GREATEST(0, following_count - 1) WHERE id = OLD.follower_id;
+    END IF;
   ELSIF TG_OP = 'DELETE' THEN
-    UPDATE actors SET follower_count = GREATEST(0, follower_count - 1) WHERE id = OLD.following_id;
-    UPDATE actors SET following_count = GREATEST(0, following_count - 1) WHERE id = OLD.follower_id;
+    -- Only decrement if the deleted follow was accepted
+    IF OLD.status = 'accepted' THEN
+      UPDATE actors SET follower_count = GREATEST(0, follower_count - 1) WHERE id = OLD.following_id;
+      UPDATE actors SET following_count = GREATEST(0, following_count - 1) WHERE id = OLD.follower_id;
+    END IF;
   END IF;
   RETURN NULL;
 END;
@@ -268,7 +287,7 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_update_follow_counts ON follows;
 CREATE TRIGGER trigger_update_follow_counts
-AFTER INSERT OR DELETE ON follows
+AFTER INSERT OR UPDATE OR DELETE ON follows
 FOR EACH ROW EXECUTE FUNCTION update_follow_counts();
 
 -- ============ Indexes ============
@@ -296,6 +315,7 @@ CREATE INDEX IF NOT EXISTS idx_posts_content_trgm ON posts USING GIN (content gi
 CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
 CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id);
 CREATE INDEX IF NOT EXISTS idx_follows_following_created ON follows(following_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_follows_status ON follows(status) WHERE status = 'accepted';
 
 -- Likes & Boosts
 CREATE INDEX IF NOT EXISTS idx_likes_post_id ON likes(post_id);

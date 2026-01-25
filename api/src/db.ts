@@ -50,6 +50,7 @@ export interface KeyPair {
 export interface Follow {
   follower_id: number;
   following_id: number;
+  status: 'pending' | 'accepted';
   created_at: string;
 }
 
@@ -136,7 +137,8 @@ export class DB {
   private pool: Pool;
 
   constructor(connectionString: string) {
-    this.pool = new Pool(connectionString, 10);
+    const poolSize = parseInt(Deno.env.get("DB_POOL_SIZE") || "20");
+    this.pool = new Pool(connectionString, poolSize);
   }
 
   // Expose pool for community DB
@@ -567,7 +569,7 @@ export class DB {
       const result = await client.queryObject<Actor>`
         SELECT a.* FROM actors a
         JOIN follows f ON a.id = f.follower_id
-        WHERE f.following_id = ${actorId}
+        WHERE f.following_id = ${actorId} AND f.status = 'accepted'
         ORDER BY f.created_at DESC
         LIMIT ${limit}
       `;
@@ -580,7 +582,7 @@ export class DB {
       const result = await client.queryObject<Actor>`
         SELECT a.* FROM actors a
         JOIN follows f ON a.id = f.following_id
-        WHERE f.follower_id = ${actorId}
+        WHERE f.follower_id = ${actorId} AND f.status = 'accepted'
         ORDER BY f.created_at DESC
         LIMIT ${limit}
       `;
@@ -605,6 +607,59 @@ export class DB {
         SELECT following_count FROM actors WHERE id = ${actorId}
       `;
       return result.rows[0]?.following_count ?? 0;
+    });
+  }
+
+  // ============ Paginated Collection Methods (for ActivityPub) ============
+
+  async getFollowersPaginated(actorId: number, limit: number, offset: number): Promise<Actor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        SELECT a.* FROM actors a
+        JOIN follows f ON a.id = f.follower_id
+        WHERE f.following_id = ${actorId} AND f.status = 'accepted'
+        ORDER BY f.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+      return result.rows;
+    });
+  }
+
+  async getFollowingPaginated(actorId: number, limit: number, offset: number): Promise<Actor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        SELECT a.* FROM actors a
+        JOIN follows f ON a.id = f.following_id
+        WHERE f.follower_id = ${actorId} AND f.status = 'accepted'
+        ORDER BY f.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+      return result.rows;
+    });
+  }
+
+  async getLikedPostsPaginated(actorId: number, limit: number, offset: number): Promise<Post[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Post>`
+        SELECT p.* FROM posts p
+        JOIN likes l ON p.id = l.post_id
+        WHERE l.actor_id = ${actorId}
+        ORDER BY l.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+      return result.rows;
+    });
+  }
+
+  async getOutboxActivitiesPaginated(actorId: number, limit: number, offset: number): Promise<Activity[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Activity>`
+        SELECT * FROM activities
+        WHERE actor_id = ${actorId} AND direction = 'outbound'
+        ORDER BY created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+      return result.rows;
     });
   }
 

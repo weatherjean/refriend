@@ -9,6 +9,7 @@ import {
   Group,
   Image,
   createFederation,
+  createExponentialBackoffPolicy,
   Endpoints,
   Follow,
   Like,
@@ -62,6 +63,23 @@ const kv = await Deno.openKv(kvPath);
 export const federation = createFederation<void>({
   kv: new DenoKvStore(kv),
   queue: new DenoKvMessageQueue(kv),
+  onOutboxError: (error, activity) => {
+    const activityId = activity?.id?.href ?? "unknown";
+    console.error(`[Outbox Error] Activity ${activityId}:`, error);
+  },
+  // Custom retry policies with exponential backoff
+  // Inbox: 5 attempts, starting at 1s, max 1 minute
+  inboxRetryPolicy: createExponentialBackoffPolicy({
+    maxAttempts: 5,
+    initialDelay: Temporal.Duration.from({ seconds: 1 }),
+    maxDelay: Temporal.Duration.from({ minutes: 1 }),
+  }),
+  // Outbox: 10 attempts, starting at 1s, max 5 minutes
+  outboxRetryPolicy: createExponentialBackoffPolicy({
+    maxAttempts: 10,
+    initialDelay: Temporal.Duration.from({ seconds: 1 }),
+    maxDelay: Temporal.Duration.from({ minutes: 5 }),
+  }),
 });
 
 // ============ NodeInfo ============
@@ -198,20 +216,32 @@ federation
 
 // ============ Followers Collection ============
 
+const COLLECTION_PAGE_SIZE = 50;
+
 federation
-  .setFollowersDispatcher("/users/{identifier}/followers", async (_ctx, identifier) => {
+  .setFollowersDispatcher("/users/{identifier}/followers", async (_ctx, identifier, cursor) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
 
-    const followers = await db.getFollowers(actor.id);
+    // Parse cursor as offset (default to 0)
+    const offset = cursor ? parseInt(cursor, 10) : 0;
+    if (isNaN(offset)) return null;
+
+    const followers = await db.getFollowersPaginated(actor.id, COLLECTION_PAGE_SIZE, offset);
     // Followers collection requires Recipient objects (id + inboxId)
     const items = followers.map((f) => ({
       id: new URL(f.uri),
       inboxId: new URL(f.inbox_url),
     }));
 
-    return { items };
+    // Calculate next cursor if there are more items
+    const nextCursor = followers.length === COLLECTION_PAGE_SIZE
+      ? String(offset + COLLECTION_PAGE_SIZE)
+      : null;
+
+    return { items, nextCursor };
   })
+  .setFirstCursor(async (_ctx, _identifier) => "0")
   .setCounter(async (_ctx, identifier) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
@@ -221,16 +251,26 @@ federation
 // ============ Following Collection ============
 
 federation
-  .setFollowingDispatcher("/users/{identifier}/following", async (_ctx, identifier) => {
+  .setFollowingDispatcher("/users/{identifier}/following", async (_ctx, identifier, cursor) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
 
-    const following = await db.getFollowing(actor.id);
+    // Parse cursor as offset (default to 0)
+    const offset = cursor ? parseInt(cursor, 10) : 0;
+    if (isNaN(offset)) return null;
+
+    const following = await db.getFollowingPaginated(actor.id, COLLECTION_PAGE_SIZE, offset);
     // Following collection accepts Actor or URL objects
     const items = following.map((f) => new URL(f.uri));
 
-    return { items };
+    // Calculate next cursor if there are more items
+    const nextCursor = following.length === COLLECTION_PAGE_SIZE
+      ? String(offset + COLLECTION_PAGE_SIZE)
+      : null;
+
+    return { items, nextCursor };
   })
+  .setFirstCursor(async (_ctx, _identifier) => "0")
   .setCounter(async (_ctx, identifier) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
@@ -240,16 +280,26 @@ federation
 // ============ Liked Collection ============
 
 federation
-  .setLikedDispatcher("/users/{identifier}/liked", async (ctx, identifier) => {
+  .setLikedDispatcher("/users/{identifier}/liked", async (_ctx, identifier, cursor) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
 
-    const likedPosts = await db.getLikedPosts(actor.id, 50);
+    // Parse cursor as offset (default to 0)
+    const offset = cursor ? parseInt(cursor, 10) : 0;
+    if (isNaN(offset)) return null;
+
+    const likedPosts = await db.getLikedPostsPaginated(actor.id, COLLECTION_PAGE_SIZE, offset);
     // Return URIs of liked posts
     const items = likedPosts.map((p) => new URL(p.uri));
 
-    return { items };
+    // Calculate next cursor if there are more items
+    const nextCursor = likedPosts.length === COLLECTION_PAGE_SIZE
+      ? String(offset + COLLECTION_PAGE_SIZE)
+      : null;
+
+    return { items, nextCursor };
   })
+  .setFirstCursor(async (_ctx, _identifier) => "0")
   .setCounter(async (_ctx, identifier) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
@@ -296,12 +346,16 @@ federation
 // ============ Outbox Collection ============
 
 federation
-  .setOutboxDispatcher("/users/{identifier}/outbox", async (ctx, identifier) => {
+  .setOutboxDispatcher("/users/{identifier}/outbox", async (ctx, identifier, cursor) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
 
+    // Parse cursor as offset (default to 0)
+    const offset = cursor ? parseInt(cursor, 10) : 0;
+    if (isNaN(offset)) return null;
+
     // Get stored activities from the activities table
-    const activities = await db.getOutboxActivities(actor.id, 50);
+    const activities = await db.getOutboxActivitiesPaginated(actor.id, COLLECTION_PAGE_SIZE, offset);
 
     // Parse JSON-LD back into Activity objects (parallel for better performance)
     const items = (await Promise.all(
@@ -322,8 +376,14 @@ federation
     // Get total count of Create activities (posts) for the profile
     const postCount = await db.getPostCountByActor(actor.id);
 
-    return { items, totalItems: postCount };
-  });
+    // Calculate next cursor if there are more items
+    const nextCursor = activities.length === COLLECTION_PAGE_SIZE
+      ? String(offset + COLLECTION_PAGE_SIZE)
+      : null;
+
+    return { items, nextCursor, totalItems: postCount };
+  })
+  .setFirstCursor(async (_ctx, _identifier) => "0");
 
 // ============ Object Dispatcher (Notes/Posts) ============
 
@@ -362,6 +422,10 @@ federation.setObjectDispatcher(Note, "/users/{identifier}/posts/{id}", async (ct
 
 federation
   .setInboxListeners("/users/{identifier}/inbox", "/inbox")
+
+  // Enable per-inbox idempotency to prevent duplicate processing
+  // This ensures activities are deduplicated per inbox, not globally
+  .withIdempotency("per-inbox")
 
   // Handle Create (posts)
   .on(Create, async (ctx, create) => {

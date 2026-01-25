@@ -193,11 +193,12 @@ export async function processCreate(
 
   // For outbound: send to followers and (if reply) to original author
   if (direction === "outbound" && localUsername) {
-    // Send to followers
+    // Send to followers (use shared inbox for efficiency)
     await safeSendActivity(ctx,
       { identifier: localUsername },
       "followers",
-      create
+      create,
+      { preferSharedInbox: true }
     );
     console.log(`[Create] Sent to followers of ${localUsername}`);
 

@@ -15,8 +15,13 @@ import { enrichPostsBatch } from "../posts/service.ts";
 import type { EnrichedPost } from "../posts/types.ts";
 import type { CommunityDB } from "../communities/repository.ts";
 
+export interface SearchUserResult extends SanitizedActor {
+  is_following: boolean;
+  follow_status: 'pending' | 'accepted' | null;
+}
+
 export interface SearchResult {
-  users: SanitizedActor[];
+  users: SearchUserResult[];
   posts: EnrichedPost[];
   postsLowConfidence: boolean;
 }
@@ -41,7 +46,7 @@ export async function search(
 ): Promise<SearchResult> {
   const { type = "all", handleOnly = false, limit = 20, currentActorId, currentUsername, communityDb } = options;
 
-  let users: SanitizedActor[] = [];
+  let users: SearchUserResult[] = [];
   let posts: EnrichedPost[] = [];
   let postsLowConfidence = false;
 
@@ -91,8 +96,15 @@ export async function search(
               if (actor && isActor(actor)) {
                 const persisted = await persistActor(db, domain, actor);
                 if (persisted) {
+                  const followStatus = currentActorId
+                    ? await db.getFollowStatus(currentActorId, persisted.id)
+                    : null;
                   return {
-                    users: [sanitizeActor(persisted, domain)],
+                    users: [{
+                      ...sanitizeActor(persisted, domain),
+                      is_following: followStatus === 'accepted',
+                      follow_status: followStatus,
+                    }],
                     posts: [],
                     postsLowConfidence: false,
                   };
@@ -112,7 +124,16 @@ export async function search(
   // Search local users/communities
   if (type === "all" || type === "users") {
     const actors = await db.searchActors(query, limit, handleOnly);
-    users = actors.map((a) => sanitizeActor(a, domain));
+    users = await Promise.all(actors.map(async (a) => {
+      const followStatus = currentActorId
+        ? await db.getFollowStatus(currentActorId, a.id)
+        : null;
+      return {
+        ...sanitizeActor(a, domain),
+        is_following: followStatus === 'accepted',
+        follow_status: followStatus,
+      };
+    }));
   }
 
   // Search posts (fuzzy search with pg_trgm)
