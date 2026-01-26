@@ -283,6 +283,8 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
                     setLightboxIndex(index);
                     setLightboxOpen(true);
                   }}
+                  disableVideo={linkToPost}
+                  onVideoClick={() => navigate(postLink)}
                 />
               </div>
             )}

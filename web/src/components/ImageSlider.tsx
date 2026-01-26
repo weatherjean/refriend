@@ -4,6 +4,8 @@ import { Attachment } from '../api';
 interface ImageSliderProps {
   attachments: Attachment[];
   onOpenLightbox: (index: number) => void;
+  disableVideo?: boolean;  // Show placeholder instead of video (for feeds)
+  onVideoClick?: () => void;  // Called when video placeholder is clicked
 }
 
 function isVideoType(mediaType: string): boolean {
@@ -11,13 +13,23 @@ function isVideoType(mediaType: string): boolean {
     mediaType === 'image/gifv'; // Imgur's gifv format
 }
 
-export function ImageSlider({ attachments, onOpenLightbox }: ImageSliderProps) {
+function isRemoteUrl(url: string): boolean {
+  return !url.startsWith('/') && !url.startsWith(window.location.origin);
+}
+
+function getProxyUrl(url: string): string {
+  return `/api/proxy/media?url=${encodeURIComponent(url)}`;
+}
+
+export function ImageSlider({ attachments, onOpenLightbox, disableVideo, onVideoClick }: ImageSliderProps) {
   const [sliderIndex, setSliderIndex] = useState(0);
   const [imageLoaded, setImageLoaded] = useState<Record<number, boolean>>({});
   const [imageError, setImageError] = useState<Record<number, boolean>>({});
+  const [useProxy, setUseProxy] = useState<Record<number, boolean>>({});
 
   const currentAttachment = attachments[sliderIndex];
   const isVideo = isVideoType(currentAttachment.media_type);
+  const showVideoPlaceholder = isVideo && disableVideo;
   const isNotSquare = currentAttachment.height && currentAttachment.width &&
     currentAttachment.height !== currentAttachment.width;
 
@@ -38,7 +50,7 @@ export function ImageSlider({ attachments, onOpenLightbox }: ImageSliderProps) {
         }}
       >
         {/* Placeholder spinner or error */}
-        {!imageLoaded[sliderIndex] && !imageError[sliderIndex] && (
+        {!showVideoPlaceholder && !imageLoaded[sliderIndex] && !imageError[sliderIndex] && (
           <div className="position-absolute top-50 start-50 translate-middle">
             <div className="spinner-border text-secondary" role="status">
               <span className="visually-hidden">Loading...</span>
@@ -51,21 +63,61 @@ export function ImageSlider({ attachments, onOpenLightbox }: ImageSliderProps) {
             <div className="small mt-1">Failed to load</div>
           </div>
         )}
-        {isVideo ? (
+        {showVideoPlaceholder ? (
+          <div
+            className="w-100 h-100 position-relative"
+            style={{ backgroundColor: 'var(--bs-dark)' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onVideoClick?.();
+            }}
+          >
+            {/* Try to show first frame via metadata preload */}
+            <video
+              src={useProxy[sliderIndex] ? getProxyUrl(currentAttachment.url) : currentAttachment.url}
+              className="w-100 h-100"
+              style={{ objectFit: 'cover' }}
+              preload="metadata"
+              muted
+              playsInline
+              onError={() => {
+                if (!useProxy[sliderIndex] && isRemoteUrl(currentAttachment.url)) {
+                  setUseProxy(prev => ({ ...prev, [sliderIndex]: true }));
+                }
+              }}
+            />
+            {/* Play button overlay */}
+            <div
+              className="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+              style={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
+            >
+              <i className="bi bi-play-circle-fill text-white" style={{ fontSize: '3rem' }}></i>
+            </div>
+          </div>
+        ) : isVideo ? (
           <video
-            src={currentAttachment.url}
+            src={useProxy[sliderIndex] ? getProxyUrl(currentAttachment.url) : currentAttachment.url}
             className="w-100 h-100"
             style={{
               objectFit: 'cover',
               opacity: imageLoaded[sliderIndex] && !imageError[sliderIndex] ? 1 : 0,
               transition: 'opacity 0.3s',
             }}
-            autoPlay
+            preload="metadata"
             loop
             muted
             playsInline
-            onLoadedData={() => setImageLoaded(prev => ({ ...prev, [sliderIndex]: true }))}
-            onError={() => setImageError(prev => ({ ...prev, [sliderIndex]: true }))}
+            controls
+            onLoadedMetadata={() => setImageLoaded(prev => ({ ...prev, [sliderIndex]: true }))}
+            onError={() => {
+              // If direct load failed and it's a remote URL, try proxy
+              if (!useProxy[sliderIndex] && isRemoteUrl(currentAttachment.url)) {
+                setUseProxy(prev => ({ ...prev, [sliderIndex]: true }));
+              } else {
+                setImageError(prev => ({ ...prev, [sliderIndex]: true }));
+              }
+            }}
           />
         ) : (
           <img
@@ -82,9 +134,14 @@ export function ImageSlider({ attachments, onOpenLightbox }: ImageSliderProps) {
             onError={() => setImageError(prev => ({ ...prev, [sliderIndex]: true }))}
           />
         )}
-        {/* Cropped badge - show if image is not square */}
+        {/* Badges - video indicator, cropped */}
         <div className="position-absolute top-0 end-0 m-2 d-flex gap-1">
-          {isNotSquare && (
+          {isVideo && !showVideoPlaceholder && (
+            <span className="badge bg-dark bg-opacity-75">
+              <i className="bi bi-camera-video-fill"></i>
+            </span>
+          )}
+          {isNotSquare && !showVideoPlaceholder && (
             <span className="badge bg-dark bg-opacity-75">
               <i className="bi bi-crop me-1"></i>cropped
             </span>

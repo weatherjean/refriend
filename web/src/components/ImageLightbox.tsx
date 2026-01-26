@@ -14,8 +14,17 @@ function isVideoType(mediaType: string): boolean {
     mediaType === 'image/gifv'; // Imgur's gifv format
 }
 
+function isRemoteUrl(url: string): boolean {
+  return !url.startsWith('/') && !url.startsWith(window.location.origin);
+}
+
+function getProxyUrl(url: string): string {
+  return `/api/proxy/media?url=${encodeURIComponent(url)}`;
+}
+
 export function ImageLightbox({ attachments, initialIndex, isOpen, onClose }: ImageLightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [useProxy, setUseProxy] = useState<Record<number, boolean>>({});
 
   // Reset index when opened with a new initial index
   useEffect(() => {
@@ -91,14 +100,19 @@ export function ImageLightbox({ attachments, initialIndex, isOpen, onClose }: Im
         )}
         {isVideoType(attachments[currentIndex].media_type) ? (
           <video
-            src={attachments[currentIndex].url}
+            src={useProxy[currentIndex] ? getProxyUrl(attachments[currentIndex].url) : attachments[currentIndex].url}
             style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }}
             onClick={(e) => e.stopPropagation()}
-            autoPlay
+            preload="metadata"
             loop
-            muted
             playsInline
             controls
+            onError={() => {
+              const url = attachments[currentIndex].url;
+              if (!useProxy[currentIndex] && isRemoteUrl(url)) {
+                setUseProxy(prev => ({ ...prev, [currentIndex]: true }));
+              }
+            }}
           />
         ) : (
           <img

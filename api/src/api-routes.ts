@@ -116,5 +116,156 @@ export function createApiRoutes(
   // Tags: /tags/*
   api.route("/", createTagRoutes());
 
+  // Media proxy for remote videos/images that block CORS
+  // Only proxies media that failed direct loading due to CORS
+  api.get("/proxy/media", async (c) => {
+    const url = c.req.query("url");
+    if (!url) {
+      return c.json({ error: "Missing url parameter" }, 400);
+    }
+
+    // Validate URL
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return c.json({ error: "Invalid URL" }, 400);
+    }
+
+    // Only allow http/https
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      return c.json({ error: "Invalid protocol" }, 400);
+    }
+
+    // Block private/internal hostnames to prevent SSRF
+    const hostname = parsedUrl.hostname.toLowerCase();
+    const isPrivateHostname = (h: string): boolean => {
+      // Localhost variants
+      if (h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "0.0.0.0") return true;
+      // .local domains
+      if (h.endsWith(".local") || h.endsWith(".localhost")) return true;
+      // Check for IP addresses
+      const ipv4Match = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+      if (ipv4Match) {
+        const [, a, b, c] = ipv4Match.map(Number);
+        // 10.x.x.x
+        if (a === 10) return true;
+        // 172.16.x.x - 172.31.x.x
+        if (a === 172 && b >= 16 && b <= 31) return true;
+        // 192.168.x.x
+        if (a === 192 && b === 168) return true;
+        // 169.254.x.x (link-local)
+        if (a === 169 && b === 254) return true;
+        // 127.x.x.x (loopback)
+        if (a === 127) return true;
+        // 0.x.x.x
+        if (a === 0) return true;
+      }
+      // IPv6 private ranges (simplified check)
+      if (h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80")) return true;
+      return false;
+    };
+
+    if (isPrivateHostname(hostname)) {
+      return c.json({ error: "Private addresses not allowed" }, 400);
+    }
+
+    // Size limit: 100MB
+    const MAX_SIZE = 100 * 1024 * 1024;
+
+    try {
+      // Use AbortController for timeout
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; Riff/1.0)",
+        },
+        signal: controller.signal,
+        redirect: "manual", // Don't follow redirects automatically (SSRF protection)
+      });
+
+      clearTimeout(timeout);
+
+      // Handle redirects manually - check if redirect target is safe
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (location) {
+          try {
+            const redirectUrl = new URL(location, url);
+            if (isPrivateHostname(redirectUrl.hostname.toLowerCase())) {
+              return c.json({ error: "Redirect to private address blocked" }, 400);
+            }
+            // Allow redirect by returning a redirect response to client
+            // Client will retry with new URL through this same proxy
+            return c.json({ error: "Redirect not followed", redirect: redirectUrl.href }, 302);
+          } catch {
+            return c.json({ error: "Invalid redirect" }, 400);
+          }
+        }
+      }
+
+      if (!response.ok) {
+        return c.json({ error: `Upstream error: ${response.status}` }, response.status as 400);
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+
+      // Only allow video and image types
+      if (!contentType.startsWith("video/") && !contentType.startsWith("image/")) {
+        return c.json({ error: "Only video and image types allowed" }, 400);
+      }
+
+      // Check content length if provided
+      const contentLength = response.headers.get("content-length");
+      if (contentLength && parseInt(contentLength) > MAX_SIZE) {
+        return c.json({ error: "File too large (max 100MB)" }, 400);
+      }
+
+      // Stream the response with size limit enforcement
+      const reader = response.body?.getReader();
+      if (!reader) {
+        return c.json({ error: "No response body" }, 502);
+      }
+
+      let totalBytes = 0;
+      const stream = new ReadableStream({
+        async pull(controller) {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            return;
+          }
+          totalBytes += value.length;
+          if (totalBytes > MAX_SIZE) {
+            controller.error(new Error("Size limit exceeded"));
+            reader.cancel();
+            return;
+          }
+          controller.enqueue(value);
+        },
+        cancel() {
+          reader.cancel();
+        },
+      });
+
+      return new Response(stream, {
+        status: 200,
+        headers: {
+          "Content-Type": contentType,
+          ...(contentLength && { "Content-Length": contentLength }),
+          "Cache-Control": "public, max-age=86400",
+        },
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return c.json({ error: "Request timeout" }, 504);
+      }
+      console.error("[MediaProxy] Error fetching:", err);
+      return c.json({ error: "Failed to fetch media" }, 502);
+    }
+  });
+
   return api;
 }
