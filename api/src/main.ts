@@ -96,6 +96,22 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+// Redirect /@username to profile page
+// This handles the ActivityPub actor URL (advertised in the 'url' field)
+// Must be before Fedify middleware
+app.get("/:username{@.+}", async (c) => {
+  const usernameWithAt = c.req.param("username");
+  const username = usernameWithAt.slice(1); // Remove leading @
+  const domain = c.get("domain");
+
+  // Check if this is a community (Group) or user (Person)
+  const actor = await db.getActorByUsername(username);
+  if (actor?.actor_type === "Group") {
+    return c.redirect(`/c/${username}`);
+  }
+  return c.redirect(`/u/@${username}@${domain}`);
+});
+
 // Fedify middleware handles ActivityPub routes (including WebFinger)
 app.use(fedifyIntegration(federation, () => undefined));
 

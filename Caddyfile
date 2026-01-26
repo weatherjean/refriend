@@ -19,7 +19,7 @@
         reverse_proxy api:8000
     }
 
-    # Serve static files directly
+    # Serve static files (SPA with fallback to index.html)
     handle {
         root * /srv/web
         try_files {path} /index.html
