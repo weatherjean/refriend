@@ -88,15 +88,15 @@ export async function processContent(db: DB, text: string, domain: string): Prom
 
     if (lookup?.isCommunity) {
       // Community - link to /c/name
-      return `<a href="/#/c/${name}" class="mention">@${handle}</a>`;
+      return `<a href="/c/${name}" class="mention">@${handle}</a>`;
     } else {
       // User (or unknown/remote) - link to /u/handle
-      return `<a href="/#/u/${fullHandle}" class="mention">@${handle}</a>`;
+      return `<a href="/u/${fullHandle}" class="mention">@${handle}</a>`;
     }
   });
 
   // Convert #hashtags to links
-  html = html.replace(/#([\w]+)/g, '<a href="/#/tags/$1" class="hashtag">#$1</a>');
+  html = html.replace(/#([\w]+)/g, '<a href="/tags/$1" class="hashtag">#$1</a>');
 
   // Convert newlines to <br>
   html = html.replace(/\n/g, "<br>");

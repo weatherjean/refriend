@@ -11,6 +11,7 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web/dist:/srv/web:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -29,7 +30,6 @@ services:
       DB_POOL_SIZE: "40"
       DOMAIN: ${DOMAIN}
       PORT: "8000"
-      STATIC_DIR: /app/static
       ALLOWED_ORIGINS: https://${DOMAIN}
       S3_BUCKET: ${S3_BUCKET}
       S3_REGION: ${S3_REGION}
@@ -47,7 +47,6 @@ services:
       # Trust Caddy's X-Forwarded-For headers for rate limiting
       TRUST_PROXY: "true"
     volumes:
-      - ./web/dist:/app/static:ro
       - kvdata:/data
     healthcheck:
       test: ["CMD", "deno", "eval", "const r = await fetch('http://localhost:8000/health'); Deno.exit(r.ok ? 0 : 1)"]

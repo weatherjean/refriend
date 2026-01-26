@@ -39,7 +39,8 @@ docker compose exec db psql -U riff
 
 ### Federation Testing
 ```bash
-ngrok http 8000
+# Point ngrok to Vite dev server (includes UI)
+ngrok http 5173
 # Search from Mastodon: @username@your-ngrok-url.ngrok-free.app
 ```
 
@@ -65,14 +66,14 @@ api/
   schema.pg.sql       # PostgreSQL schema
 web/
   src/                # React frontend
-  dist/               # Built static files (served by API)
+  dist/               # Built static files (served by Caddy in prod)
 ```
 
 ### Backend Patterns
 
 - **Single-file modules:** Core logic consolidated in `api.ts`, `federation.ts`, `db.ts`
 - **Fedify integration:** ActivityPub federation via `@fedify/fedify` library
-- **Static serving:** Frontend built to `web/dist/`, served by Hono
+- **Static serving:** In production, Caddy serves `web/dist/` and proxies API routes. In development, Vite serves frontend and proxies to API.
 
 ### Environment Variables
 
@@ -80,5 +81,5 @@ web/
 |----------|---------|-------------|
 | `DATABASE_URL` | - | PostgreSQL connection string |
 | `PORT` | `8000` | API server port |
-| `STATIC_DIR` | `../web/dist` | Frontend static files |
+| `STATIC_DIR` | - | Optional: serve static files from this directory (not used when Caddy/Vite handles static) |
 | `DENO_KV_PATH` | - | Path for persistent Deno KV storage (e.g., `/data/kv.sqlite`) |

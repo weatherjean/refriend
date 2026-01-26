@@ -1,10 +1,7 @@
 # Caddyfile for Riff
-# Replace YOURDOMAIN.COM with your actual domain
 # Caddy automatically handles Let's Encrypt SSL certificates
 
 {$DOMAIN:localhost} {
-    reverse_proxy api:8000
-
     # Enable compression
     encode gzip zstd
 
@@ -12,5 +9,20 @@
     log {
         output stdout
         format console
+    }
+
+    # Proxy API and federation routes to the backend
+    @backend {
+        path /api/* /.well-known/* /users/* /nodeinfo/* /inbox /@* /health
+    }
+    handle @backend {
+        reverse_proxy api:8000
+    }
+
+    # Serve static files directly
+    handle {
+        root * /srv/web
+        try_files {path} /index.html
+        file_server
     }
 }

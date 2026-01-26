@@ -21,7 +21,7 @@ import { logger } from "./logger.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
 const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://riff:riff@localhost:5432/riff";
-const STATIC_DIR = Deno.env.get("STATIC_DIR") || "../web/dist";
+const STATIC_DIR = Deno.env.get("STATIC_DIR");
 
 // Log unhandled rejections (but let them crash in production - restart policy handles recovery)
 globalThis.addEventListener("unhandledrejection", (e) => {
@@ -94,22 +94,6 @@ app.use("*", async (c, next) => {
   c.set("domain", domain);
 
   await next();
-});
-
-// Redirect /@username to hash router profile page
-// This handles mention links from ActivityPub that use our advertised profile URLs
-// Must be before Fedify middleware
-app.get("/:username{@.+}", async (c) => {
-  const usernameWithAt = c.req.param("username");
-  const username = usernameWithAt.slice(1); // Remove leading @
-  const domain = new URL(c.req.url).host;
-
-  // Check if this is a community (Group) or user (Person)
-  const actor = await db.getActorByUsername(username);
-  if (actor?.actor_type === "Group") {
-    return c.redirect(`/#/c/${username}`);
-  }
-  return c.redirect(`/#/u/@${username}@${domain}`);
 });
 
 // Fedify middleware handles ActivityPub routes (including WebFinger)
@@ -202,9 +186,10 @@ app.use("/*", async (c, next) => {
   }
 });
 
-// Serve static files from web/dist (built frontend)
-// Hash router handles client-side routing, so we just serve static files
-app.use("/*", serveStatic({ root: STATIC_DIR }));
+// Optionally serve static files (for standalone deployments without Caddy/nginx)
+if (STATIC_DIR) {
+  app.use("/*", serveStatic({ root: STATIC_DIR }));
+}
 
 // Graceful shutdown handling
 let shuttingDown = false;
