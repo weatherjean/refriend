@@ -1000,34 +1000,50 @@ export class DB {
   async getHomeFeedWithActor(actorId: number, limit = 20, before?: number, sort: 'new' | 'hot' = 'new'): Promise<PostWithActor[]> {
     return this.query(async (client) => {
       // For hot sort, we don't use cursor pagination (just return top N by hot_score)
-      const orderBy = sort === 'hot' ? 'p.hot_score DESC, p.id DESC' : 'p.id DESC';
+      const orderBy = sort === 'hot' ? 'hot_score DESC, id DESC' : 'id DESC';
+      const finalOrderBy = sort === 'hot' ? 'p.hot_score DESC, p.id DESC' : 'p.id DESC';
       const useBefore = sort === 'new' && before;
+      // Oversample each branch then merge - trades edge-case correctness for performance
+      const branchLimit = limit * 3;
 
-      // Use CTE to first get distinct post IDs, then join and order
       const baseQuery = `
         WITH timeline_posts AS (
           -- Posts from followed users (Person actors)
-          SELECT DISTINCT p.id FROM posts p
-          JOIN follows f ON p.actor_id = f.following_id
-          JOIN actors following_actor ON f.following_id = following_actor.id
-          WHERE f.follower_id = $1 AND p.in_reply_to_id IS NULL
-            AND following_actor.actor_type = 'Person'
-            ${useBefore ? 'AND p.id < $2' : ''}
+          (SELECT p.id, p.hot_score FROM posts p
+           JOIN follows f ON p.actor_id = f.following_id
+           JOIN actors a ON f.following_id = a.id
+           WHERE f.follower_id = $1 AND p.in_reply_to_id IS NULL AND a.actor_type = 'Person'
+             ${useBefore ? 'AND p.id < $2' : ''}
+           ORDER BY ${orderBy} LIMIT ${branchLimit})
 
-          UNION
+          UNION ALL
 
-          -- Approved posts from joined communities (Group actors)
-          SELECT DISTINCT p.id FROM posts p
-          JOIN community_posts cp ON p.id = cp.post_id
-          JOIN follows f ON cp.community_id = f.following_id
-          WHERE f.follower_id = $1 AND cp.status = 'approved' AND p.in_reply_to_id IS NULL
-            ${useBefore ? 'AND p.id < $2' : ''}
+          -- Approved posts from joined communities
+          (SELECT p.id, p.hot_score FROM posts p
+           JOIN community_posts cp ON p.id = cp.post_id
+           JOIN follows f ON cp.community_id = f.following_id
+           WHERE f.follower_id = $1 AND cp.status = 'approved' AND p.in_reply_to_id IS NULL
+             ${useBefore ? 'AND p.id < $2' : ''}
+           ORDER BY ${orderBy} LIMIT ${branchLimit})
+
+          UNION ALL
+
+          -- Posts boosted by followed users
+          (SELECT p.id, p.hot_score FROM posts p
+           JOIN boosts b ON p.id = b.post_id
+           JOIN follows f ON b.actor_id = f.following_id
+           WHERE f.follower_id = $1 AND p.in_reply_to_id IS NULL
+             ${useBefore ? 'AND p.id < $2' : ''}
+           ORDER BY ${orderBy} LIMIT ${branchLimit})
+        ),
+        deduped AS (
+          SELECT DISTINCT ON (id) id, hot_score FROM timeline_posts
         )
         SELECT ${this.postWithActorSelect}
-        FROM timeline_posts tp
-        JOIN posts p ON p.id = tp.id
+        FROM deduped d
+        JOIN posts p ON p.id = d.id
         JOIN actors a ON p.actor_id = a.id
-        ORDER BY ${orderBy}
+        ORDER BY ${finalOrderBy}
         LIMIT ${useBefore ? '$3' : '$2'}
       `;
       const params = useBefore ? [actorId, before, limit] : [actorId, limit];
