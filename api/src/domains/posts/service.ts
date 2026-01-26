@@ -4,7 +4,7 @@
  * Business logic for posts including enrichment.
  */
 
-import type { DB } from "../../db.ts";
+import type { DB, PostWithActorAndBooster, BoosterInfo } from "../../db.ts";
 import type { Post, PostWithActor, Actor, LinkPreview, VideoEmbed } from "../../shared/types.ts";
 import * as repository from "./repository.ts";
 import type { EnrichedPost, PostsListResponse, CreatePostInput, AttachmentInput } from "./types.ts";
@@ -542,7 +542,30 @@ export async function getTimelinePosts(
   const resultPosts = hasMore ? posts.slice(0, limit) : posts;
   const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : null;
 
+  // Build a map of post id -> booster info for posts that were boosted into the timeline
+  const boosterMap = new Map<number, BoosterInfo>();
+  for (const post of resultPosts) {
+    if (post.booster) {
+      boosterMap.set(post.id, post.booster);
+    }
+  }
+
   const enrichedPosts = await enrichPostsBatch(db, resultPosts, actorId, domain, communityDb);
+
+  // Attach booster info to enriched posts
+  for (const enrichedPost of enrichedPosts) {
+    // Find the original post by public_id to get internal id
+    const originalPost = resultPosts.find(p => p.public_id === enrichedPost.id);
+    if (originalPost && boosterMap.has(originalPost.id)) {
+      const booster = boosterMap.get(originalPost.id)!;
+      enrichedPost.boosted_by = {
+        id: booster.public_id,
+        handle: booster.handle,
+        name: booster.name,
+        avatar_url: booster.avatar_url,
+      };
+    }
+  }
 
   return {
     posts: enrichedPosts,

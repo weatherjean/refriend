@@ -78,7 +78,7 @@ export function TermsPage() {
             </p>
             <p className="legal-text mb-3">
               <strong>If you believe your copyright has been infringed:</strong> Send a DMCA takedown
-              notice to <a href="mailto:contact@riff-social.com" className="legal-link">contact@riff-social.com</a> with:
+              notice to <a href="mailto:riff-social@pm.me" className="legal-link">riff-social@pm.me</a> with:
             </p>
             <ul className="legal-list mb-3">
               <li>Identification of the copyrighted work</li>
@@ -213,7 +213,7 @@ export function TermsPage() {
             <h5 className="mb-3">Contact</h5>
             <p className="legal-text mb-0">
               Questions about these terms? Contact us at{' '}
-              <a href="mailto:contact@riff-social.com" className="legal-link">contact@riff-social.com</a>.
+              <a href="mailto:riff-social@pm.me" className="legal-link">riff-social@pm.me</a>.
             </p>
           </div>
         </div>

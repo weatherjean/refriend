@@ -111,6 +111,17 @@ export interface PostWithActor extends Post {
   author: Actor;
 }
 
+export interface BoosterInfo {
+  public_id: string;
+  handle: string;
+  name: string | null;
+  avatar_url: string | null;
+}
+
+export interface PostWithActorAndBooster extends PostWithActor {
+  booster?: BoosterInfo;
+}
+
 export interface Hashtag {
   id: number;
   name: string;
@@ -950,6 +961,23 @@ export class DB {
     };
   }
 
+  private parsePostWithActorAndBooster(row: Record<string, unknown>): PostWithActorAndBooster {
+    const post = this.parsePostWithActor(row);
+    const boosterPublicId = row.booster_public_id as string | null;
+    if (boosterPublicId) {
+      return {
+        ...post,
+        booster: {
+          public_id: boosterPublicId,
+          handle: row.booster_handle as string,
+          name: row.booster_name as string | null,
+          avatar_url: row.booster_avatar_url as string | null,
+        },
+      };
+    }
+    return post;
+  }
+
   private readonly postWithActorSelect = `
     p.id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.community_id, p.addressed_to, p.likes_count, p.sensitive, p.link_preview, p.video_embed, p.created_at,
     a.id as author_id, a.public_id as author_public_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
@@ -997,7 +1025,7 @@ export class DB {
     });
   }
 
-  async getHomeFeedWithActor(actorId: number, limit = 20, before?: number, sort: 'new' | 'hot' = 'new'): Promise<PostWithActor[]> {
+  async getHomeFeedWithActor(actorId: number, limit = 20, before?: number, sort: 'new' | 'hot' = 'new'): Promise<PostWithActorAndBooster[]> {
     return this.query(async (client) => {
       // For hot sort, we don't use cursor pagination (just return top N by hot_score)
       const orderBy = sort === 'hot' ? 'hot_score DESC, id DESC' : 'id DESC';
@@ -1008,47 +1036,53 @@ export class DB {
 
       const baseQuery = `
         WITH timeline_posts AS (
-          -- Posts from followed users (Person actors)
-          (SELECT p.id, p.hot_score FROM posts p
+          -- Posts from followed users (Person actors) - no booster
+          (SELECT p.id, p.hot_score, NULL::integer as booster_actor_id FROM posts p
            JOIN follows f ON p.actor_id = f.following_id
            JOIN actors a ON f.following_id = a.id
-           WHERE f.follower_id = $1 AND p.in_reply_to_id IS NULL AND a.actor_type = 'Person'
+           WHERE f.follower_id = $1 AND f.status = 'accepted' AND p.in_reply_to_id IS NULL AND a.actor_type = 'Person'
              ${useBefore ? 'AND p.id < $2' : ''}
            ORDER BY ${orderBy} LIMIT ${branchLimit})
 
           UNION ALL
 
-          -- Approved posts from joined communities
-          (SELECT p.id, p.hot_score FROM posts p
+          -- Approved posts from joined communities - no booster
+          (SELECT p.id, p.hot_score, NULL::integer as booster_actor_id FROM posts p
            JOIN community_posts cp ON p.id = cp.post_id
            JOIN follows f ON cp.community_id = f.following_id
-           WHERE f.follower_id = $1 AND cp.status = 'approved' AND p.in_reply_to_id IS NULL
+           WHERE f.follower_id = $1 AND f.status = 'accepted' AND cp.status = 'approved' AND p.in_reply_to_id IS NULL
              ${useBefore ? 'AND p.id < $2' : ''}
            ORDER BY ${orderBy} LIMIT ${branchLimit})
 
           UNION ALL
 
-          -- Posts boosted by followed users
-          (SELECT p.id, p.hot_score FROM posts p
+          -- Posts boosted by followed users - track booster
+          (SELECT p.id, p.hot_score, b.actor_id as booster_actor_id FROM posts p
            JOIN boosts b ON p.id = b.post_id
            JOIN follows f ON b.actor_id = f.following_id
-           WHERE f.follower_id = $1 AND p.in_reply_to_id IS NULL
+           WHERE f.follower_id = $1 AND f.status = 'accepted' AND p.in_reply_to_id IS NULL
              ${useBefore ? 'AND p.id < $2' : ''}
            ORDER BY ${orderBy} LIMIT ${branchLimit})
         ),
         deduped AS (
-          SELECT DISTINCT ON (id) id, hot_score FROM timeline_posts
+          -- Prefer direct posts over boosts (NULLS FIRST means non-boosted entries win)
+          SELECT DISTINCT ON (id) id, hot_score, booster_actor_id
+          FROM timeline_posts
+          ORDER BY id, booster_actor_id NULLS FIRST
         )
-        SELECT ${this.postWithActorSelect}
+        SELECT ${this.postWithActorSelect},
+               ba.public_id as booster_public_id, ba.handle as booster_handle,
+               ba.name as booster_name, ba.avatar_url as booster_avatar_url
         FROM deduped d
         JOIN posts p ON p.id = d.id
         JOIN actors a ON p.actor_id = a.id
+        LEFT JOIN actors ba ON d.booster_actor_id = ba.id
         ORDER BY ${finalOrderBy}
         LIMIT ${useBefore ? '$3' : '$2'}
       `;
       const params = useBefore ? [actorId, before, limit] : [actorId, limit];
       const result = await client.queryObject(baseQuery, params);
-      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+      return result.rows.map(row => this.parsePostWithActorAndBooster(row as Record<string, unknown>));
     });
   }
 

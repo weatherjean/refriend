@@ -449,6 +449,11 @@ export async function updateAvatar(
     return { success: false, error: "No image provided" };
   }
 
+  // Extract format from data URL (e.g., "data:image/webp;base64,..." -> "webp")
+  const formatMatch = imageBase64.match(/^data:image\/(\w+);base64,/);
+  const format = formatMatch?.[1] || "webp";
+  const extension = format === "jpeg" ? "jpg" : format;
+
   // Decode base64 image
   const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
   const imageData = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
@@ -458,8 +463,8 @@ export async function updateAvatar(
     return { success: false, error: "Image too large (max 2MB)" };
   }
 
-  // Generate filename
-  const filename = `${actorId}-${Date.now()}.webp`;
+  // Generate filename with correct extension
+  const filename = `${actorId}-${Date.now()}.${extension}`;
 
   // Save to storage
   const avatarUrl = await saveAvatarFn(filename, imageData);
@@ -718,11 +723,7 @@ export async function getActorBoostedPosts(
     return null;
   }
 
-  // Only local actors have boost data
-  if (actor.user_id === null) {
-    return { posts: [], next_cursor: null };
-  }
-
+  // Both local and remote actors can have boost data (from Announce activities)
   const posts = await db.getBoostedPostsWithActor(actor.id, limit + 1, before);
 
   const hasMore = posts.length > limit;

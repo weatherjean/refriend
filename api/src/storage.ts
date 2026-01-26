@@ -106,6 +106,7 @@ function validateMagicBytes(data: Uint8Array, expectedType: string): boolean {
   return false;
 }
 
+
 /**
  * Initialize storage - validates S3 config
  */

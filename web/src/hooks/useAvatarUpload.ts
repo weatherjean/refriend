@@ -24,7 +24,7 @@ export interface UseAvatarUploadOptions {
 
 export function useAvatarUpload({
   initialPreview = null,
-  maxSize = 100,
+  maxSize = 300,  // 300px looks crisp on 3x Retina displays at 100px display size
 }: UseAvatarUploadOptions = {}): UseAvatarUploadResult {
   const [preview, setPreview] = useState<string | null>(initialPreview);
   const [data, setData] = useState<string | null>(null);

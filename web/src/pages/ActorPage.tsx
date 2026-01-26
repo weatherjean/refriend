@@ -283,7 +283,7 @@ export function ActorPage() {
 
       <ProfileTabs
         activeTab={activeTab}
-        showBoosts={actor.is_local}
+        showBoosts={true}
         showSettings={isOwnProfile}
         onTabChange={setActiveTab}
       />

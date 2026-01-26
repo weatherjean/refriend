@@ -183,7 +183,7 @@ function LandingPage() {
                 that removes all your data from our servers.
               </p>
               <p className="landing-text mb-0">
-                For serious issues, contact us at <a href="mailto:contact@riff-social.com" className="landing-link">contact@riff-social.com</a>.
+                For serious issues, contact us at <a href="mailto:riff-social@pm.me" className="landing-link">riff-social@pm.me</a>.
               </p>
             </div>
           </div>

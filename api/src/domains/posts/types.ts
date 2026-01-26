@@ -90,6 +90,12 @@ export interface EnrichedPost {
     handle: string;
     avatar_url: string | null;
   } | null;
+  boosted_by?: {
+    id: string;
+    handle: string;
+    name: string | null;
+    avatar_url: string | null;
+  };
 }
 
 export interface PostsListResponse {

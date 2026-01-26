@@ -31,9 +31,20 @@ export async function fetchAndStoreNote(
   console.log(`[Reply] Fetching parent post: ${noteUri}`);
 
   try {
-    // Fetch the Note from remote
+    // Fetch the document from remote
     const docLoader = ctx.documentLoader;
-    const note = await Note.fromJsonLd(await docLoader(noteUri).then(r => r.document), {
+    const { document } = await docLoader(noteUri);
+
+    // Check if it's actually a Note before trying to parse
+    // deno-lint-ignore no-explicit-any
+    const docType = (document as any)?.type || (document as any)?.['@type'];
+    const typeStr = Array.isArray(docType) ? docType[0] : docType;
+    if (typeStr && !['Note', 'Article', 'Page'].includes(typeStr)) {
+      console.log(`[Reply] Skipping non-Note object (${typeStr}): ${noteUri}`);
+      return null;
+    }
+
+    const note = await Note.fromJsonLd(document, {
       documentLoader: docLoader,
       contextLoader: ctx.contextLoader,
     });

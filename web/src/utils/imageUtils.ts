@@ -55,8 +55,13 @@ export async function resizeImageWithDimensions(
       canvas.height = height;
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Convert to WebP (quality 0.85 is a good balance)
-      const dataUrl = canvas.toDataURL('image/webp', 0.85);
+      // Try WebP first, fall back to JPEG if browser doesn't support WebP encoding
+      // (Safari on iOS/macOS doesn't support WebP encoding and silently returns PNG)
+      let dataUrl = canvas.toDataURL('image/webp', 0.85);
+      if (!dataUrl.startsWith('data:image/webp')) {
+        // Browser doesn't support WebP encoding, use JPEG instead
+        dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      }
       resolve({ dataUrl, width, height });
     };
 
@@ -91,30 +96,26 @@ export async function resizeAndConvertToWebP(
     }
 
     img.onload = () => {
-      // Calculate new dimensions (maintain aspect ratio, fit in maxSize square)
-      let width = img.width;
-      let height = img.height;
+      // Center-crop to square, then resize to maxSize
+      const size = Math.min(img.width, img.height);
+      const srcX = (img.width - size) / 2;
+      const srcY = (img.height - size) / 2;
 
-      if (width > height) {
-        if (width > maxSize) {
-          height = Math.round((height * maxSize) / width);
-          width = maxSize;
-        }
-      } else {
-        if (height > maxSize) {
-          width = Math.round((width * maxSize) / height);
-          height = maxSize;
-        }
+      // Set canvas to target square size
+      canvas.width = maxSize;
+      canvas.height = maxSize;
+
+      // Draw center-cropped square, scaled to maxSize
+      ctx.drawImage(img, srcX, srcY, size, size, 0, 0, maxSize, maxSize);
+
+      // Try WebP first, fall back to JPEG if browser doesn't support WebP encoding
+      // (Safari on iOS/macOS doesn't support WebP encoding and silently returns PNG)
+      let dataUrl = canvas.toDataURL('image/webp', 0.85);
+      if (!dataUrl.startsWith('data:image/webp')) {
+        // Browser doesn't support WebP encoding, use JPEG instead
+        dataUrl = canvas.toDataURL('image/jpeg', 0.85);
       }
-
-      // Set canvas size and draw resized image
-      canvas.width = width;
-      canvas.height = height;
-      ctx.drawImage(img, 0, 0, width, height);
-
-      // Convert to WebP (quality 0.85 is a good balance)
-      const webpDataUrl = canvas.toDataURL('image/webp', 0.85);
-      resolve(webpDataUrl);
+      resolve(dataUrl);
     };
 
     img.onerror = () => {

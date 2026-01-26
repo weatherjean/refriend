@@ -20,7 +20,7 @@ export function PrivacyPolicyPage() {
               servers using the ActivityPub protocol. Our servers are hosted in Europe.
             </p>
             <p className="legal-text mb-0">
-              Contact: <a href="mailto:contact@riff-social.com" className="legal-link">contact@riff-social.com</a>
+              Contact: <a href="mailto:riff-social@pm.me" className="legal-link">riff-social@pm.me</a>
             </p>
           </div>
         </div>
@@ -171,7 +171,7 @@ export function PrivacyPolicyPage() {
             <h5 className="mb-3">Contact</h5>
             <p className="legal-text mb-0">
               For privacy-related questions or to exercise your rights, contact us at{' '}
-              <a href="mailto:contact@riff-social.com" className="legal-link">contact@riff-social.com</a>.
+              <a href="mailto:riff-social@pm.me" className="legal-link">riff-social@pm.me</a>.
             </p>
           </div>
         </div>

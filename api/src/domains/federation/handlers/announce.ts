@@ -46,6 +46,15 @@ export async function processAnnounce(
   const objectUri = announce.objectId?.href;
   if (!objectUri) return;
 
+  // Skip non-Note activities (Lemmy communities announce Likes, etc.)
+  // These URLs typically contain /activities/like/, /activities/dislike/, etc.
+  if (objectUri.includes('/activities/like') ||
+      objectUri.includes('/activities/dislike') ||
+      objectUri.includes('/activities/undo')) {
+    // Silently skip - these are not posts we can display
+    return;
+  }
+
   // Try to find the post locally, or fetch it if remote
   let post = await db.getPostByUri(objectUri);
   if (!post) {

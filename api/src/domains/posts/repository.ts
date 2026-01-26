@@ -4,7 +4,7 @@
  * Database operations for posts.
  */
 
-import type { DB } from "../../db.ts";
+import type { DB, PostWithActorAndBooster } from "../../db.ts";
 import type { Post, PostWithActor, LinkPreview, VideoEmbed } from "../../shared/types.ts";
 
 // ============ Read Operations ============
@@ -62,7 +62,7 @@ export async function getTimelinePosts(
   limit: number,
   before?: number,
   sort: "new" | "hot" = "new"
-): Promise<PostWithActor[]> {
+): Promise<PostWithActorAndBooster[]> {
   return db.getHomeFeedWithActor(actorId, limit, before, sort);
 }
 

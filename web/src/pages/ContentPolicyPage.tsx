@@ -140,7 +140,7 @@ export function ContentPolicyPage() {
             <h5 className="mb-3">Appeals</h5>
             <p className="legal-text mb-0">
               If you believe a moderation decision was made in error, you can appeal by contacting us
-              at <a href="mailto:contact@riff-social.com" className="legal-link">contact@riff-social.com</a>.
+              at <a href="mailto:riff-social@pm.me" className="legal-link">riff-social@pm.me</a>.
               Please include your username and explain why you believe the decision should be reconsidered.
               We review all appeals and will respond within a reasonable timeframe.
             </p>
@@ -153,7 +153,7 @@ export function ContentPolicyPage() {
             <h5 className="mb-3">Questions?</h5>
             <p className="legal-text mb-0">
               If you have questions about this policy, contact us at{' '}
-              <a href="mailto:contact@riff-social.com" className="legal-link">contact@riff-social.com</a>.
+              <a href="mailto:riff-social@pm.me" className="legal-link">riff-social@pm.me</a>.
             </p>
           </div>
         </div>

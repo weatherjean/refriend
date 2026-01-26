@@ -9,6 +9,11 @@ interface ImageLightboxProps {
   onClose: () => void;
 }
 
+function isVideoType(mediaType: string): boolean {
+  return mediaType.startsWith('video/') ||
+    mediaType === 'image/gifv'; // Imgur's gifv format
+}
+
 export function ImageLightbox({ attachments, initialIndex, isOpen, onClose }: ImageLightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
@@ -84,12 +89,25 @@ export function ImageLightbox({ attachments, initialIndex, isOpen, onClose }: Im
             </button>
           </>
         )}
-        <img
-          src={attachments[currentIndex].url}
-          alt={attachments[currentIndex].alt_text ?? ''}
-          style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }}
-          onClick={(e) => e.stopPropagation()}
-        />
+        {isVideoType(attachments[currentIndex].media_type) ? (
+          <video
+            src={attachments[currentIndex].url}
+            style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }}
+            onClick={(e) => e.stopPropagation()}
+            autoPlay
+            loop
+            muted
+            playsInline
+            controls
+          />
+        ) : (
+          <img
+            src={attachments[currentIndex].url}
+            alt={attachments[currentIndex].alt_text ?? ''}
+            style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        )}
         {attachments.length > 1 && (
           <div
             className="position-absolute start-50 translate-middle-x text-white"

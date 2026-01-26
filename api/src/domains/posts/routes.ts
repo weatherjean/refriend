@@ -266,6 +266,12 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       return c.json({ error: "No image provided" }, 400);
     }
 
+    // Extract format from data URL (e.g., "data:image/webp;base64,..." -> "webp")
+    // Safari doesn't support WebP encoding and silently returns PNG/JPEG
+    const formatMatch = image.match(/^data:image\/(\w+);base64,/);
+    const format = formatMatch?.[1] || "webp";
+    const extension = format === "jpeg" ? "jpg" : format;
+
     // Decode base64 image
     const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
     const imageData = Uint8Array.from(atob(base64Data), (ch) => ch.charCodeAt(0));
@@ -275,13 +281,13 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       return c.json({ error: "Image too large (max 5MB)" }, 400);
     }
 
-    // Generate unique filename
-    const filename = `${crypto.randomUUID()}.webp`;
+    // Generate unique filename with correct extension
+    const filename = `${crypto.randomUUID()}.${extension}`;
 
     // Save to storage
     const mediaUrl = await saveMedia(filename, imageData);
 
-    return c.json({ url: mediaUrl, media_type: "image/webp" });
+    return c.json({ url: mediaUrl, media_type: `image/${format}` });
   });
 
   // POST /posts - Create post via ActivityPub Create activity (rate limited)

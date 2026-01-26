@@ -6,12 +6,18 @@ interface ImageSliderProps {
   onOpenLightbox: (index: number) => void;
 }
 
+function isVideoType(mediaType: string): boolean {
+  return mediaType.startsWith('video/') ||
+    mediaType === 'image/gifv'; // Imgur's gifv format
+}
+
 export function ImageSlider({ attachments, onOpenLightbox }: ImageSliderProps) {
   const [sliderIndex, setSliderIndex] = useState(0);
   const [imageLoaded, setImageLoaded] = useState<Record<number, boolean>>({});
   const [imageError, setImageError] = useState<Record<number, boolean>>({});
 
   const currentAttachment = attachments[sliderIndex];
+  const isVideo = isVideoType(currentAttachment.media_type);
   const isNotSquare = currentAttachment.height && currentAttachment.width &&
     currentAttachment.height !== currentAttachment.width;
 
@@ -45,19 +51,37 @@ export function ImageSlider({ attachments, onOpenLightbox }: ImageSliderProps) {
             <div className="small mt-1">Failed to load</div>
           </div>
         )}
-        <img
-          src={currentAttachment.url}
-          alt={currentAttachment.alt_text ?? ''}
-          className="w-100 h-100"
-          style={{
-            objectFit: 'cover',
-            opacity: imageLoaded[sliderIndex] && !imageError[sliderIndex] ? 1 : 0,
-            transition: 'opacity 0.3s',
-          }}
-          loading="lazy"
-          onLoad={() => setImageLoaded(prev => ({ ...prev, [sliderIndex]: true }))}
-          onError={() => setImageError(prev => ({ ...prev, [sliderIndex]: true }))}
-        />
+        {isVideo ? (
+          <video
+            src={currentAttachment.url}
+            className="w-100 h-100"
+            style={{
+              objectFit: 'cover',
+              opacity: imageLoaded[sliderIndex] && !imageError[sliderIndex] ? 1 : 0,
+              transition: 'opacity 0.3s',
+            }}
+            autoPlay
+            loop
+            muted
+            playsInline
+            onLoadedData={() => setImageLoaded(prev => ({ ...prev, [sliderIndex]: true }))}
+            onError={() => setImageError(prev => ({ ...prev, [sliderIndex]: true }))}
+          />
+        ) : (
+          <img
+            src={currentAttachment.url}
+            alt={currentAttachment.alt_text ?? ''}
+            className="w-100 h-100"
+            style={{
+              objectFit: 'cover',
+              opacity: imageLoaded[sliderIndex] && !imageError[sliderIndex] ? 1 : 0,
+              transition: 'opacity 0.3s',
+            }}
+            loading="lazy"
+            onLoad={() => setImageLoaded(prev => ({ ...prev, [sliderIndex]: true }))}
+            onError={() => setImageError(prev => ({ ...prev, [sliderIndex]: true }))}
+          />
+        )}
         {/* Cropped badge - show if image is not square */}
         <div className="position-absolute top-0 end-0 m-2 d-flex gap-1">
           {isNotSquare && (
