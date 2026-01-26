@@ -146,19 +146,65 @@ TRUST_PROXY=true
 
 ## Deployments
 
-### Push Updates
+### Quick Deploy (After Code Changes)
 
-From local machine:
+**1. Build & push images (local machine):**
 ```bash
+# Ensure you're logged in
+docker login rg.fr-par.scw.cloud -u nologin -p <SCW_SECRET_KEY>
+
+# Build both images and push to registry
 ./scripts/deploy.sh
+
+# Or manually:
+docker build -t rg.fr-par.scw.cloud/riff-app/api:latest .
+docker build -t rg.fr-par.scw.cloud/riff-app/frontend:latest ./web
+docker push rg.fr-par.scw.cloud/riff-app/api:latest
+docker push rg.fr-par.scw.cloud/riff-app/frontend:latest
 ```
 
-On server:
+**2. Pull & restart (on server):**
 ```bash
 cd /opt/riff
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
 docker image prune -f
+```
+
+### Deploy API Only
+
+When you've only changed backend code:
+
+**Local:**
+```bash
+docker build -t rg.fr-par.scw.cloud/riff-app/api:latest .
+docker push rg.fr-par.scw.cloud/riff-app/api:latest
+```
+
+**Server:**
+```bash
+cd /opt/riff
+docker compose -f docker-compose.prod.yml pull api
+docker compose -f docker-compose.prod.yml up -d api
+```
+
+### Deploy Frontend Only
+
+When you've only changed frontend code:
+
+**Local:**
+```bash
+docker build -t rg.fr-par.scw.cloud/riff-app/frontend:latest ./web
+docker push rg.fr-par.scw.cloud/riff-app/frontend:latest
+```
+
+**Server:**
+```bash
+cd /opt/riff
+docker compose -f docker-compose.prod.yml pull frontend
+docker compose -f docker-compose.prod.yml up -d --force-recreate frontend
+# Restart caddy to pick up new files
+docker compose -f docker-compose.prod.yml restart caddy
 ```
 
 ### Logs

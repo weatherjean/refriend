@@ -386,7 +386,7 @@ export async function enrichPost(
   post: Post,
   currentActorId?: number,
   domain?: string,
-  communityDb?: { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>> }
+  communityDb?: { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null; is_local: boolean }>> }
 ): Promise<EnrichedPost> {
   const author = await db.getActorById(post.actor_id);
   const postWithActor: PostWithActor = { ...post, author: author! };
@@ -402,7 +402,7 @@ export async function enrichPostsBatch(
   posts: PostWithActor[],
   currentActorId?: number,
   domain?: string,
-  communityDb?: { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>> }
+  communityDb?: { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null; is_local: boolean }>> }
 ): Promise<EnrichedPost[]> {
   if (posts.length === 0) return [];
 
@@ -416,7 +416,7 @@ export async function enrichPostsBatch(
     currentActorId ? db.getBoostedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
     db.getRepliesCounts(postIds),
     currentActorId ? db.getPinnedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
-    communityDb ? communityDb.getCommunitiesForPosts(postIds) : Promise.resolve(new Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>()),
+    communityDb ? communityDb.getCommunitiesForPosts(postIds) : Promise.resolve(new Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null; is_local: boolean }>()),
   ]);
 
   // Collect parent post IDs for replies
@@ -476,6 +476,7 @@ export async function enrichPostsBatch(
         name: communityInfo.name,
         handle: communityInfo.handle,
         avatar_url: communityInfo.avatar_url,
+        is_local: communityInfo.is_local,
       } : null,
     };
   });
@@ -484,7 +485,7 @@ export async function enrichPostsBatch(
 // ============ Post Retrieval ============
 
 // Type for communityDb parameter
-type CommunityDbForEnrich = { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>> };
+type CommunityDbForEnrich = { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null; is_local: boolean }>> };
 
 /**
  * Get recent posts (public feed)

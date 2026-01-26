@@ -127,6 +127,12 @@ export async function processCreate(
       inReplyToId = await fetchAndStoreNote(ctx, db, domain, inReplyToUri);
     }
     console.log(`[Create] Reply to ${inReplyToUri} -> local ID: ${inReplyToId}`);
+
+    // Discard replies if we can't resolve the parent post
+    if (!inReplyToId) {
+      console.log(`[Create] Discarding reply - parent post not found: ${inReplyToUri}`);
+      return;
+    }
   }
 
   // Get sensitive flag

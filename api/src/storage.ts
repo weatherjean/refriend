@@ -141,6 +141,7 @@ export async function saveAvatar(filename: string, data: Uint8Array): Promise<st
       Body: data,
       ContentType: contentType,
       CacheControl: "public, max-age=31536000",
+      ACL: "public-read",
     })
   );
   return getS3Url(key);
@@ -181,6 +182,7 @@ export async function saveMedia(filename: string, data: Uint8Array): Promise<str
       Body: data,
       ContentType: contentType,
       CacheControl: "public, max-age=31536000",
+      ACL: "public-read",
     })
   );
   return getS3Url(key);

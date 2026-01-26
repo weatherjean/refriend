@@ -8,6 +8,7 @@ import { PageHeader } from '../components/PageHeader';
 import { SearchForm } from '../components/SearchForm';
 import { CommunityAvatar } from '../components/Avatar';
 import { useSearch } from '../hooks';
+import { getCommunitySlug } from '../utils';
 
 type Tab = 'browse' | 'rising';
 
@@ -119,7 +120,7 @@ export function CommunitiesPage() {
               {displayCommunities.map((community) => (
                 <div key={community.id} className="col-12 col-sm-6">
                   <Link
-                    to={`/c/${community.name}`}
+                    to={`/c/${getCommunitySlug(community.handle, community.is_local)}`}
                     className="card h-100 text-decoration-none"
                   >
                     <div className="card-body">
@@ -165,7 +166,7 @@ export function CommunitiesPage() {
           ) : (
             <div className="row g-3">
               {risingCommunities.map((community) => {
-                const slug = community.handle.replace(/^@/, '').split('@')[0];
+                const slug = getCommunitySlug(community.handle, community.is_local);
                 return (
                   <div key={community.id} className="col-12 col-sm-6">
                     <Link

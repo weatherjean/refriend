@@ -137,12 +137,40 @@ export class CommunityDB {
     });
   }
 
+  /**
+   * Get a community by name - only returns LOCAL communities.
+   * For remote communities, use getCommunityByHandle with full @name@domain format.
+   */
   async getCommunityByName(name: string): Promise<Community | null> {
     return this.query(async (client) => {
+      // Only return local communities (those with created_by set)
       const result = await client.queryObject<Actor>`
         SELECT * FROM actors
         WHERE actor_type = 'Group'
+          AND created_by IS NOT NULL
           AND (handle ILIKE ${'@' + name + '@%'} OR name = ${name})
+        LIMIT 1
+      `;
+      if (!result.rows[0]) return null;
+      return {
+        ...result.rows[0],
+        member_count: result.rows[0].follower_count,
+      };
+    });
+  }
+
+  /**
+   * Get a community by full handle (@name@domain format).
+   * Works for both local and remote communities.
+   */
+  async getCommunityByHandle(handle: string): Promise<Community | null> {
+    return this.query(async (client) => {
+      // Normalize handle - ensure it starts with @
+      const normalizedHandle = handle.startsWith('@') ? handle : `@${handle}`;
+      const result = await client.queryObject<Actor>`
+        SELECT * FROM actors
+        WHERE actor_type = 'Group'
+          AND handle ILIKE ${normalizedHandle}
         LIMIT 1
       `;
       if (!result.rows[0]) return null;
@@ -852,25 +880,26 @@ export class CommunityDB {
   }
 
   // Get communities for multiple posts (batch) - returns minimal community info for post banners
-  async getCommunitiesForPosts(postIds: number[]): Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>> {
+  async getCommunitiesForPosts(postIds: number[]): Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null; is_local: boolean }>> {
     if (postIds.length === 0) return new Map();
 
     return this.query(async (client) => {
       // Get community info for posts that are in communities
-      const result = await client.queryObject<{ post_id: number; public_id: string; name: string | null; handle: string; avatar_url: string | null }>`
-        SELECT cp.post_id, a.public_id, a.name, a.handle, a.avatar_url
+      const result = await client.queryObject<{ post_id: number; public_id: string; name: string | null; handle: string; avatar_url: string | null; created_by: number | null }>`
+        SELECT cp.post_id, a.public_id, a.name, a.handle, a.avatar_url, a.created_by
         FROM community_posts cp
         JOIN actors a ON cp.community_id = a.id
         WHERE cp.post_id = ANY(${postIds}::int[]) AND cp.status = 'approved'
       `;
 
-      const map = new Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null }>();
+      const map = new Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null; is_local: boolean }>();
       for (const row of result.rows) {
         map.set(row.post_id, {
           public_id: row.public_id,
           name: row.name,
           handle: row.handle,
           avatar_url: row.avatar_url,
+          is_local: row.created_by !== null,
         });
       }
       return map;

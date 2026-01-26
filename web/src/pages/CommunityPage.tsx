@@ -171,6 +171,9 @@ export function CommunityPage() {
 
             <div className="mt-3 d-flex justify-content-center gap-3 text-muted small flex-wrap">
               <span><strong>{community.member_count}</strong> members</span>
+              {!community.is_local && (
+                <span><i className="bi bi-globe2 me-1"></i>Remote</span>
+              )}
               {community.require_approval && (
                 <span><i className="bi bi-shield-fill-check me-1"></i>Approval required</span>
               )}
@@ -232,6 +235,9 @@ export function CommunityPage() {
               {community.bio && <div className="mb-2" dangerouslySetInnerHTML={{ __html: sanitizeHtml(community.bio) }} />}
               <div className="d-flex gap-3 text-muted small">
                 <span><strong>{community.member_count}</strong> members</span>
+                {!community.is_local && (
+                  <span><i className="bi bi-globe2 me-1"></i>Remote</span>
+                )}
                 {community.require_approval && (
                   <span><i className="bi bi-shield-fill-check me-1"></i>Posts require approval</span>
                 )}
@@ -248,6 +254,15 @@ export function CommunityPage() {
           </div>
         </div>
       </div>
+
+      {!community.is_local && community.url && (
+        <p>
+          <a href={community.url} target="_blank" rel="noopener noreferrer" className="btn btn-outline-secondary btn-sm">
+            <i className="bi bi-box-arrow-up-right me-1"></i>
+            View on {new URL(community.url).host}
+          </a>
+        </p>
+      )}
 
       {/* Tabs */}
       <ul className="nav nav-tabs mb-3">

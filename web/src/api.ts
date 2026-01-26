@@ -94,6 +94,7 @@ export interface Post {
     name: string;
     handle: string;
     avatar_url: string | null;
+    is_local: boolean;
   };
   boosted_by?: {
     id: string;
@@ -429,6 +430,7 @@ export interface Community {
   bio: string | null;
   avatar_url: string | null;
   url: string | null;
+  is_local: boolean;
   member_count: number;
   require_approval: boolean;
   created_at: string;
@@ -467,6 +469,7 @@ export interface CommunityPost extends Post {
     name: string;
     handle: string;
     avatar_url: string | null;
+    is_local: boolean;
   };
   suggested_by?: Actor | null;
 }
@@ -486,6 +489,7 @@ export interface TrendingCommunity {
   handle: string;
   name: string | null;
   avatar_url: string | null;
+  is_local: boolean;
   member_count: number;
   new_members: number;
 }

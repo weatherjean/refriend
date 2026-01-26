@@ -19,6 +19,7 @@ EXPOSE 8000
 CMD ["deno", "run", \
   "--allow-net", \
   "--allow-env", \
+  "--allow-sys", \
   "--allow-read=/app,/data", \
   "--allow-write=/data", \
   "--unstable-kv", \

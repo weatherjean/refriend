@@ -36,3 +36,17 @@ export function getDomain(handle: string): string | null {
   const match = handle.match(/@[^@]+@(.+)$/);
   return match ? match[1] : null;
 }
+
+/**
+ * Get community URL identifier from handle and is_local flag.
+ * - Local communities: returns just the name (e.g., "technology")
+ * - Remote communities: returns name@domain (e.g., "technology@lemmy.ml")
+ */
+export function getCommunitySlug(handle: string, isLocal: boolean): string {
+  const username = getUsername(handle);
+  if (isLocal) {
+    return username;
+  }
+  const domain = getDomain(handle);
+  return domain ? `${username}@${domain}` : username;
+}

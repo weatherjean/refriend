@@ -4,7 +4,7 @@ import { users, follows, search, actors, Actor, Post } from '../api';
 import { PostCard } from '../components/PostCard';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { getUsername } from '../utils';
+import { getUsername, getDomain } from '../utils';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { LoadMoreButton } from '../components/LoadMoreButton';
 import { ActorListModal } from '../components/ActorListModal';
@@ -119,6 +119,13 @@ export function ActorPage() {
       // Always try local user first (API returns 404 if not found)
       try {
         const profileData = await users.get(username, { silent: true });
+        // Check if the handle matches - if URL has a domain, make sure it matches
+        const urlDomain = getDomain(fullHandle);
+        const actorDomain = getDomain(profileData.actor.handle);
+        if (urlDomain && urlDomain !== actorDomain) {
+          // URL specifies a different domain, fall through to remote search
+          throw new Error('Domain mismatch');
+        }
         setActor(profileData.actor);
         setStats(profileData.stats);
         setIsFollowing(profileData.is_following);

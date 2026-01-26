@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Post, posts as postsApi } from '../api';
-import { formatTimeAgo, getUsername, sanitizeHtml } from '../utils';
+import { formatTimeAgo, getUsername, sanitizeHtml, getCommunitySlug } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import { TagBadge } from './TagBadge';
 import { Avatar } from './Avatar';
@@ -15,6 +15,7 @@ interface CommunityInfo {
   name: string;
   handle: string;
   avatar_url?: string | null;
+  is_local: boolean;
 }
 
 interface PostCardProps {
@@ -169,7 +170,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
         {/* Community pill - shown above header on mobile */}
         {community && (
           <Link
-            to={`/c/${community.name}`}
+            to={`/c/${getCommunitySlug(community.handle, community.is_local)}`}
             className="community-pill community-pill-mobile"
             onClick={(e) => e.stopPropagation()}
           >
@@ -214,7 +215,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
           </div>
           {community && (
             <Link
-              to={`/c/${community.name}`}
+              to={`/c/${getCommunitySlug(community.handle, community.is_local)}`}
               className="community-pill community-pill-desktop"
               onClick={(e) => e.stopPropagation()}
             >

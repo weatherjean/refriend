@@ -26,6 +26,9 @@ type Env = {
 
 // Sanitize community for API response
 function sanitizeCommunity(community: Community) {
+  // Check if local by seeing if created_by is set (local communities have a creator)
+  const isLocal = community.created_by !== null;
+
   return {
     id: community.public_id,
     uri: community.uri,
@@ -34,10 +37,38 @@ function sanitizeCommunity(community: Community) {
     bio: community.bio,
     avatar_url: community.avatar_url,
     url: community.url,
+    is_local: isLocal,
     member_count: community.member_count || 0,
     require_approval: community.require_approval || false,
     created_at: formatDate(community.created_at),
   };
+}
+
+/**
+ * Parse community identifier from URL param.
+ * - "technology" -> local community lookup by name
+ * - "technology@lemmy.ml" or "@technology@lemmy.ml" -> full handle lookup
+ */
+function parsesCommunityIdentifier(nameParam: string): { type: 'name' | 'handle'; value: string } {
+  // Check if it contains @ (excluding leading @)
+  const withoutLeadingAt = nameParam.startsWith('@') ? nameParam.slice(1) : nameParam;
+  if (withoutLeadingAt.includes('@')) {
+    // Full handle format: technology@lemmy.ml or @technology@lemmy.ml
+    return { type: 'handle', value: nameParam.startsWith('@') ? nameParam : `@${nameParam}` };
+  }
+  // Just a name: technology
+  return { type: 'name', value: nameParam };
+}
+
+/**
+ * Look up community by name (local only) or full handle (any).
+ */
+async function lookupCommunity(communityDb: CommunityDB, nameParam: string): Promise<Community | null> {
+  const { type, value } = parsesCommunityIdentifier(nameParam);
+  if (type === 'handle') {
+    return communityDb.getCommunityByHandle(value);
+  }
+  return communityDb.getCommunityByName(value);
 }
 
 // Sanitize actor for API response
@@ -142,6 +173,7 @@ export function createCommunityRoutes(
         handle: community.handle,
         name: community.name,
         avatar_url: community.avatar_url,
+        is_local: community.created_by !== null,
         member_count: community.member_count || 0,
         new_members: community.new_members,
       })),
@@ -182,7 +214,8 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const domain = c.get("domain");
 
-    // Check if community already exists
+    // Check if local community already exists with this name
+    // (only check local communities - remote ones don't block creation)
     const existing = await communityDb.getCommunityByName(name);
     if (existing) {
       return c.json({ error: "Community name already taken" }, 400);
@@ -203,7 +236,7 @@ export function createCommunityRoutes(
     const moderation = c.get("moderation");
     const actor = c.get("actor");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -229,7 +262,7 @@ export function createCommunityRoutes(
     }
 
     const communityDb = c.get("communityDb");
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -268,7 +301,7 @@ export function createCommunityRoutes(
     }
 
     const communityDb = c.get("communityDb");
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -297,7 +330,7 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -325,7 +358,7 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -349,7 +382,7 @@ export function createCommunityRoutes(
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
     const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -373,7 +406,7 @@ export function createCommunityRoutes(
     const domain = c.get("domain");
     const communityDb = c.get("communityDb");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -406,7 +439,7 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -451,7 +484,7 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -487,7 +520,7 @@ export function createCommunityRoutes(
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 10, 50);
     const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -534,7 +567,7 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -572,7 +605,7 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -604,7 +637,7 @@ export function createCommunityRoutes(
     const before = parseIntSafe(c.req.query("before")) ?? undefined;
     const sort = c.req.query("sort") === "new" ? "new" : "hot"; // Default to hot
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -673,7 +706,7 @@ export function createCommunityRoutes(
     const db = c.get("db");
     const currentActor = c.get("actor");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -741,7 +774,7 @@ export function createCommunityRoutes(
     const db = c.get("db");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -797,7 +830,7 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -861,7 +894,7 @@ export function createCommunityRoutes(
     const moderation = c.get("moderation");
     const federation = c.get("federation");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -924,7 +957,7 @@ export function createCommunityRoutes(
     const db = c.get("db");
     const federation = c.get("federation");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -974,7 +1007,7 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -1015,7 +1048,7 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -1062,7 +1095,7 @@ export function createCommunityRoutes(
     const federation = c.get("federation");
     const domain = c.get("domain");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -1136,7 +1169,7 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -1174,7 +1207,7 @@ export function createCommunityRoutes(
     const communityDb = c.get("communityDb");
     const db = c.get("db");
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }
@@ -1208,7 +1241,7 @@ export function createCommunityRoutes(
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 50, 100);
     const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
-    const community = await communityDb.getCommunityByName(name);
+    const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
     }

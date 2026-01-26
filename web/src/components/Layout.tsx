@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFeed } from '../context/FeedContext';
 import { useScrollLockEffect } from '../context/ScrollLockContext';
-import { getUsername } from '../utils';
+import { getUsername, getCommunitySlug } from '../utils';
 import { tags, notifications as notificationsApi, communities, type TrendingCommunity } from '../api';
 import { TagBadge } from './TagBadge';
 import { Avatar, CommunityAvatar } from './Avatar';
@@ -188,7 +188,7 @@ export function Layout({ children }: LayoutProps) {
                 <h6 className="card-title mb-3">Rising Communities</h6>
                 <div className="d-flex flex-column">
                   {trendingCommunities.slice(0, 3).map((community) => {
-                    const slug = community.handle.replace(/^@/, '').split('@')[0];
+                    const slug = getCommunitySlug(community.handle, community.is_local);
                     return (
                       <Link
                         key={community.id}
