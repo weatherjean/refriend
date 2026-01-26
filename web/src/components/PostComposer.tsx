@@ -6,7 +6,7 @@ import { getUsername } from '../utils';
 
 const MAX_CHARACTERS = 500;
 const MAX_IMAGES = 4;
-const MAX_IMAGE_SIZE_MB = 10;
+const MAX_IMAGE_SIZE_MB = 25;
 
 interface ImagePreview {
   file: File;

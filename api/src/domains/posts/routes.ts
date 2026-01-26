@@ -276,9 +276,9 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
     const imageData = Uint8Array.from(atob(base64Data), (ch) => ch.charCodeAt(0));
 
-    // Validate image size (max 5MB for media attachments)
-    if (imageData.length > 5 * 1024 * 1024) {
-      return c.json({ error: "Image too large (max 5MB)" }, 400);
+    // Validate image size (max 25MB for media attachments)
+    if (imageData.length > 25 * 1024 * 1024) {
+      return c.json({ error: "Image too large (max 25MB)" }, 400);
     }
 
     // Generate unique filename with correct extension

@@ -511,16 +511,16 @@ Deno.test({
         assertEquals(data.error, "No image provided");
       });
 
-      await t.step("rejects image over 2MB", async () => {
+      await t.step("rejects image over 25MB", async () => {
         await cleanDatabase();
         const api = await createTestApi();
 
         await createTestUser({ username: "testuser", email: "test@test.com", password: "password123" });
         const session = await loginUser(api, "test@test.com", "password123");
 
-        // Create a base64 string that decodes to > 2MB
-        // base64 encoding increases size by ~33%, so we need about 1.5MB of base64 to get 2MB decoded
-        const largeData = "A".repeat(3 * 1024 * 1024); // 3MB of base64 = ~2.25MB decoded
+        // Create a base64 string that decodes to > 25MB
+        // base64 encoding increases size by ~33%, so we need about 34MB of base64 to get >25MB decoded
+        const largeData = "A".repeat(34 * 1024 * 1024); // 34MB of base64 = ~25.5MB decoded
 
         const res = await testRequest(api, "POST", "/profile/avatar", {
           cookie: session.cookie, csrfToken: session.csrfToken,
@@ -529,7 +529,7 @@ Deno.test({
 
         assertEquals(res.status, 400);
         const data = await res.json();
-        assertEquals(data.error, "Image too large (max 2MB)");
+        assertEquals(data.error, "Image too large (max 25MB)");
       });
 
       // Skip: requires S3/MinIO which isn't configured in tests

@@ -458,9 +458,9 @@ export async function updateAvatar(
   const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
   const imageData = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
 
-  // Validate image size (max 2MB)
-  if (imageData.length > 2 * 1024 * 1024) {
-    return { success: false, error: "Image too large (max 2MB)" };
+  // Validate image size (max 25MB)
+  if (imageData.length > 25 * 1024 * 1024) {
+    return { success: false, error: "Image too large (max 25MB)" };
   }
 
   // Generate filename with correct extension
