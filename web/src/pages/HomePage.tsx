@@ -20,11 +20,11 @@ function LandingPage() {
         <div className="card-body text-center py-5">
           <img src="/logo.svg" alt="Riff" height="48" className="mb-3" />
           <p className="landing-tagline mb-4">
-            Social networking made simple
+            Simple social. Openly connected.
           </p>
           <p className="landing-subtitle mb-4">
-            One platform, fully connected to the fediverse. No servers to choose,
-            no complexity. Just sign up and start posting.
+            A friendly entry point to the fediverse. Sign up once,
+            connect with millions across the open social web.
           </p>
           <div className="d-flex gap-2 justify-content-center">
             <Link to="/register" className="btn btn-primary">
