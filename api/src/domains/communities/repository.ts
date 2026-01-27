@@ -839,7 +839,7 @@ export class CommunityDB {
     });
   }
 
-  // Get trending communities (most new members in last 24h)
+  // Get trending communities (most new members in last 24h) - local only
   async getTrendingCommunities(limit = 3): Promise<(Community & { new_members: number })[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor & { new_members: bigint }>`
@@ -848,6 +848,7 @@ export class CommunityDB {
         JOIN follows f ON f.following_id = a.id
         WHERE f.created_at > NOW() - INTERVAL '24 hours'
           AND a.actor_type = 'Group'
+          AND a.created_by IS NOT NULL
         GROUP BY a.id
         ORDER BY new_members DESC
         LIMIT ${limit}

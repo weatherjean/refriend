@@ -7,13 +7,16 @@
 import {
   Document,
   Image,
+  Link,
   Note,
+  Article,
+  Page,
   isActor,
   type Context,
 } from "@fedify/fedify";
 import type { DB } from "../../../db.ts";
 import { persistActor } from "../actor-persistence.ts";
-import { extractHashtags } from "./content.ts";
+import { extractHashtags, validateAndSanitizeContent } from "./content.ts";
 
 /**
  * Fetch and store a remote Note (for fetching parent posts of replies)
@@ -35,19 +38,30 @@ export async function fetchAndStoreNote(
     const docLoader = ctx.documentLoader;
     const { document } = await docLoader(noteUri);
 
-    // Check if it's actually a Note before trying to parse
+    // Check the object type and parse accordingly
     // deno-lint-ignore no-explicit-any
     const docType = (document as any)?.type || (document as any)?.['@type'];
     const typeStr = Array.isArray(docType) ? docType[0] : docType;
-    if (typeStr && !['Note', 'Article', 'Page'].includes(typeStr)) {
-      console.log(`[Reply] Skipping non-Note object (${typeStr}): ${noteUri}`);
+
+    let note: Note | Article | Page | null = null;
+    let titlePrefix: string | null = null;
+
+    if (typeStr === 'Article') {
+      note = await Article.fromJsonLd(document, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
+    } else if (typeStr === 'Page') {
+      note = await Page.fromJsonLd(document, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
+    } else if (typeStr === 'Note') {
+      note = await Note.fromJsonLd(document, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
+    } else {
+      console.log(`[Reply] Skipping unsupported object type (${typeStr}): ${noteUri}`);
       return null;
     }
 
-    const note = await Note.fromJsonLd(document, {
-      documentLoader: docLoader,
-      contextLoader: ctx.contextLoader,
-    });
+    // Extract title for Article/Page
+    if (note && (note instanceof Article || note instanceof Page)) {
+      const title = typeof note.name === 'string' ? note.name : note.name?.toString();
+      if (title) titlePrefix = title;
+    }
 
     if (!note || !note.id) {
       console.log(`[Reply] Failed to fetch parent note: ${noteUri}`);
@@ -69,9 +83,27 @@ export async function fetchAndStoreNote(
     }
 
     // Get content and URL
-    const content = typeof note.content === "string"
+    let content = typeof note.content === "string"
       ? note.content
       : note.content?.toString() ?? "";
+
+    // For Article/Page, prepend title
+    if (titlePrefix) {
+      const escapedTitle = titlePrefix
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      const titleHtml = `<p><strong>${escapedTitle}</strong></p>`;
+      content = content ? `${titleHtml}\n${content}` : titleHtml;
+    }
+
+    // Sanitize remote content
+    const sanitized = validateAndSanitizeContent(content);
+    if (sanitized === null) {
+      console.log(`[Reply] Parent post content too large: ${noteUri}`);
+      return null;
+    }
+    content = sanitized;
 
     const noteUrl = note.url;
     let urlString: string | null = null;
@@ -117,6 +149,17 @@ export async function fetchAndStoreNote(
     try {
       const attachments = await note.getAttachments();
       for await (const att of attachments) {
+        // Handle Link attachments (Lemmy/kbin external URLs) - only for Page/Article, not Note
+        if (att instanceof Link && (note instanceof Page || note instanceof Article)) {
+          const linkHref = att.href;
+          if (linkHref) {
+            // Use the Link href as the post's external URL (overrides object.url for link posts)
+            const externalUrl = linkHref instanceof URL ? linkHref.href : String(linkHref);
+            await db.updatePostUrl(post.id, externalUrl);
+          }
+          continue;
+        }
+
         if (att instanceof Document || att instanceof Image) {
           const attUrl = att.url;
           let attUrlString: string | null = null;

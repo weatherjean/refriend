@@ -3,10 +3,7 @@
     "dev": "deno run -A --unstable-kv --unstable-temporal --watch src/main.ts",
     "start": "deno run -A --unstable-kv --unstable-temporal src/main.ts",
     "seed": "deno run -A src/seeder.ts",
-    "test": "deno test -A --unstable-kv --unstable-temporal --no-check --ignore=**/**.integration.test.ts src/",
-    "test:integration": "deno test -A --unstable-kv --unstable-temporal --no-check src/test/*.integration.test.ts",
-    "test:all": "deno test -A --unstable-kv --unstable-temporal --no-check src/",
-    "test:watch": "deno test -A --unstable-kv --unstable-temporal --no-check --watch --ignore=**/**.integration.test.ts src/"
+    "test": "deno test -A --unstable-kv --unstable-temporal --no-check src/test/*.integration.test.ts"
   },
   "imports": {
     "@hongminhee/x-forwarded-fetch": "jsr:@hongminhee/x-forwarded-fetch@^0.2.0",

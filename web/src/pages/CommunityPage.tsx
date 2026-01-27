@@ -172,7 +172,7 @@ export function CommunityPage() {
             <div className="mt-3 d-flex justify-content-center gap-3 text-muted small flex-wrap">
               <span><strong>{community.member_count}</strong> members</span>
               {!community.is_local && (
-                <span><i className="bi bi-globe2 me-1"></i>Remote</span>
+                <span><i className="bi bi-globe2 me-1" style={{ color: '#fbbf24' }}></i>Remote</span>
               )}
               {community.require_approval && (
                 <span><i className="bi bi-shield-fill-check me-1"></i>Approval required</span>
@@ -236,7 +236,7 @@ export function CommunityPage() {
               <div className="d-flex gap-3 text-muted small">
                 <span><strong>{community.member_count}</strong> members</span>
                 {!community.is_local && (
-                  <span><i className="bi bi-globe2 me-1"></i>Remote</span>
+                  <span><i className="bi bi-globe2 me-1" style={{ color: '#fbbf24' }}></i>Remote</span>
                 )}
                 {community.require_approval && (
                   <span><i className="bi bi-shield-fill-check me-1"></i>Posts require approval</span>

@@ -113,7 +113,7 @@ export function MentionPicker({ query, onSelect, onClose, position }: MentionPic
                   </div>
                   <div className={`small text-truncate ${index === selectedIndex ? 'text-white-50' : 'text-muted'}`}>
                     {displayHandle}
-                    {!actor.is_local && <i className="bi bi-globe2 ms-1" style={{ fontSize: '0.7em' }}></i>}
+                    {!actor.is_local && <i className="bi bi-globe2 ms-1" style={{ fontSize: '0.7em', color: '#fbbf24' }}></i>}
                   </div>
                 </div>
               </button>

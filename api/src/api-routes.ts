@@ -23,6 +23,9 @@ import { createCommunityRoutes } from "./domains/communities/routes.ts";
 import { createTagRoutes } from "./domains/tags/routes.ts";
 import { createSearchRoutes } from "./domains/search/index.ts";
 
+// Storage for video caching
+import { getCachedMedia, cacheRemoteMedia } from "./storage.ts";
+
 type Env = {
   Variables: {
     db: DB;
@@ -170,8 +173,15 @@ export function createApiRoutes(
       return c.json({ error: "Private addresses not allowed" }, 400);
     }
 
-    // Size limit: 100MB
-    const MAX_SIZE = 100 * 1024 * 1024;
+    // Size limit: 250MB for videos
+    const MAX_SIZE = 250 * 1024 * 1024;
+
+    // Check video cache BEFORE fetching (saves bandwidth)
+    // We check for any URL - if it's an image, cache miss is fine
+    const cachedUrl = await getCachedMedia(url);
+    if (cachedUrl) {
+      return c.redirect(cachedUrl, 302);
+    }
 
     try {
       // Use AbortController for timeout
@@ -220,10 +230,23 @@ export function createApiRoutes(
       // Check content length if provided
       const contentLength = response.headers.get("content-length");
       if (contentLength && parseInt(contentLength) > MAX_SIZE) {
-        return c.json({ error: "File too large (max 100MB)" }, 400);
+        return c.json({ error: "File too large (max 250MB)" }, 400);
       }
 
-      // Stream the response with size limit enforcement
+      // For videos: cache to S3 and redirect
+      if (contentType.startsWith("video/")) {
+        // Fetch full body for caching
+        const body = await response.arrayBuffer();
+        if (body.byteLength > MAX_SIZE) {
+          return c.json({ error: "File too large (max 250MB)" }, 400);
+        }
+
+        // Cache to S3 and redirect
+        const cached = await cacheRemoteMedia(url, new Uint8Array(body), contentType);
+        return c.redirect(cached, 302);
+      }
+
+      // For images: stream directly without caching
       const reader = response.body?.getReader();
       if (!reader) {
         return c.json({ error: "No response body" }, 502);

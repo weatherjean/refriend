@@ -46,10 +46,15 @@ export function useSearch<T>(options: UseSearchOptions<T>): UseSearchResult<T> {
   }, [initialFetch]);
 
   const search = useCallback(async () => {
-    const trimmed = query.trim();
+    let trimmed = query.trim();
     if (!trimmed) {
       setSearchResults(null);
       return;
+    }
+
+    // Convert Lemmy community syntax (!community@instance) to ActivityPub (@community@instance)
+    if (trimmed.startsWith('!') && trimmed.includes('@')) {
+      trimmed = '@' + trimmed.slice(1);
     }
 
     setSearchLoading(true);

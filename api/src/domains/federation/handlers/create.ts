@@ -8,7 +8,10 @@ import {
   Create,
   Document,
   Image,
+  Link,
   Note,
+  Article,
+  Page,
   isActor,
   PUBLIC_COLLECTION,
   type Context,
@@ -34,14 +37,22 @@ export async function processCreate(
   direction: "inbound" | "outbound",
   localUsername?: string
 ): Promise<void> {
-  let object: Note | null = null;
+  let object: Note | Article | Page | null = null;
+  let titlePrefix: string | null = null;  // For Article/Page titles
   let authorActor: Actor | null = null;
 
-  // Try to get the object (Note)
+  // Try to get the object (Note, Article, or Page)
   try {
     const obj = await create.getObject();
     if (obj instanceof Note) {
       object = obj;
+    } else if (obj instanceof Article || obj instanceof Page) {
+      object = obj;
+      // Extract title for later - Lemmy uses 'name' for post titles
+      const title = typeof obj.name === 'string' ? obj.name : obj.name?.toString();
+      if (title) {
+        titlePrefix = title;
+      }
     }
   } catch {
     // In localhost dev, getObject might fail
@@ -74,9 +85,19 @@ export async function processCreate(
   if (existingPost) return;
 
   // Get content
-  const rawContent = typeof object.content === "string"
+  let rawContent = typeof object.content === "string"
     ? object.content
     : object.content?.toString() ?? "";
+
+  // For Article/Page (Lemmy/kbin), prepend the title to content
+  if (titlePrefix) {
+    const escapedTitle = titlePrefix
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const titleHtml = `<p><strong>${escapedTitle}</strong></p>`;
+    rawContent = rawContent ? `${titleHtml}\n${rawContent}` : titleHtml;
+  }
 
   // For inbound content, validate size and sanitize HTML
   let content = rawContent;
@@ -159,6 +180,18 @@ export async function processCreate(
   try {
     const attachments = await object.getAttachments();
     for await (const att of attachments) {
+      // Handle Link attachments (Lemmy/kbin external URLs) - only for Page/Article, not Note
+      if (att instanceof Link && (object instanceof Page || object instanceof Article)) {
+        const linkHref = att.href;
+        if (linkHref) {
+          // Use the Link href as the post's external URL (overrides object.url for link posts)
+          const externalUrl = linkHref instanceof URL ? linkHref.href : String(linkHref);
+          await db.updatePostUrl(post.id, externalUrl);
+          console.log(`[Create] Added external link from attachment: ${externalUrl}`);
+        }
+        continue;
+      }
+
       if (att instanceof Document || att instanceof Image) {
         const attUrl = att.url;
         let urlString: string | null = null;
@@ -249,7 +282,7 @@ export async function processCreate(
  */
 async function checkAndSubmitToCommunity(
   db: DB,
-  note: Note,
+  note: Note | Article | Page,
   postId: number,
   authorActorId: number,
   inReplyToId: number | null

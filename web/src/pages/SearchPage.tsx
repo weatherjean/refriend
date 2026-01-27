@@ -30,12 +30,18 @@ export function SearchPage() {
   }, [initFollowingSet]);
 
   const performSearch = async (searchQuery: string) => {
-    if (!searchQuery.trim()) return;
+    let trimmed = searchQuery.trim();
+    if (!trimmed) return;
+
+    // Convert Lemmy community syntax (!community@instance) to ActivityPub (@community@instance)
+    if (trimmed.startsWith('!') && trimmed.includes('@')) {
+      trimmed = '@' + trimmed.slice(1);
+    }
 
     setSearching(true);
     setSearched(true);
     try {
-      const { users: userRes, posts: postRes, postsLowConfidence: lowConf } = await search.query(searchQuery.trim());
+      const { users: userRes, posts: postRes, postsLowConfidence: lowConf } = await search.query(trimmed);
       setUserResults(userRes || []);
       setPostResults(postRes || []);
       setPostsLowConfidence(lowConf || false);
@@ -150,7 +156,7 @@ export function SearchPage() {
                                   {actor.name || username}
                                 </span>
                                 {!actor.is_local && (
-                                  <i className="bi bi-globe2 text-muted flex-shrink-0" style={{ fontSize: '0.8em' }}></i>
+                                  <i className="bi bi-globe2 flex-shrink-0" style={{ fontSize: '0.8em', color: '#fbbf24' }}></i>
                                 )}
                               </div>
                               {isCommunity && (

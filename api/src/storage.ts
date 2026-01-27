@@ -8,6 +8,7 @@ import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 
 // S3 configuration from environment
@@ -203,4 +204,61 @@ export async function deleteMedia(filename: string): Promise<void> {
   } catch {
     // Ignore errors - file may not exist
   }
+}
+
+/**
+ * Generate a cache key from a remote URL (SHA-256 hash)
+ * Key is URL-only (no extension) - Content-Type is set on the S3 object
+ */
+async function getCacheKey(url: string): Promise<string> {
+  const hash = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(url)
+  );
+  const hashHex = [...new Uint8Array(hash)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return `cache/${hashHex}`;
+}
+
+/**
+ * Check if a cached version exists, return URL if so
+ */
+export async function getCachedMedia(url: string): Promise<string | null> {
+  const key = await getCacheKey(url);
+  try {
+    await getS3Client().send(
+      new HeadObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: key,
+      })
+    );
+    return getS3Url(key);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cache remote media to S3 (for proxy fallback)
+ * Returns the cached URL
+ */
+export async function cacheRemoteMedia(
+  remoteUrl: string,
+  data: Uint8Array,
+  contentType: string
+): Promise<string> {
+  const key = await getCacheKey(remoteUrl);
+
+  await getS3Client().send(
+    new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: key,
+      Body: data,
+      ContentType: contentType,
+      CacheControl: "public, max-age=604800", // 7 days browser cache
+      ACL: "public-read",
+    })
+  );
+  return getS3Url(key);
 }

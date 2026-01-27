@@ -127,7 +127,12 @@ export function CommunitiesPage() {
                       <div className="d-flex align-items-center mb-2">
                         <CommunityAvatar src={community.avatar_url} size={48} className="flex-shrink-0" />
                         <div className="ms-3 min-width-0">
-                          <h6 className="mb-0 fw-bold text-body">{community.name}</h6>
+                          <h6 className="mb-0 fw-bold text-body d-flex align-items-center gap-1">
+                            {community.name}
+                            {!community.is_local && (
+                              <i className="bi bi-globe2" style={{ fontSize: '0.75em', color: '#fbbf24' }}></i>
+                            )}
+                          </h6>
                           <small className="text-muted d-block text-truncate">{community.handle}</small>
                         </div>
                       </div>
@@ -177,7 +182,12 @@ export function CommunitiesPage() {
                         <div className="d-flex align-items-center">
                           <CommunityAvatar src={community.avatar_url} size={48} className="flex-shrink-0" />
                           <div className="ms-3 min-width-0">
-                            <h6 className="mb-0 fw-bold text-body">{community.name || slug}</h6>
+                            <h6 className="mb-0 fw-bold text-body d-flex align-items-center gap-1">
+                              {community.name || slug}
+                              {!community.is_local && (
+                                <i className="bi bi-globe2" style={{ fontSize: '0.75em', color: '#fbbf24' }}></i>
+                              )}
+                            </h6>
                             <small className="text-muted d-block text-truncate">{community.handle}</small>
                             <span className="badge bg-success mt-1">+{community.new_members} new</span>
                           </div>

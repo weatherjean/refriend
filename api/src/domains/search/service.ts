@@ -69,9 +69,15 @@ export async function search(
 
           if (wfResponse.ok) {
             const wfData = await wfResponse.json();
-            const selfLink = wfData.links?.find((l: { rel: string; type?: string }) =>
+            // Find all self links with ActivityPub type
+            const selfLinks = wfData.links?.filter((l: { rel: string; type?: string }) =>
               l.rel === "self" && l.type?.includes("activity")
-            );
+            ) || [];
+            // Prefer Group (community) over Person if both exist
+            // Check the properties field for type hint
+            const selfLink = selfLinks.find((l: { properties?: Record<string, string> }) =>
+              l.properties?.["https://www.w3.org/ns/activitystreams#type"] === "Group"
+            ) || selfLinks[0];
 
             if (selfLink?.href) {
               // SECURITY: Validate that the actor URI domain matches the requested domain
