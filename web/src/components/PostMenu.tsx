@@ -11,9 +11,10 @@ interface PostMenuProps {
   isCommunityAdmin?: boolean;
   communityName?: string;
   onDelete?: () => void;
+  originalUrl?: string | null;
 }
 
-export function PostMenu({ postId, isOwnPost = false, isCommunityAdmin = false, communityName, onDelete }: PostMenuProps) {
+export function PostMenu({ postId, isOwnPost = false, isCommunityAdmin = false, communityName, onDelete, originalUrl }: PostMenuProps) {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [showSuggestModal, setShowSuggestModal] = useState(false);
@@ -94,6 +95,18 @@ export function PostMenu({ postId, isOwnPost = false, isCommunityAdmin = false, 
 
       {isOpen && (
         <div className="post-menu-dropdown">
+          {originalUrl && (
+            <a
+              className="post-menu-item"
+              href={originalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <i className="bi bi-box-arrow-up-right"></i>
+              <span>View original</span>
+            </a>
+          )}
           <button
             className="post-menu-item"
             onClick={handleSuggestClick}

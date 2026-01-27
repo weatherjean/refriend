@@ -459,6 +459,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
               isCommunityAdmin={isCommunityAdmin}
               communityName={community?.name || communityNameProp}
               onDelete={onDelete}
+              originalUrl={post.url}
             />
           )}
         </div>

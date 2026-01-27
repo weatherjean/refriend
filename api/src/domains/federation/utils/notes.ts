@@ -6,6 +6,7 @@
 
 import {
   Create,
+  Update,
   Document,
   Image,
   Link,
@@ -51,15 +52,19 @@ export async function fetchAndStoreNote(
     // Lemmy sends URLs like /activities/create/... that return Create activities
     if (typeStr === 'Create' || typeStr === 'Update') {
       try {
-        const createActivity = await Create.fromJsonLd(document, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
-        const innerObject = await createActivity.getObject();
+        // Use the correct class based on activity type
+        const activity = typeStr === 'Create'
+          ? await Create.fromJsonLd(document, { documentLoader: docLoader, contextLoader: ctx.contextLoader })
+          : await Update.fromJsonLd(document, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
+        const innerObject = await activity.getObject();
         if (innerObject && 'id' in innerObject && innerObject.id) {
           // Re-fetch the actual object URL
           const { document: innerDoc } = await docLoader(innerObject.id.href);
           objectDoc = innerDoc;
           docType = (innerDoc as any)?.type || (innerDoc as any)?.['@type'];
+          const originalType = typeStr;
           typeStr = Array.isArray(docType) ? docType[0] : docType;
-          console.log(`[Reply] Unwrapped ${typeStr === 'Create' ? 'Create' : 'Update'} activity to ${typeStr}: ${innerObject.id.href}`);
+          console.log(`[Reply] Unwrapped ${originalType} activity to ${typeStr}: ${innerObject.id.href}`);
         } else {
           console.log(`[Reply] Create/Update activity has no valid object: ${noteUri}`);
           return null;

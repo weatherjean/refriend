@@ -805,6 +805,16 @@ export class DB {
         return result.rows[0];
       } catch (e) {
         await client.queryArray`ROLLBACK`;
+        // Handle duplicate key error (race condition) by returning existing post
+        // deno-lint-ignore no-explicit-any
+        if ((e as any)?.fields?.code === '23505' && (e as any)?.fields?.constraint === 'posts_uri_key') {
+          const existing = await client.queryObject<Post>`
+            SELECT * FROM posts WHERE uri = ${post.uri}
+          `;
+          if (existing.rows[0]) {
+            return existing.rows[0];
+          }
+        }
         throw e;
       }
     });
