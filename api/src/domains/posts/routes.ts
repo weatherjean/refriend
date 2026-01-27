@@ -9,6 +9,7 @@ import {
   Create,
   Delete,
   Document,
+  Hashtag,
   Note,
   Tombstone,
   PUBLIC_COLLECTION,
@@ -335,6 +336,10 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
 
     const { replyToPost, linkPreview, videoEmbed } = validation;
 
+    // Extract hashtags from plain text BEFORE HTML processing
+    const hashtagMatches = content.match(/#[\w]+/g) || [];
+    const hashtagNames = [...new Set(hashtagMatches.map(m => m.slice(1).toLowerCase()))];
+
     // Process content: escape HTML, linkify mentions and hashtags
     const { html: processedContent, mentions } = await service.processContent(db, content, domain);
     // If there's a link or video, append it to content for federation (so other servers can generate their own cards)
@@ -347,6 +352,12 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     }
 
     const ctx = federation.createContext(c.req.raw, undefined);
+
+    // Create Hashtag objects for the Note
+    const noteTags = hashtagNames.map(name => new Hashtag({
+      name: `#${name}`,
+      href: new URL(`https://${domain}/tags/${name}`),
+    }));
 
     // Generate a unique ID for this note
     const noteId = crypto.randomUUID();
@@ -373,6 +384,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       published: Temporal.Now.instant(),
       replyTarget: replyToPost ? new URL(replyToPost.uri) : undefined,
       attachments: noteAttachments.length > 0 ? noteAttachments : undefined,
+      tags: noteTags.length > 0 ? noteTags : undefined,
       sensitive: sensitive ?? false,
     });
 

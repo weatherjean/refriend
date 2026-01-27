@@ -120,5 +120,10 @@ export function validateAndSanitizeContent(content: string): string | null {
 export function extractHashtags(text: string): string[] {
   const plainText = text.replace(/<[^>]*>/g, "");
   const matches = plainText.match(/#[\w]+/g) || [];
-  return [...new Set(matches.map((m) => m.slice(1).toLowerCase()))];
+  return [...new Set(
+    matches
+      .map((m) => m.slice(1).toLowerCase())
+      // Filter out HTML entity artifacts like #39, #039, #x27 (from &#39; &#039; &#x27;)
+      .filter((tag) => !/^\d+$/.test(tag) && !/^x[0-9a-f]+$/i.test(tag))
+  )];
 }

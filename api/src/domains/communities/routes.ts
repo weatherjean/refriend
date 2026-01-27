@@ -6,7 +6,7 @@ import { CommunityDB, type Community } from "./repository.ts";
 import { CommunityModeration } from "./moderation.ts";
 import { announcePost, getCommunityActorUri } from "./federation.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
-import { processActivity, type ActivityResult } from "../../activities.ts";
+import { processActivity } from "../../activities.ts";
 import { deleteMedia } from "../../storage.ts";
 import { getCachedTrendingCommunities, setCachedTrendingCommunities, clearCachedTrendingCommunities } from "../../cache.ts";
 import { formatDate } from "../../shared/formatting.ts";

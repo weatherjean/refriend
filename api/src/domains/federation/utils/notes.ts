@@ -13,12 +13,13 @@ import {
   Note,
   Article,
   Page,
+  Hashtag,
   isActor,
   type Context,
 } from "@fedify/fedify";
 import type { DB } from "../../../db.ts";
 import { persistActor } from "../actor-persistence.ts";
-import { extractHashtags, validateAndSanitizeContent } from "./content.ts";
+import { validateAndSanitizeContent } from "./content.ts";
 import { fetchOpenGraph } from "../../posts/service.ts";
 
 /**
@@ -170,11 +171,20 @@ export async function fetchAndStoreNote(
       sensitive,
     });
 
-    // Extract hashtags
-    const hashtags = extractHashtags(content);
-    for (const tag of hashtags) {
-      const hashtag = await db.getOrCreateHashtag(tag);
-      await db.addPostHashtag(post.id, hashtag.id);
+    // Extract hashtags from structured tag data
+    try {
+      const tags = await note.getTags();
+      for await (const tag of tags) {
+        if (tag instanceof Hashtag && tag.name) {
+          const tagName = tag.name.toString().replace(/^#/, '').toLowerCase();
+          if (tagName) {
+            const hashtag = await db.getOrCreateHashtag(tagName);
+            await db.addPostHashtag(post.id, hashtag.id);
+          }
+        }
+      }
+    } catch {
+      // Tags may not be present
     }
 
     // Extract attachments

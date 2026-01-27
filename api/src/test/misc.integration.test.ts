@@ -85,7 +85,7 @@ Deno.test({
 
         assertEquals(res.status, 400);
         const data = await res.json();
-        assertEquals(data.error, "Handle required");
+        assertEquals(data.error, "Handle or actor_id required");
       });
     });
 

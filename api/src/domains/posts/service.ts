@@ -17,15 +17,16 @@ import { createNotification } from "../notifications/service.ts";
 // ============ Content Processing Helpers ============
 
 /**
- * Escape HTML special characters
+ * Escape HTML special characters for text content.
+ * Only escapes characters that can break HTML structure.
+ * Quotes/apostrophes are NOT escaped - they're safe in text content,
+ * only dangerous in attributes (which we don't use user input for).
  */
 export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replace(/>/g, "&gt;");
 }
 
 /**

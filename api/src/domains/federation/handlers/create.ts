@@ -12,13 +12,14 @@ import {
   Note,
   Article,
   Page,
+  Hashtag,
   isActor,
   PUBLIC_COLLECTION,
   type Context,
 } from "@fedify/fedify";
 import type { DB, Actor } from "../../../db.ts";
 import { persistActor, getCommunityDb } from "../actor-persistence.ts";
-import { extractHashtags, validateAndSanitizeContent, MAX_CONTENT_SIZE } from "../utils/content.ts";
+import { validateAndSanitizeContent, MAX_CONTENT_SIZE } from "../utils/content.ts";
 import { safeSendActivity } from "../utils/send.ts";
 import { fetchAndStoreNote } from "../utils/notes.ts";
 import { invalidateProfileCache } from "../../../cache.ts";
@@ -170,11 +171,21 @@ export async function processCreate(
     sensitive,
   });
 
-  // Extract and add hashtags
-  const hashtags = extractHashtags(content);
-  for (const tag of hashtags) {
-    const hashtag = await db.getOrCreateHashtag(tag);
-    await db.addPostHashtag(post.id, hashtag.id);
+  // Extract hashtags from structured tag data (not regex on content)
+  try {
+    const tags = await object.getTags();
+    for await (const tag of tags) {
+      if (tag instanceof Hashtag && tag.name) {
+        // Tag name comes as "#hashtag", strip the # prefix
+        const tagName = tag.name.toString().replace(/^#/, '').toLowerCase();
+        if (tagName) {
+          const hashtag = await db.getOrCreateHashtag(tagName);
+          await db.addPostHashtag(post.id, hashtag.id);
+        }
+      }
+    }
+  } catch {
+    // Tags may not be present
   }
 
   // Extract attachments from incoming Note
