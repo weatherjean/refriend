@@ -25,6 +25,7 @@ import { invalidateProfileCache } from "../../../cache.ts";
 import { updateParentPostScore } from "../../../scoring.ts";
 import { createNotification } from "../../notifications/routes.ts";
 import { CommunityModeration } from "../../communities/moderation.ts";
+import { fetchOpenGraph } from "../../posts/service.ts";
 
 /**
  * Process a Create activity
@@ -184,10 +185,32 @@ export async function processCreate(
       if (att instanceof Link && (object instanceof Page || object instanceof Article)) {
         const linkHref = att.href;
         if (linkHref) {
-          // Use the Link href as the post's external URL (overrides object.url for link posts)
           const externalUrl = linkHref instanceof URL ? linkHref.href : String(linkHref);
+
+          // 1. Update post URL
           await db.updatePostUrl(post.id, externalUrl);
           console.log(`[Create] Added external link from attachment: ${externalUrl}`);
+
+          // 2. Fetch OpenGraph preview (non-blocking, don't fail on error)
+          try {
+            const linkPreview = await fetchOpenGraph(externalUrl);
+            if (linkPreview) {
+              await db.updatePostLinkPreview(post.id, linkPreview);
+              console.log(`[Create] Added link preview for: ${externalUrl}`);
+            }
+          } catch (e) {
+            console.log(`[Create] Failed to fetch link preview: ${e}`);
+          }
+
+          // 3. Append link to content (like local posts do)
+          const escapedUrl = externalUrl
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+          const linkHtml = `<p><a href="${escapedUrl}">${escapedUrl}</a></p>`;
+          const updatedContent = content + linkHtml;
+          await db.updatePostContent(post.id, updatedContent);
         }
         continue;
       }

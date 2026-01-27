@@ -1,18 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { search, Actor, Post } from '../api';
-import { useAuth } from '../context/AuthContext';
 import { getUsername, getCommunitySlug } from '../utils';
 import { Avatar } from '../components/Avatar';
 import { EmptyState } from '../components/EmptyState';
 import { PostCard } from '../components/PostCard';
 import { SearchForm } from '../components/SearchForm';
 import { TabContent } from '../components/TabContent';
-import { LoadingButton } from '../components/LoadingButton';
-import { useFollowMultiActor } from '../hooks';
 
 export function SearchPage() {
-  const { user, actor: currentActor } = useAuth();
   const [searchParams] = useSearchParams();
   const initialQuery = searchParams.get('q') || '';
   const [query, setQuery] = useState(initialQuery);
@@ -22,12 +18,6 @@ export function SearchPage() {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [activeTab, setActiveTab] = useState<'users' | 'posts'>('users');
-
-  const { followingSet, loadingSet: followingInProgress, toggleActorFollow, initFollowingSet } = useFollowMultiActor();
-
-  useEffect(() => {
-    initFollowingSet();
-  }, [initFollowingSet]);
 
   const performSearch = async (searchQuery: string) => {
     let trimmed = searchQuery.trim();
@@ -139,8 +129,6 @@ export function SearchPage() {
                       const profileLink = isCommunity
                         ? `/c/${getCommunitySlug(actor.handle, actor.is_local)}`
                         : `/u/${actor.handle}`;
-                      const isFollowing = followingSet.has(actor.id);
-                      const isSelf = currentActor?.id === actor.id;
 
                       return (
                         <Link
@@ -169,21 +157,6 @@ export function SearchPage() {
                                 <small className="text-muted d-none d-md-block text-truncate mt-1">{actor.bio.replace(/<[^>]*>/g, '')}</small>
                               )}
                             </div>
-                            {user && !isSelf && (
-                              <LoadingButton
-                                variant={isFollowing ? 'outline-secondary' : 'outline-primary'}
-                                size="sm"
-                                className="flex-shrink-0"
-                                loading={followingInProgress.has(actor.id)}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  toggleActorFollow(actor);
-                                }}
-                              >
-                                {isFollowing ? (isCommunity ? 'Joined' : 'Following') : (isCommunity ? 'Join' : 'Follow')}
-                              </LoadingButton>
-                            )}
                           </div>
                         </Link>
                       );

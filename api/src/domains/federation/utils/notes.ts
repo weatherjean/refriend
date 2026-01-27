@@ -17,6 +17,7 @@ import {
 import type { DB } from "../../../db.ts";
 import { persistActor } from "../actor-persistence.ts";
 import { extractHashtags, validateAndSanitizeContent } from "./content.ts";
+import { fetchOpenGraph } from "../../posts/service.ts";
 
 /**
  * Fetch and store a remote Note (for fetching parent posts of replies)
@@ -153,9 +154,29 @@ export async function fetchAndStoreNote(
         if (att instanceof Link && (note instanceof Page || note instanceof Article)) {
           const linkHref = att.href;
           if (linkHref) {
-            // Use the Link href as the post's external URL (overrides object.url for link posts)
             const externalUrl = linkHref instanceof URL ? linkHref.href : String(linkHref);
+
+            // 1. Update post URL
             await db.updatePostUrl(post.id, externalUrl);
+
+            // 2. Fetch OpenGraph preview (non-blocking, don't fail on error)
+            try {
+              const linkPreview = await fetchOpenGraph(externalUrl);
+              if (linkPreview) {
+                await db.updatePostLinkPreview(post.id, linkPreview);
+              }
+            } catch {
+              // Ignore fetch errors
+            }
+
+            // 3. Append link to content (like local posts do)
+            const escapedUrl = externalUrl
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;');
+            const linkHtml = `<p><a href="${escapedUrl}">${escapedUrl}</a></p>`;
+            await db.updatePostContent(post.id, content + linkHtml);
           }
           continue;
         }

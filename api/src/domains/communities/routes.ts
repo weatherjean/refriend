@@ -642,6 +642,45 @@ export function createCommunityRoutes(
       return c.json({ error: "Community not found" }, 404);
     }
 
+    // Check if this is a remote community (no created_by means it was federated in)
+    const isRemoteCommunity = community.created_by === null;
+
+    if (isRemoteCommunity) {
+      // Remote communities: posts come from Announce activities stored in boosts table
+      const boostedPosts = await db.getBoostedPostsWithActor(community.id, limit + 1, before);
+      const hasMore = boostedPosts.length > limit;
+      const result = hasMore ? boostedPosts.slice(0, limit) : boostedPosts;
+      const nextCursor = hasMore && result.length > 0 ? result[result.length - 1].id : null;
+
+      // Enrich posts with all the data PostCard needs
+      const enrichedPosts = await enrichPostsBatch(db, result, currentActor?.id, domain, communityDb);
+
+      // All posts from remote communities are boosts (announcements)
+      const posts = enrichedPosts.map((post) => ({
+        ...post,
+        pinned_in_community: false, // Remote communities don't have local pinning
+        is_announcement: true,
+        community: {
+          id: community.public_id,
+          name: community.name,
+          handle: community.handle,
+          avatar_url: community.avatar_url,
+        },
+        boosted_by: {
+          id: community.public_id,
+          handle: community.handle,
+          name: community.name,
+          avatar_url: community.avatar_url,
+        },
+      }));
+
+      return c.json({
+        posts,
+        next_cursor: nextCursor,
+      });
+    }
+
+    // Local communities: use community_posts table
     const communityPosts = await communityDb.getCommunityPosts(community.id, "approved", limit + 1, before, sort);
     const hasMore = communityPosts.length > limit;
     const result = hasMore ? communityPosts.slice(0, limit) : communityPosts;
@@ -709,6 +748,11 @@ export function createCommunityRoutes(
     const community = await lookupCommunity(communityDb, name);
     if (!community) {
       return c.json({ error: "Community not found" }, 404);
+    }
+
+    // Remote communities don't have local pinning
+    if (community.created_by === null) {
+      return c.json({ posts: [] });
     }
 
     const pinnedPosts = await communityDb.getPinnedPosts(community.id);

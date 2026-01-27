@@ -21,7 +21,7 @@ export function CommunityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
-  const [activeTab, setActiveTab] = useState<'posts' | 'pending' | 'modlogs' | 'settings'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'boosts' | 'pending' | 'modlogs' | 'settings'>('posts');
   const [_nextCursor, setNextCursor] = useState<number | null>(null);
   const [postSort, setPostSort] = useState<'new' | 'hot'>('hot');
 
@@ -34,6 +34,11 @@ export function CommunityPage() {
         const { community: c, moderation: mod } = await communities.get(name);
         setCommunity(c);
         setModeration(mod);
+
+        // For remote communities, default to boosts tab
+        if (!c.is_local) {
+          setActiveTab('boosts');
+        }
 
         // Load pinned posts
         const { posts: pinned } = await communities.getPinnedPosts(name);
@@ -266,14 +271,28 @@ export function CommunityPage() {
 
       {/* Tabs */}
       <ul className="nav nav-tabs mb-3">
-        <li className="nav-item">
-          <button
-            className={`nav-link ${activeTab === 'posts' ? 'active' : ''}`}
-            onClick={() => setActiveTab('posts')}
-          >
-            Posts
-          </button>
-        </li>
+        {/* Remote communities show Boosts tab first */}
+        {!community.is_local && (
+          <li className="nav-item">
+            <button
+              className={`nav-link ${activeTab === 'boosts' ? 'active' : ''}`}
+              onClick={() => setActiveTab('boosts')}
+            >
+              <i className="bi bi-arrow-repeat me-1"></i>Boosts
+            </button>
+          </li>
+        )}
+        {/* Local communities show Posts tab */}
+        {community.is_local && (
+          <li className="nav-item">
+            <button
+              className={`nav-link ${activeTab === 'posts' ? 'active' : ''}`}
+              onClick={() => setActiveTab('posts')}
+            >
+              Posts
+            </button>
+          </li>
+        )}
         {moderation?.isAdmin && community.require_approval && (
           <li className="nav-item">
             <button
@@ -309,7 +328,7 @@ export function CommunityPage() {
       </ul>
 
       {/* Tab Content */}
-      {activeTab === 'posts' && (
+      {(activeTab === 'posts' || activeTab === 'boosts') && (
         <div>
           {(posts.length > 0 || pinnedPosts.length > 0) && (
             <div className="d-flex justify-content-end mb-3">

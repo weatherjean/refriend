@@ -842,6 +842,12 @@ export class DB {
     });
   }
 
+  async updatePostContent(id: number, content: string): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`UPDATE posts SET content = ${content} WHERE id = ${id}`;
+    });
+  }
+
   async getPostById(id: number): Promise<Post | null> {
     return this.query(async (client) => {
       const result = await client.queryObject<Post>`SELECT * FROM posts WHERE id = ${id}`;
