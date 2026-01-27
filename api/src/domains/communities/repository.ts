@@ -613,6 +613,35 @@ export class CommunityDB {
     this.logModAction(communityId, reviewerId, "post_rejected", "post", postPublicId);
   }
 
+  // Check if a post (or its thread root) is an announcement (boosted into community)
+  // Returns true if the post or any ancestor in the reply chain is an announcement
+  async isPostInAnnouncementThread(communityId: number, postId: number): Promise<boolean> {
+    return this.query(async (client) => {
+      // Use recursive CTE to find the root of the thread and check if any post in chain is announcement
+      const result = await client.queryObject<{ is_announcement: boolean }>`
+        WITH RECURSIVE thread AS (
+          -- Start with the current post
+          SELECT p.id, p.in_reply_to_id
+          FROM posts p
+          WHERE p.id = ${postId}
+
+          UNION ALL
+
+          -- Recursively get parent posts
+          SELECT p.id, p.in_reply_to_id
+          FROM posts p
+          INNER JOIN thread t ON p.id = t.in_reply_to_id
+        )
+        SELECT cp.is_announcement
+        FROM thread t
+        JOIN community_posts cp ON cp.post_id = t.id AND cp.community_id = ${communityId}
+        WHERE cp.is_announcement = true
+        LIMIT 1
+      `;
+      return result.rows.length > 0;
+    });
+  }
+
   // Remove a post from community (unboost) without deleting the actual post
   async unboostPost(communityId: number, postId: number, unboostedBy: number, postPublicId?: string): Promise<void> {
     await this.query(async (client) => {

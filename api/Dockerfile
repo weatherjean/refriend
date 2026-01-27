@@ -3,8 +3,8 @@ FROM denoland/deno:latest
 WORKDIR /app
 
 # Create non-root user for security
-RUN addgroup --gid 1000 deno && \
-    adduser --uid 1000 --gid 1000 --disabled-password --gecos "" deno
+RUN groupadd --gid 1000 deno 2>/dev/null || true && \
+    useradd --uid 1000 --gid 1000 --create-home deno 2>/dev/null || true
 
 # Create data directory for KV persistence with correct ownership
 RUN mkdir -p /data && chown deno:deno /data

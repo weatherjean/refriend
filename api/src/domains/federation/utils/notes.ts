@@ -167,6 +167,18 @@ export async function fetchAndStoreNote(
     // Get sensitive flag
     const sensitive = note.sensitive ?? false;
 
+    // Extract audience (Lemmy community) - single value, not array
+    const addressedTo: string[] = [];
+    try {
+      const audienceId = note.audienceId;
+      if (audienceId) {
+        addressedTo.push(audienceId.href);
+        console.log(`[Reply] Post has audience: ${audienceId.href}`);
+      }
+    } catch {
+      // Audience may not be present
+    }
+
     // Create the post
     const post = await db.createPost({
       uri: note.id.href,
@@ -175,6 +187,7 @@ export async function fetchAndStoreNote(
       url: urlString,
       in_reply_to_id: inReplyToId,
       sensitive,
+      addressed_to: addressedTo.length > 0 ? addressedTo : undefined,
     });
 
     // Extract hashtags from structured tag data

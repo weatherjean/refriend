@@ -124,6 +124,15 @@ export async function processActivity(
   }
 
   try {
+    // For outbound activities, serialize BEFORE processing (which queues for sending)
+    // This prevents toJsonLd() from mutating the activity after it's queued
+    let rawJson: string | null = null;
+    let objectInfo: { uri: string | null; type: string | null } | null = null;
+    if (direction === "outbound") {
+      rawJson = await serializeActivity(activity);
+      objectInfo = await getObjectInfo(activity);
+    }
+
     // Process based on activity type
     if (activity instanceof Create) {
       await processCreate(ctx, db, domain, activity, direction, localUsername);
@@ -147,7 +156,7 @@ export async function processActivity(
 
     // Only store outbound activities (for serving our outbox)
     // Inbound activities don't need to be stored - Fedify handles deduplication via KV
-    if (direction === "outbound") {
+    if (direction === "outbound" && rawJson && objectInfo) {
       // Get local actor for storing activity
       let actor: Actor | null = null;
       if (localUsername) {
@@ -167,9 +176,6 @@ export async function processActivity(
       }
 
       if (actor) {
-        const objectInfo = await getObjectInfo(activity);
-        const rawJson = await serializeActivity(activity);
-
         const storedActivity = await db.storeActivity({
           uri: activityUri,
           type: getActivityType(activity),

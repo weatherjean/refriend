@@ -161,6 +161,30 @@ export async function processCreate(
   // Get sensitive flag
   const sensitive = object.sensitive ?? false;
 
+  // Extract audience URIs (Lemmy community) for inbound posts
+  const addressedTo: string[] = [];
+  if (direction === "inbound") {
+    try {
+      // Try singular audience first (Lemmy uses this)
+      const audienceId = object.audienceId;
+      if (audienceId) {
+        addressedTo.push(audienceId.href);
+      }
+      // Also check plural audiences
+      const audienceIds = object.audienceIds;
+      for (const uri of audienceIds) {
+        if (uri instanceof URL && !addressedTo.includes(uri.href)) {
+          addressedTo.push(uri.href);
+        }
+      }
+      if (addressedTo.length > 0) {
+        console.log(`[Create] Post has audience: ${addressedTo.join(", ")}`);
+      }
+    } catch {
+      // Audience may not be present
+    }
+  }
+
   // Create the post
   const post = await db.createPost({
     uri: noteUri,
@@ -169,6 +193,7 @@ export async function processCreate(
     url: postUrlString,
     in_reply_to_id: inReplyToId,
     sensitive,
+    addressed_to: addressedTo.length > 0 ? addressedTo : undefined,
   });
 
   // Extract hashtags from structured tag data (not regex on content)
@@ -292,18 +317,45 @@ export async function processCreate(
       if (parentPost) {
         const parentAuthor = await db.getActorById(parentPost.actor_id);
         if (parentAuthor && !parentAuthor.user_id && parentAuthor.inbox_url) {
-          // Remote author - send them the reply
+          // Remote author - send them the reply via shared inbox if available
           await safeSendActivity(ctx,
             { identifier: localUsername },
             {
               id: new URL(parentAuthor.uri),
-              inboxId: new URL(parentAuthor.inbox_url),
+              inboxId: new URL(parentAuthor.shared_inbox_url || parentAuthor.inbox_url),
             },
-            create
+            create,
+            { preferSharedInbox: true }
           );
           console.log(`[Create] Sent reply to ${parentAuthor.handle}`);
         }
       }
+    }
+
+    // If the Note has an audience (Lemmy community), send to the community inbox
+    try {
+      const audienceId = object.audienceId;
+      if (audienceId) {
+        // Fetch the community actor to get its inbox
+        const communityActor = await db.getActorByUri(audienceId.href);
+        if (communityActor && communityActor.inbox_url) {
+          // Use shared inbox for Lemmy communities
+          await safeSendActivity(ctx,
+            { identifier: localUsername },
+            {
+              id: new URL(communityActor.uri),
+              inboxId: new URL(communityActor.shared_inbox_url || communityActor.inbox_url),
+            },
+            create,
+            { preferSharedInbox: true }
+          );
+          console.log(`[Create] Sent to community: ${communityActor.handle}`);
+        } else {
+          console.log(`[Create] Community actor not found for audience: ${audienceId.href}`);
+        }
+      }
+    } catch (e) {
+      console.log(`[Create] Failed to send to audience:`, e);
     }
   }
 

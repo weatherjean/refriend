@@ -9,6 +9,7 @@ import {
   Create,
   Delete,
   Document,
+  Group,
   Hashtag,
   Note,
   Tombstone,
@@ -400,12 +401,23 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       height: att.height,
     }));
 
+    // Check if parent post has audience (Lemmy community) - inherit it for replies
+    let audienceUri: URL | undefined;
+    const ccRecipients: URL[] = [ctx.getFollowersUri(user.username)];
+    if (replyToPost?.addressed_to && replyToPost.addressed_to.length > 0) {
+      // Use first audience URI (typically the community)
+      audienceUri = new URL(replyToPost.addressed_to[0]);
+      // Add community to cc recipients so it receives the activity
+      ccRecipients.push(audienceUri);
+      console.log(`[Create] Reply inherits audience: ${audienceUri.href}`);
+    }
+
     // Create the Note
     const note = new Note({
       id: new URL(noteUri),
       attribution: ctx.getActorUri(user.username),
       to: PUBLIC_COLLECTION,
-      cc: ctx.getFollowersUri(user.username),
+      ccs: ccRecipients,
       content: safeContent,
       url: new URL(noteUrl),
       published: Temporal.Now.instant(),
@@ -413,6 +425,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       attachments: noteAttachments.length > 0 ? noteAttachments : undefined,
       tags: noteTags.length > 0 ? noteTags : undefined,
       sensitive: sensitive ?? false,
+      audience: audienceUri,
     });
 
     // Create the activity
@@ -421,7 +434,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       actor: ctx.getActorUri(user.username),
       object: note,
       to: PUBLIC_COLLECTION,
-      cc: ctx.getFollowersUri(user.username),
+      ccs: ccRecipients,
     });
 
     // Process through unified pipeline

@@ -1206,15 +1206,31 @@ export function createCommunityRoutes(
       return c.json({ error: permission.reason }, 403);
     }
 
+    // Check if this post (or its thread root) is an announcement (boosted into community)
+    // Cannot delete posts in announcement threads - they belong to external servers
+    // Use unboost on the root post to remove the entire thread from the community
+    const isAnnouncementThread = await communityDb.isPostInAnnouncementThread(community.id, post.id);
+    if (isAnnouncementThread) {
+      return c.json({
+        error: "Cannot delete posts in a boosted thread. Use unboost on the original post to remove it from the community."
+      }, 400);
+    }
+
     // Get all posts that will be deleted (for ActivityPub and cache invalidation)
     const { deletedUris, deletedCount, mediaUrls } = await db.cascadeDeletePost(post.id);
 
-    // Send Delete activities for each deleted post using their proper URIs
+    // Send Delete activities only for LOCAL posts (we can't delete remote content)
     const ctx = federation.createContext(c.req.raw, undefined);
     // Extract slug from handle (@slug@domain -> slug)
     const communitySlug = community.handle.replace(/^@/, '').split('@')[0];
     const communityActorUri = getCommunityActorUri(communitySlug);
+    const localDomain = `https://${domain}`;
     for (const postUri of deletedUris) {
+      // Only send Delete for posts on our domain - we don't own remote posts
+      if (!postUri.startsWith(localDomain)) {
+        console.log(`[Community] Skipping Delete activity for remote post: ${postUri}`);
+        continue;
+      }
       try {
         const deleteActivity = new Delete({
           id: new URL(`https://${domain}/#deletes/${crypto.randomUUID()}`),

@@ -65,9 +65,44 @@ const kvPath = Deno.env.get("DENO_KV_PATH") || undefined;
 const kv = await Deno.openKv(kvPath);
 
 // Parallel message queue for better throughput
+const parallelWorkers = parseInt(Deno.env.get("QUEUE_WORKERS") || "16");
+
+// Wrap queue to disable native retry - this lets Fedify's retry policy control retries
+// DenoKvMessageQueue has nativeRetrial=true by default, which ignores our retry policy
+// By setting nativeRetrial=false, we use Fedify's fail-fast retry policy instead
+class ControlledRetryQueue {
+  #inner: DenoKvMessageQueue;
+
+  constructor(inner: DenoKvMessageQueue) {
+    this.#inner = inner;
+  }
+
+  // Signal to Fedify that WE control retries, not Deno KV's native retry
+  // This enables our fail-fast retry policy to work
+  get nativeRetrial(): boolean {
+    return false;
+  }
+
+  enqueue(
+    message: unknown,
+    options?: { delay?: Temporal.Duration }
+  ): Promise<void> {
+    return this.#inner.enqueue(message, options);
+  }
+
+  listen(
+    handler: (message: unknown) => Promise<void> | void,
+    options?: { signal?: AbortSignal }
+  ): Promise<void> {
+    return this.#inner.listen(handler, options);
+  }
+}
+
 const baseQueue = new DenoKvMessageQueue(kv);
-const parallelWorkers = parseInt(Deno.env.get("QUEUE_WORKERS") || "4");
-const queue = new ParallelMessageQueue(baseQueue, parallelWorkers);
+const queue = new ParallelMessageQueue(
+  new ControlledRetryQueue(baseQueue) as unknown as DenoKvMessageQueue,
+  parallelWorkers
+);
 
 // Check if we should manually start the queue (for web/worker separation)
 // Only enable manual control when NODE_TYPE is explicitly set
@@ -82,7 +117,14 @@ export const federation = createFederation<void>({
   firstKnock: "draft-cavage-http-signatures-12",
   onOutboxError: (error, activity) => {
     const activityId = activity?.id?.href ?? "unknown";
-    console.error(`[Outbox Error] Activity ${activityId}:`, error);
+    const errorStr = String(error);
+    // Check if this is a permanent failure (4xx client error)
+    const isPermanent = /\b(4\d{2})\b/.test(errorStr) || errorStr.includes("Gone");
+    if (isPermanent) {
+      console.warn(`[Outbox] Permanent failure for ${activityId}: ${errorStr.slice(0, 500)}`);
+    } else {
+      console.error(`[Outbox Error] Activity ${activityId}:`, error);
+    }
   },
   // Custom retry policies with exponential backoff
   // Inbox: 5 attempts, starting at 1s, max 1 minute
@@ -91,11 +133,12 @@ export const federation = createFederation<void>({
     initialDelay: Temporal.Duration.from({ seconds: 1 }),
     maxDelay: Temporal.Duration.from({ minutes: 1 }),
   }),
-  // Outbox: 10 attempts, starting at 1s, max 5 minutes
+  // Outbox: fail fast - 3 attempts max, short delays
+  // With 16 workers and fast failure, one dead endpoint won't block everything
   outboxRetryPolicy: createExponentialBackoffPolicy({
-    maxAttempts: 10,
-    initialDelay: Temporal.Duration.from({ seconds: 1 }),
-    maxDelay: Temporal.Duration.from({ minutes: 5 }),
+    maxAttempts: 3,
+    initialDelay: Temporal.Duration.from({ seconds: 5 }),
+    maxDelay: Temporal.Duration.from({ seconds: 30 }),
   }),
 });
 
