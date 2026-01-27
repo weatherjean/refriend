@@ -143,46 +143,48 @@ export async function processActivity(
       await processReject(ctx, db, domain, activity, direction);
     }
 
-    // Get actor for storing activity
-    let actor: Actor | null = null;
+    console.log(`[${getActivityType(activity)}] Processed (${direction}): ${activityUri}`);
 
-    // For outbound activities, use the local username directly
-    if (direction === "outbound" && localUsername) {
-      actor = await db.getActorByUsername(localUsername);
-    }
+    // Only store outbound activities (for serving our outbox)
+    // Inbound activities don't need to be stored - Fedify handles deduplication via KV
+    if (direction === "outbound") {
+      // Get local actor for storing activity
+      let actor: Actor | null = null;
+      if (localUsername) {
+        actor = await db.getActorByUsername(localUsername);
+      }
 
-    // For inbound or if local lookup failed, try to resolve from activity
-    if (!actor) {
-      try {
-        const actorAP = await activity.getActor();
-        if (actorAP && isActor(actorAP)) {
-          actor = await persistActor(db, domain, actorAP);
+      if (!actor) {
+        // Try to resolve from activity as fallback
+        try {
+          const actorAP = await activity.getActor();
+          if (actorAP && isActor(actorAP)) {
+            actor = await persistActor(db, domain, actorAP);
+          }
+        } catch {
+          // In localhost dev, getActor might fail
         }
-      } catch {
-        // In localhost dev, getActor might fail - that's OK for outbound
+      }
+
+      if (actor) {
+        const objectInfo = await getObjectInfo(activity);
+        const rawJson = await serializeActivity(activity);
+
+        const storedActivity = await db.storeActivity({
+          uri: activityUri,
+          type: getActivityType(activity),
+          actor_id: actor.id,
+          object_uri: objectInfo.uri,
+          object_type: objectInfo.type,
+          raw_json: rawJson,
+          direction,
+        });
+
+        return { success: true, activity: storedActivity };
       }
     }
 
-    if (!actor) {
-      return { success: false, error: "Failed to resolve actor" };
-    }
-
-    // Store the activity
-    const objectInfo = await getObjectInfo(activity);
-    const rawJson = await serializeActivity(activity);
-
-    const storedActivity = await db.storeActivity({
-      uri: activityUri,
-      type: getActivityType(activity),
-      actor_id: actor.id,
-      object_uri: objectInfo.uri,
-      object_type: objectInfo.type,
-      raw_json: rawJson,
-      direction,
-    });
-
-    console.log(`[${getActivityType(activity)}] Processed (${direction}): ${activityUri}`);
-    return { success: true, activity: storedActivity };
+    return { success: true };
   } catch (error) {
     console.error(`[${getActivityType(activity)}] Error:`, error);
     return { success: false, error: String(error) };

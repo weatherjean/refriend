@@ -1889,27 +1889,6 @@ export class DB {
     });
   }
 
-  async getActivitiesByActor(actorId: number, limit = 50): Promise<Activity[]> {
-    return this.query(async (client) => {
-      const result = await client.queryObject<Activity>`
-        SELECT * FROM activities WHERE actor_id = ${actorId}
-        ORDER BY created_at DESC LIMIT ${limit}
-      `;
-      return result.rows;
-    });
-  }
-
-  async getOutboxActivities(actorId: number, limit = 50): Promise<Activity[]> {
-    return this.query(async (client) => {
-      const result = await client.queryObject<Activity>`
-        SELECT * FROM activities
-        WHERE actor_id = ${actorId} AND direction = 'outbound'
-        ORDER BY created_at DESC LIMIT ${limit}
-      `;
-      return result.rows;
-    });
-  }
-
   async getPostCountByActor(actorId: number): Promise<number> {
     return this.query(async (client) => {
       const result = await client.queryObject<{ count: bigint }>`
