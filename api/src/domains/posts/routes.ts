@@ -38,6 +38,33 @@ interface PostsEnv {
 export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
   const routes = new Hono<PostsEnv>();
 
+  // GET /posts/all - Get all posts for troubleshooting (auth required)
+  routes.get("/posts/all", async (c) => {
+    const user = c.get("user");
+    if (!user) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const db = c.get("db");
+    const communityDb = c.get("communityDb");
+    const domain = c.get("domain");
+    const currentActor = c.get("actor");
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const before = parseIntSafe(c.req.query("before")) ?? undefined;
+
+    const posts = await db.getAllPostsWithActor(limit + 1, before);
+    const hasMore = posts.length > limit;
+    const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+    const nextCursor = hasMore && resultPosts.length > 0
+      ? resultPosts[resultPosts.length - 1].id
+      : null;
+
+    return c.json({
+      posts: await service.enrichPostsBatch(db, resultPosts, currentActor?.id, domain, communityDb),
+      next_cursor: nextCursor,
+    });
+  });
+
   // GET /posts/hot - Get hot posts from user's timeline
   routes.get("/posts/hot", async (c) => {
     const actor = c.get("actor");

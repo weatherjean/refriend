@@ -296,6 +296,13 @@ export const posts = {
     const queryStr = query.toString();
     return fetchJson<PaginatedPosts>(`/timeline${queryStr ? '?' + queryStr : ''}`);
   },
+  getAll: (params?: PaginationParams) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const queryStr = query.toString();
+    return fetchJson<PaginatedPosts>(`/posts/all${queryStr ? '?' + queryStr : ''}`);
+  },
   getHot: (limit = 10) => fetchJson<{ posts: Post[] }>(`/posts/hot?limit=${limit}`),
   get: (id: string) => fetchJson<{ post: Post; ancestors: Post[] }>(`/posts/${id}`),
   getReplies: (id: string, sort?: 'new' | 'hot', after?: number) => {

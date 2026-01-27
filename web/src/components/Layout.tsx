@@ -258,6 +258,13 @@ export function Layout({ children }: LayoutProps) {
             <Link to="/install" onClick={() => setMobileMenuOpen(false)}>
               Install App
             </Link>
+            {user && (
+              <div>
+                <Link to="/all" onClick={() => setMobileMenuOpen(false)}>
+                  All Activity
+                </Link>
+              </div>
+            )}
             <div className="sidebar-footer-legal">
               <Link to="/policy" onClick={() => setMobileMenuOpen(false)}>Content Policy</Link>
               <span className="sidebar-footer-sep">·</span>

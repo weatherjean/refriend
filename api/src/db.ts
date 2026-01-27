@@ -1024,6 +1024,21 @@ export class DB {
     });
   }
 
+  // Get ALL posts (no filtering) - for troubleshooting
+  async getAllPostsWithActor(limit = 20, before?: number): Promise<PostWithActor[]> {
+    return this.query(async (client) => {
+      const query = before
+        ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           WHERE p.id < $1
+           ORDER BY p.id DESC LIMIT $2`
+        : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           ORDER BY p.id DESC LIMIT $1`;
+      const params = before ? [before, limit] : [limit];
+      const result = await client.queryObject(query, params);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
+    });
+  }
+
   async getHotPosts(limit = 10): Promise<PostWithActor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject(`
