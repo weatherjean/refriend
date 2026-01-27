@@ -156,6 +156,12 @@ export async function fetchAndStoreNote(
     if (parentReplyUri) {
       // Limit recursion depth to avoid infinite loops
       inReplyToId = await fetchAndStoreNote(ctx, db, domain, parentReplyUri);
+
+      // Discard replies if we can't resolve the parent post
+      if (!inReplyToId) {
+        console.log(`[Reply] Discarding reply - parent post not found: ${parentReplyUri}`);
+        return null;
+      }
     }
 
     // Get sensitive flag
