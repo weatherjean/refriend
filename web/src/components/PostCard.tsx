@@ -48,6 +48,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [linkPreviewLightboxOpen, setLinkPreviewLightboxOpen] = useState(false);
+  const [linkPreviewImageError, setLinkPreviewImageError] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -301,12 +302,16 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
             {/* Link Preview Card */}
             {post.link_preview && (
               <div className="link-preview-card" onClick={(e) => e.stopPropagation()}>
-                {post.link_preview.image && (
+                {post.link_preview.image && !linkPreviewImageError && (
                   <div
                     className="link-preview-image"
                     onClick={() => setLinkPreviewLightboxOpen(true)}
                   >
-                    <img src={post.link_preview.image} alt="" />
+                    <img
+                      src={post.link_preview.image}
+                      alt=""
+                      onError={() => setLinkPreviewImageError(true)}
+                    />
                   </div>
                 )}
                 <a
@@ -330,7 +335,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
             )}
 
             {/* Link Preview Lightbox */}
-            {post.link_preview?.image && (
+            {post.link_preview?.image && !linkPreviewImageError && (
               <ImageLightbox
                 attachments={[{ id: 0, url: post.link_preview.image, media_type: 'image/jpeg', alt_text: post.link_preview.title || null, width: null, height: null }]}
                 initialIndex={0}

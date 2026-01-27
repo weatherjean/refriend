@@ -5,6 +5,7 @@
  */
 
 import {
+  Create,
   Document,
   Image,
   Link,
@@ -41,18 +42,43 @@ export async function fetchAndStoreNote(
 
     // Check the object type and parse accordingly
     // deno-lint-ignore no-explicit-any
-    const docType = (document as any)?.type || (document as any)?.['@type'];
-    const typeStr = Array.isArray(docType) ? docType[0] : docType;
+    let docType = (document as any)?.type || (document as any)?.['@type'];
+    let typeStr = Array.isArray(docType) ? docType[0] : docType;
+    // deno-lint-ignore no-explicit-any
+    let objectDoc: any = document;
+
+    // Handle Create/Update activities by unwrapping to get the actual object
+    // Lemmy sends URLs like /activities/create/... that return Create activities
+    if (typeStr === 'Create' || typeStr === 'Update') {
+      try {
+        const createActivity = await Create.fromJsonLd(document, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
+        const innerObject = await createActivity.getObject();
+        if (innerObject && 'id' in innerObject && innerObject.id) {
+          // Re-fetch the actual object URL
+          const { document: innerDoc } = await docLoader(innerObject.id.href);
+          objectDoc = innerDoc;
+          docType = (innerDoc as any)?.type || (innerDoc as any)?.['@type'];
+          typeStr = Array.isArray(docType) ? docType[0] : docType;
+          console.log(`[Reply] Unwrapped ${typeStr === 'Create' ? 'Create' : 'Update'} activity to ${typeStr}: ${innerObject.id.href}`);
+        } else {
+          console.log(`[Reply] Create/Update activity has no valid object: ${noteUri}`);
+          return null;
+        }
+      } catch (e) {
+        console.log(`[Reply] Failed to unwrap Create/Update activity: ${noteUri}`, e);
+        return null;
+      }
+    }
 
     let note: Note | Article | Page | null = null;
     let titlePrefix: string | null = null;
 
     if (typeStr === 'Article') {
-      note = await Article.fromJsonLd(document, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
+      note = await Article.fromJsonLd(objectDoc, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
     } else if (typeStr === 'Page') {
-      note = await Page.fromJsonLd(document, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
+      note = await Page.fromJsonLd(objectDoc, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
     } else if (typeStr === 'Note') {
-      note = await Note.fromJsonLd(document, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
+      note = await Note.fromJsonLd(objectDoc, { documentLoader: docLoader, contextLoader: ctx.contextLoader });
     } else {
       console.log(`[Reply] Skipping unsupported object type (${typeStr}): ${noteUri}`);
       return null;

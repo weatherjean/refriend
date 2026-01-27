@@ -190,14 +190,16 @@ export function CommunityPage() {
             {user && !moderation?.isBanned && (
               <div className="mt-3">
                 <button
-                  className={`btn ${moderation?.isMember ? 'btn-outline-secondary' : 'btn-primary'}`}
+                  className={`btn ${moderation?.isMember ? 'btn-outline-secondary' : moderation?.membershipStatus === 'pending' ? 'btn-outline-warning' : 'btn-primary'}`}
                   onClick={handleJoinLeave}
-                  disabled={joining}
+                  disabled={joining || moderation?.membershipStatus === 'pending'}
                 >
                   {joining ? (
                     <span className="spinner-border spinner-border-sm"></span>
                   ) : moderation?.isMember ? (
                     'Leave'
+                  ) : moderation?.membershipStatus === 'pending' ? (
+                    'Pending...'
                   ) : (
                     'Join'
                   )}
@@ -223,14 +225,16 @@ export function CommunityPage() {
                 </div>
                 {user && !moderation?.isBanned && (
                   <button
-                    className={`btn ${moderation?.isMember ? 'btn-outline-secondary' : 'btn-primary'}`}
+                    className={`btn ${moderation?.isMember ? 'btn-outline-secondary' : moderation?.membershipStatus === 'pending' ? 'btn-outline-warning' : 'btn-primary'}`}
                     onClick={handleJoinLeave}
-                    disabled={joining}
+                    disabled={joining || moderation?.membershipStatus === 'pending'}
                   >
                     {joining ? (
                       <span className="spinner-border spinner-border-sm"></span>
                     ) : moderation?.isMember ? (
                       'Leave'
+                    ) : moderation?.membershipStatus === 'pending' ? (
+                      'Pending...'
                     ) : (
                       'Join'
                     )}

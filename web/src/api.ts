@@ -347,10 +347,11 @@ export const posts = {
 
 // Follows
 export const follows = {
-  follow: (handle: string) =>
+  // Prefer passing actorId to avoid case sensitivity issues with handles
+  follow: (handleOrId: string, actorId?: string) =>
     fetchJson<{ ok: boolean; message?: string }>('/follow', {
       method: 'POST',
-      body: JSON.stringify({ handle }),
+      body: JSON.stringify(actorId ? { actor_id: actorId } : { handle: handleOrId }),
     }),
   unfollow: (actorId: string) =>
     fetchJson<{ ok: boolean }>('/unfollow', {
@@ -438,6 +439,7 @@ export interface Community {
 
 export interface CommunityModerationInfo {
   isMember: boolean;
+  membershipStatus: 'accepted' | 'pending' | null;
   isAdmin: boolean;
   isOwner: boolean;
   isBanned: boolean;

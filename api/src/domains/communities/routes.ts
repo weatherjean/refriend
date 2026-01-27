@@ -1,12 +1,12 @@
 import { Hono } from "@hono/hono";
 import type { DB, Actor, User, PostWithActor } from "../../db.ts";
 import type { Federation, Context } from "@fedify/fedify";
-import { Delete, Tombstone, PUBLIC_COLLECTION } from "@fedify/fedify";
+import { Delete, Follow, Tombstone, Undo, PUBLIC_COLLECTION } from "@fedify/fedify";
 import { CommunityDB, type Community } from "./repository.ts";
 import { CommunityModeration } from "./moderation.ts";
 import { announcePost, getCommunityActorUri } from "./federation.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
-import { processActivity } from "../../activities.ts";
+import { processActivity, type ActivityResult } from "../../activities.ts";
 import { deleteMedia } from "../../storage.ts";
 import { getCachedTrendingCommunities, setCachedTrendingCommunities, clearCachedTrendingCommunities } from "../../cache.ts";
 import { formatDate } from "../../shared/formatting.ts";
@@ -329,6 +329,8 @@ export function createCommunityRoutes(
 
     const communityDb = c.get("communityDb");
     const db = c.get("db");
+    const domain = c.get("domain");
+    const federation = c.get("federation");
 
     const community = await lookupCommunity(communityDb, name);
     if (!community) {
@@ -341,9 +343,30 @@ export function createCommunityRoutes(
       return c.json({ error: "You are banned from this community" }, 403);
     }
 
-    // Add follow (membership)
-    await db.addFollow(actor.id, community.id);
-    return c.json({ ok: true, is_member: true });
+    // Check if this is a remote community (created_by is null for remote)
+    const isRemote = community.created_by === null;
+
+    if (isRemote) {
+      // Remote community: send Follow activity via ActivityPub
+      const ctx = federation.createContext(c.req.raw, undefined);
+      const followActivity = new Follow({
+        id: new URL(`https://${domain}/#follows/${crypto.randomUUID()}`),
+        actor: ctx.getActorUri(user.username),
+        object: new URL(community.uri),
+        to: new URL(community.uri),
+      });
+
+      const result = await processActivity(ctx, db, domain, followActivity, "outbound", user.username);
+      if (!result.success) {
+        return c.json({ error: result.error || "Failed to join community" }, 500);
+      }
+
+      return c.json({ ok: true, is_member: true, message: "Join request sent" });
+    } else {
+      // Local community: add follow directly
+      await db.addFollow(actor.id, community.id);
+      return c.json({ ok: true, is_member: true });
+    }
   });
 
   // Leave a community (unfollow)
@@ -357,6 +380,8 @@ export function createCommunityRoutes(
 
     const communityDb = c.get("communityDb");
     const db = c.get("db");
+    const domain = c.get("domain");
+    const federation = c.get("federation");
 
     const community = await lookupCommunity(communityDb, name);
     if (!community) {
@@ -369,9 +394,35 @@ export function createCommunityRoutes(
       return c.json({ error: "Owners cannot leave. Transfer ownership first." }, 403);
     }
 
-    // Remove follow (membership)
-    await db.removeFollow(actor.id, community.id);
-    return c.json({ ok: true, is_member: false });
+    // Check if this is a remote community (created_by is null for remote)
+    const isRemote = community.created_by === null;
+
+    if (isRemote) {
+      // Remote community: send Undo(Follow) activity via ActivityPub
+      const ctx = federation.createContext(c.req.raw, undefined);
+      const followActivity = new Follow({
+        id: new URL(`https://${domain}/#follows/${crypto.randomUUID()}`),
+        actor: ctx.getActorUri(user.username),
+        object: new URL(community.uri),
+      });
+      const undoActivity = new Undo({
+        id: new URL(`https://${domain}/#undo/${crypto.randomUUID()}`),
+        actor: ctx.getActorUri(user.username),
+        object: followActivity,
+        to: new URL(community.uri),
+      });
+
+      const result = await processActivity(ctx, db, domain, undoActivity, "outbound", user.username);
+      if (!result.success) {
+        return c.json({ error: result.error || "Failed to leave community" }, 500);
+      }
+
+      return c.json({ ok: true, is_member: false });
+    } else {
+      // Local community: remove follow directly
+      await db.removeFollow(actor.id, community.id);
+      return c.json({ ok: true, is_member: false });
+    }
   });
 
   // List members

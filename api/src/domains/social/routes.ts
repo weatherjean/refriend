@@ -77,44 +77,63 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const { handle } = await c.req.json<{ handle: string }>();
-    if (!handle) {
-      return c.json({ error: "Handle required" }, 400);
+    const body = await c.req.json<{ handle?: string; actor_id?: string }>();
+    const { handle, actor_id } = body;
+
+    if (!handle && !actor_id) {
+      return c.json({ error: "Handle or actor_id required" }, 400);
     }
 
-    // Parse the handle: @username@domain or username@domain or @username
-    const handleMatch = handle.match(/^@?([^@]+)(?:@(.+))?$/);
-    if (!handleMatch) {
-      return c.json({ error: "Invalid handle format" }, 400);
-    }
-
-    const [, username, handleDomain] = handleMatch;
     const ctx = federation.createContext(c.req.raw, undefined);
-
-    // Check if this is a local user
-    const isLocalTarget = !handleDomain || handleDomain === domain || handleDomain === domain.replace(/:\d+$/, "");
-
     let targetActor;
-    if (isLocalTarget) {
-      targetActor = await db.getActorByUsername(username);
-      if (!targetActor) {
-        return c.json({ error: "User not found" }, 404);
-      }
+    let isLocalTarget = false;
 
-      if (targetActor.id === actor.id) {
-        return c.json({ error: "Cannot follow yourself" }, 400);
-      }
-    } else {
-      // Remote user: use ActivityPub lookup
-      const targetAP = await ctx.lookupObject(handle);
-      if (!targetAP || !isActor(targetAP)) {
+    // If actor_id is provided, use it directly (preferred - avoids case sensitivity issues)
+    if (actor_id) {
+      targetActor = await db.getActorByPublicId(actor_id);
+      if (!targetActor) {
         return c.json({ error: "Actor not found" }, 404);
       }
-
-      targetActor = await persistActor(db, domain, targetAP);
-      if (!targetActor) {
-        return c.json({ error: "Failed to persist actor" }, 500);
+      // Check if local by seeing if they have a user_id
+      isLocalTarget = targetActor.user_id !== null;
+    } else if (handle) {
+      // Fallback to handle lookup
+      // Parse the handle: @username@domain or username@domain or @username
+      const handleMatch = handle.match(/^@?([^@]+)(?:@(.+))?$/);
+      if (!handleMatch) {
+        return c.json({ error: "Invalid handle format" }, 400);
       }
+
+      const [, username, handleDomain] = handleMatch;
+
+      // Check if this is a local user
+      isLocalTarget = !handleDomain || handleDomain === domain || handleDomain === domain.replace(/:\d+$/, "");
+
+      if (isLocalTarget) {
+        targetActor = await db.getActorByUsername(username);
+        if (!targetActor) {
+          return c.json({ error: "User not found" }, 404);
+        }
+      } else {
+        // Remote user: use ActivityPub lookup
+        const targetAP = await ctx.lookupObject(handle);
+        if (!targetAP || !isActor(targetAP)) {
+          return c.json({ error: "Actor not found" }, 404);
+        }
+
+        targetActor = await persistActor(db, domain, targetAP);
+        if (!targetActor) {
+          return c.json({ error: "Failed to persist actor" }, 500);
+        }
+      }
+    }
+
+    if (!targetActor) {
+      return c.json({ error: "Actor not found" }, 404);
+    }
+
+    if (targetActor.id === actor.id) {
+      return c.json({ error: "Cannot follow yourself" }, 400);
     }
 
     // Create and process the Follow activity

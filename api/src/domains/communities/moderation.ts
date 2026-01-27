@@ -130,21 +130,25 @@ export class CommunityModeration {
    */
   async getModerationInfo(communityId: number, actorId: number): Promise<{
     isMember: boolean;
+    membershipStatus: 'accepted' | 'pending' | null;
     isAdmin: boolean;
     isOwner: boolean;
     isBanned: boolean;
     pendingPostsCount: number;
   }> {
-    const [isMember, isAdminResult, isOwner, isBanned] = await Promise.all([
-      this.communityDb.isMember(communityId, actorId),
+    const [membershipStatus, isAdminResult, isOwner, isBanned] = await Promise.all([
+      this.communityDb.getMembershipStatus(communityId, actorId),
       this.communityDb.isAdmin(communityId, actorId),
       this.communityDb.isOwner(communityId, actorId),
       this.communityDb.isBanned(communityId, actorId),
     ]);
 
+    // isMember is true only if membership is accepted
+    const isMember = membershipStatus === 'accepted';
+
     // Get pending count only if admin
     const pendingPostsCount = isAdminResult ? await this.communityDb.getPendingPostsCount(communityId) : 0;
 
-    return { isMember, isAdmin: isAdminResult, isOwner, isBanned, pendingPostsCount };
+    return { isMember, membershipStatus, isAdmin: isAdminResult, isOwner, isBanned, pendingPostsCount };
   }
 }

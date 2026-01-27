@@ -28,6 +28,11 @@ services:
         condition: service_healthy
     networks:
       - riff
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   api:
     image: rg.fr-par.scw.cloud/riff-app/api:${TAG:-latest}
@@ -62,6 +67,11 @@ services:
       start_period: 30s
     networks:
       - riff
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   web_dist:

@@ -35,7 +35,8 @@ export function useFollowSingleActor(
         setIsFollowing(false);
         toast.info('Unfollowed');
       } else {
-        const response = await follows.follow(actor.handle);
+        // Pass actor.id to avoid case sensitivity issues with handles
+        const response = await follows.follow(actor.handle, actor.id);
         setIsFollowing(true);
         toast.info(response.message || 'Now following!');
       }
@@ -89,7 +90,8 @@ export function useFollowMultiActor(): MultiActorResult {
         });
         toast.info('Unfollowed');
       } else {
-        const response = await follows.follow(actor.handle);
+        // Pass actor.id to avoid case sensitivity issues with handles
+        const response = await follows.follow(actor.handle, actor.id);
         setFollowingSet(prev => new Set(prev).add(actor.id));
         toast.info(response.message || 'Now following!');
       }

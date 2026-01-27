@@ -474,9 +474,21 @@ export class CommunityDB {
   async isMember(communityId: number, actorId: number): Promise<boolean> {
     return this.query(async (client) => {
       const result = await client.queryArray`
-        SELECT 1 FROM follows WHERE follower_id = ${actorId} AND following_id = ${communityId}
+        SELECT 1 FROM follows
+        WHERE follower_id = ${actorId} AND following_id = ${communityId} AND status = 'accepted'
       `;
       return result.rows.length > 0;
+    });
+  }
+
+  async getMembershipStatus(communityId: number, actorId: number): Promise<'accepted' | 'pending' | null> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ status: string }>`
+        SELECT status FROM follows
+        WHERE follower_id = ${actorId} AND following_id = ${communityId}
+      `;
+      if (result.rows.length === 0) return null;
+      return result.rows[0].status as 'accepted' | 'pending';
     });
   }
 
@@ -485,7 +497,7 @@ export class CommunityDB {
       const result = await client.queryObject<Actor>`
         SELECT a.* FROM actors a
         JOIN follows f ON a.id = f.following_id
-        WHERE f.follower_id = ${actorId} AND a.actor_type = 'Group'
+        WHERE f.follower_id = ${actorId} AND a.actor_type = 'Group' AND f.status = 'accepted'
         ORDER BY a.name ASC
         LIMIT ${limit}
       `;
@@ -501,11 +513,11 @@ export class CommunityDB {
       const query = before
         ? `SELECT a.* FROM actors a
            JOIN follows f ON a.id = f.follower_id
-           WHERE f.following_id = $1 AND a.id < $2
+           WHERE f.following_id = $1 AND a.id < $2 AND f.status = 'accepted'
            ORDER BY f.created_at DESC LIMIT $3`
         : `SELECT a.* FROM actors a
            JOIN follows f ON a.id = f.follower_id
-           WHERE f.following_id = $1
+           WHERE f.following_id = $1 AND f.status = 'accepted'
            ORDER BY f.created_at DESC LIMIT $2`;
       const params = before ? [communityId, before, limit] : [communityId, limit];
       const result = await client.queryObject<Actor>(query, params);

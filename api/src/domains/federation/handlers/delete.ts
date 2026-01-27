@@ -4,7 +4,7 @@
  * Handles ActivityPub Delete activities.
  */
 
-import { Delete, Tombstone, Note, isActor, type Context } from "@fedify/fedify";
+import { Delete, Tombstone, Note, Article, Page, isActor, type Context } from "@fedify/fedify";
 import type { DB, Actor } from "../../../db.ts";
 import { persistActor } from "../actor-persistence.ts";
 import { safeSendActivity } from "../utils/send.ts";
@@ -47,32 +47,64 @@ export async function processDelete(
     const object = await deleteActivity.getObject();
     if (object instanceof Tombstone) {
       objectUri = object.id?.href;
-    } else if (object instanceof Note) {
+    } else if (object instanceof Note || object instanceof Article || object instanceof Page) {
       objectUri = object.id?.href;
     }
   } catch {
-    // In localhost dev, getObject might fail
+    // getObject might fail if object is just a URI string
   }
 
-  if (!objectUri) return;
+  // Fallback to objectId if getObject didn't give us a URI
+  // (Lemmy and some servers send object as just a URI string)
+  if (!objectUri) {
+    objectUri = deleteActivity.objectId?.href;
+  }
+
+  if (!objectUri) {
+    console.log(`[Delete] No object URI found in delete activity`);
+    return;
+  }
+
+  // Check if this is an account deletion (object URI matches actor URI)
+  if (objectUri === actorRecord.uri) {
+    // Don't delete local actors via federation
+    if (actorRecord.user_id) {
+      console.log(`[Delete] Ignoring delete for local actor: ${actorRecord.handle}`);
+      return;
+    }
+
+    // Delete all posts by this actor and the actor itself
+    const deletedCount = await db.deleteActorAndPosts(actorRecord.id);
+    console.log(`[Delete] Account ${actorRecord.handle} deleted (${deletedCount} posts removed)`);
+    await invalidateProfileCache(actorRecord.id);
+    return;
+  }
 
   // Find and delete the post
   const post = await db.getPostByUri(objectUri);
-  if (post && post.actor_id === actorRecord.id) {
-    await db.deletePost(post.id);
-    console.log(`[Delete] Post ${post.id} by ${actorRecord.handle}`);
+  if (!post) {
+    console.log(`[Delete] Post not found: ${objectUri}`);
+    return;
+  }
 
-    // Invalidate the author's profile cache
-    await invalidateProfileCache(actorRecord.id);
+  if (post.actor_id !== actorRecord.id) {
+    console.log(`[Delete] Unauthorized: ${actorRecord.handle} cannot delete post by actor ${post.actor_id}`);
+    return;
+  }
 
-    // For outbound: send to followers
-    if (direction === "outbound" && localUsername) {
-      await safeSendActivity(ctx,
-        { identifier: localUsername },
-        "followers",
-        deleteActivity
-      );
-      console.log(`[Delete] Sent to followers of ${localUsername}`);
-    }
+  await db.deletePost(post.id);
+  console.log(`[Delete] Post ${post.id} by ${actorRecord.handle}`);
+
+  // Invalidate the author's profile cache
+  await invalidateProfileCache(actorRecord.id);
+
+  // For outbound: send to followers
+  if (direction === "outbound" && localUsername) {
+    await safeSendActivity(ctx,
+      { identifier: localUsername },
+      "followers",
+      deleteActivity
+    );
+    console.log(`[Delete] Sent to followers of ${localUsername}`);
   }
 }

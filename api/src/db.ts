@@ -1293,6 +1293,35 @@ export class DB {
   }
 
   /**
+   * Delete a remote actor and all their posts (for account deletion from federation).
+   * Returns the number of posts deleted.
+   */
+  async deleteActorAndPosts(actorId: number): Promise<number> {
+    return this.query(async (client) => {
+      await client.queryArray`BEGIN`;
+      try {
+        // Count posts before deletion
+        const countResult = await client.queryObject<{ count: string }>`
+          SELECT COUNT(*) as count FROM posts WHERE actor_id = ${actorId}
+        `;
+        const postCount = parseInt(countResult.rows[0]?.count ?? '0', 10);
+
+        // Delete all posts by this actor (CASCADE will handle media, likes, etc.)
+        await client.queryArray`DELETE FROM posts WHERE actor_id = ${actorId}`;
+
+        // Delete the actor (CASCADE will handle follows, keys, etc.)
+        await client.queryArray`DELETE FROM actors WHERE id = ${actorId}`;
+
+        await client.queryArray`COMMIT`;
+        return postCount;
+      } catch (e) {
+        await client.queryArray`ROLLBACK`;
+        throw e;
+      }
+    });
+  }
+
+  /**
    * Delete a post and ALL its replies recursively (cascade delete).
    * Returns the URIs of all deleted posts (for ActivityPub) and their media URLs.
    * @param maxDepth Maximum recursion depth to prevent runaway queries (default 100)
