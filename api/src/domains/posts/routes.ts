@@ -76,9 +76,10 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
+    const offset = parseIntSafe(c.req.query("offset")) ?? undefined;
 
-    const result = await service.getTimelinePosts(db, actor.id, limit, undefined, "hot", domain, communityDb);
-    return c.json({ posts: result.posts });
+    const result = await service.getTimelinePosts(db, actor.id, limit, undefined, "hot", domain, communityDb, offset);
+    return c.json(result);
   });
 
   // GET /timeline - Get authenticated user's timeline

@@ -913,7 +913,7 @@ federation
     const objectUri = announce.objectId?.href;
     if (!objectUri) return;
 
-    // Skip Lemmy internal activities (except delete which we need to process)
+    // Skip Lemmy internal activities (except delete/remove which we need to process)
     if (objectUri.includes('/activities/like') ||
         objectUri.includes('/activities/dislike') ||
         objectUri.includes('/activities/undo')) {
@@ -985,6 +985,39 @@ federation
         }
       } catch (e) {
         console.log(`[Announce Delete] Error processing: ${objectUri}`, e);
+        return;
+      }
+    }
+
+    // Handle Announce(Remove) - Lemmy communities announce mod removals
+    if (objectUri.includes('/activities/remove')) {
+      try {
+        const docLoader = ctx.documentLoader;
+        const { document } = await docLoader(objectUri);
+
+        // Get the object URI from the Remove activity
+        // deno-lint-ignore no-explicit-any
+        const removeObject = (document as any)?.object;
+        const removeObjectUri = typeof removeObject === 'string' ? removeObject : removeObject?.id;
+
+        if (!removeObjectUri) {
+          console.log(`[Announce Remove] No object URI found`);
+          return;
+        }
+
+        const post = await db.getPostByUri(removeObjectUri);
+        if (!post) {
+          console.log(`[Announce Remove] Post not found: ${removeObjectUri}`);
+          return;
+        }
+
+        await db.removeBoost(boosterActor.id, post.id);
+        await updatePostScore(db, post.id);
+        await removeNotification(db, 'boost', boosterActor.id, post.actor_id, post.id);
+        console.log(`[Announce Remove] Removed boost on post ${post.id} via ${boosterActor.handle}`);
+        return;
+      } catch (e) {
+        console.log(`[Announce Remove] Error processing: ${objectUri}`, e);
         return;
       }
     }

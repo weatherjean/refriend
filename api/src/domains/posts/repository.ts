@@ -61,9 +61,10 @@ export async function getTimelinePosts(
   actorId: number,
   limit: number,
   before?: number,
-  sort: "new" | "hot" = "new"
+  sort: "new" | "hot" = "new",
+  offset?: number
 ): Promise<PostWithActorAndBooster[]> {
-  return db.getHomeFeedWithActor(actorId, limit, before, sort);
+  return db.getHomeFeedWithActor(actorId, limit, before, sort, offset);
 }
 
 export async function getPostMedia(db: DB, postId: number): Promise<Array<{

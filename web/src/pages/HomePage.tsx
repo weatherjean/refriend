@@ -207,8 +207,8 @@ export function HomePage() {
       return { items: [], next_cursor: null };
     }
     if (isHotFeed) {
-      const { posts } = await postsApi.getHot(30);
-      return { items: posts, next_cursor: null };
+      const { posts, next_cursor } = await postsApi.getHot(cursor ? { offset: cursor, limit: 30 } : { limit: 30 });
+      return { items: posts, next_cursor };
     }
     const { posts, next_cursor } = await postsApi.getTimeline(cursor ? { before: cursor } : undefined);
     return { items: posts, next_cursor };
@@ -264,7 +264,7 @@ export function HomePage() {
           {posts.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
-          {hasMore && !isHotFeed && (
+          {hasMore && (
             <LoadMoreButton loading={loadingMore} onClick={loadMore} />
           )}
         </>

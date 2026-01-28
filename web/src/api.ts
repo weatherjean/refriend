@@ -303,7 +303,13 @@ export const posts = {
     const queryStr = query.toString();
     return fetchJson<PaginatedPosts>(`/posts/all${queryStr ? '?' + queryStr : ''}`);
   },
-  getHot: (limit = 10) => fetchJson<{ posts: Post[] }>(`/posts/hot?limit=${limit}`),
+  getHot: (params?: { limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.offset) query.set('offset', params.offset.toString());
+    const queryStr = query.toString();
+    return fetchJson<PaginatedPosts>(`/posts/hot${queryStr ? '?' + queryStr : ''}`);
+  },
   get: (id: string) => fetchJson<{ post: Post; ancestors: Post[] }>(`/posts/${id}`),
   getReplies: (id: string, sort?: 'new' | 'hot', after?: number) => {
     const params = new URLSearchParams();

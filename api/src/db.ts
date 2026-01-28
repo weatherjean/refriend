@@ -1062,14 +1062,15 @@ export class DB {
     });
   }
 
-  async getHomeFeedWithActor(actorId: number, limit = 20, before?: number, sort: 'new' | 'hot' = 'new'): Promise<PostWithActorAndBooster[]> {
+  async getHomeFeedWithActor(actorId: number, limit = 20, before?: number, sort: 'new' | 'hot' = 'new', offset?: number): Promise<PostWithActorAndBooster[]> {
     return this.query(async (client) => {
-      // For hot sort, we don't use cursor pagination (just return top N by hot_score)
+      // For hot sort, we use offset pagination; for new sort, we use cursor pagination
       const orderBy = sort === 'hot' ? 'hot_score DESC, id DESC' : 'id DESC';
       const finalOrderBy = sort === 'hot' ? 'p.hot_score DESC, p.id DESC' : 'p.id DESC';
       const useBefore = sort === 'new' && before;
+      const useOffset = sort === 'hot' && offset;
       // Oversample each branch then merge - trades edge-case correctness for performance
-      const branchLimit = limit * 3;
+      const branchLimit = (offset ?? 0) + limit * 3;
 
       const baseQuery = `
         WITH timeline_posts AS (
@@ -1116,8 +1117,9 @@ export class DB {
         LEFT JOIN actors ba ON d.booster_actor_id = ba.id
         ORDER BY ${finalOrderBy}
         LIMIT ${useBefore ? '$3' : '$2'}
+        ${useOffset ? `OFFSET $3` : ''}
       `;
-      const params = useBefore ? [actorId, before, limit] : [actorId, limit];
+      const params = useBefore ? [actorId, before, limit] : useOffset ? [actorId, limit, offset] : [actorId, limit];
       const result = await client.queryObject(baseQuery, params);
       return result.rows.map(row => this.parsePostWithActorAndBooster(row as Record<string, unknown>));
     });
