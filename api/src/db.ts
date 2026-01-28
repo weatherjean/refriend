@@ -1420,6 +1420,12 @@ export class DB {
     });
   }
 
+  async deleteMediaByPostId(postId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`DELETE FROM media WHERE post_id = ${postId}`;
+    });
+  }
+
   async getMediaByPostId(postId: number): Promise<Media[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Media>`
@@ -1473,6 +1479,12 @@ export class DB {
       await client.queryArray`INSERT INTO hashtags (name) VALUES (${normalized}) ON CONFLICT DO NOTHING`;
       const result = await client.queryObject<Hashtag>`SELECT * FROM hashtags WHERE name = ${normalized}`;
       return result.rows[0];
+    });
+  }
+
+  async deletePostHashtags(postId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`DELETE FROM post_hashtags WHERE post_id = ${postId}`;
     });
   }
 

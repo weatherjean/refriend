@@ -31,6 +31,7 @@ import {
   Reject,
   Tombstone,
   Undo,
+  Update,
   exportJwk,
   generateCryptoKeyPair,
   importJwk,
@@ -689,6 +690,7 @@ federation
     // Extract attachments
     try {
       const attachments = await object.getAttachments();
+      const seenMediaUrls = new Set<string>();
       for await (const att of attachments) {
         if (att instanceof Link && (object instanceof Page || object instanceof Article)) {
           const linkHref = att.href;
@@ -713,7 +715,8 @@ federation
           else if (typeof attUrl === 'string') urlString = attUrl;
           else if (attUrl && 'href' in attUrl) urlString = String(attUrl.href);
 
-          if (urlString) {
+          if (urlString && !seenMediaUrls.has(urlString)) {
+            seenMediaUrls.add(urlString);
             const mediaType = att.mediaType ?? "image/jpeg";
             const altText = typeof att.name === 'string' ? att.name : att.name?.toString() ?? null;
             await db.createMedia(post.id, urlString, mediaType, altText, att.width ?? null, att.height ?? null);
@@ -739,6 +742,167 @@ federation
       }
     }
 
+    await invalidateProfileCache(authorActor.id);
+  })
+
+  // ============ Update Handler ============
+  .on(Update, async (ctx, update) => {
+    let object: Note | Article | Page | Person | Group | null = null;
+
+    try {
+      const obj = await update.getObject();
+      if (obj instanceof Note || obj instanceof Article || obj instanceof Page) {
+        object = obj;
+      } else if (obj instanceof Person || obj instanceof Group) {
+        object = obj;
+      }
+    } catch {
+      return;
+    }
+    if (!object) return;
+
+    // ---- Actor update (Person/Group) ----
+    if (object instanceof Person || object instanceof Group) {
+      try {
+        await persistActor(db, DOMAIN, object);
+        console.log(`[Update] Actor profile updated: ${object.id?.href}`);
+      } catch (e) {
+        console.error(`[Update] Failed to update actor:`, e);
+      }
+      return;
+    }
+
+    // ---- Post update (Note/Article/Page) ----
+    let authorActor: Actor | null = null;
+    try {
+      const author = await update.getActor();
+      if (author && isActor(author)) {
+        authorActor = await persistActor(db, DOMAIN, author);
+      }
+    } catch {
+      return;
+    }
+    if (!authorActor) return;
+
+    const noteUri = object.id?.href;
+    if (!noteUri) return;
+
+    const existingPost = await db.getPostByUri(noteUri);
+    if (!existingPost) {
+      console.log(`[Update] Post not found locally, skipping: ${noteUri}`);
+      return;
+    }
+
+    // Authorization: only the original author can update
+    if (existingPost.actor_id !== authorActor.id) {
+      console.log(`[Update] Unauthorized: ${authorActor.handle} cannot update post ${existingPost.id}`);
+      return;
+    }
+
+    // Extract and sanitize content
+    let titlePrefix: string | null = null;
+    if (object instanceof Article || object instanceof Page) {
+      const title = typeof object.name === 'string' ? object.name : object.name?.toString();
+      if (title) titlePrefix = title;
+    }
+
+    let rawContent = typeof object.content === "string"
+      ? object.content
+      : object.content?.toString() ?? "";
+
+    if (titlePrefix) {
+      const escapedTitle = titlePrefix
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      const titleHtml = `<p><strong>${escapedTitle}</strong></p>`;
+      rawContent = rawContent ? `${titleHtml}\n${rawContent}` : titleHtml;
+    }
+
+    const content = validateAndSanitizeContent(rawContent);
+    if (content === null) {
+      console.log(`[Update] Rejected update from ${authorActor.handle}: content exceeds ${MAX_CONTENT_SIZE} bytes`);
+      return;
+    }
+
+    // Update content
+    await db.updatePostContent(existingPost.id, content);
+
+    // Update sensitive flag
+    const sensitive = object.sensitive ?? false;
+    await db.updatePostSensitive(existingPost.id, sensitive);
+
+    // Update URL if changed
+    const objectUrl = object.url;
+    let postUrlString: string | null = null;
+    if (objectUrl) {
+      if (objectUrl instanceof URL) {
+        postUrlString = objectUrl.href;
+      } else if (typeof objectUrl === 'string') {
+        postUrlString = objectUrl;
+      } else if (objectUrl && 'href' in objectUrl) {
+        postUrlString = String(objectUrl.href);
+      }
+    }
+    if (postUrlString && postUrlString !== existingPost.url) {
+      await db.updatePostUrl(existingPost.id, postUrlString);
+    }
+
+    // Clear and re-add hashtags
+    await db.deletePostHashtags(existingPost.id);
+    try {
+      const tags = await object.getTags();
+      for await (const tag of tags) {
+        if (tag instanceof Hashtag && tag.name) {
+          const tagName = tag.name.toString().replace(/^#/, '').toLowerCase();
+          if (tagName) {
+            const hashtag = await db.getOrCreateHashtag(tagName);
+            await db.addPostHashtag(existingPost.id, hashtag.id);
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
+    // Clear and re-add media attachments
+    await db.deleteMediaByPostId(existingPost.id);
+    try {
+      const attachments = await object.getAttachments();
+      const seenMediaUrls = new Set<string>();
+      for await (const att of attachments) {
+        if (att instanceof Link && (object instanceof Page || object instanceof Article)) {
+          const linkHref = att.href;
+          if (linkHref) {
+            const externalUrl = linkHref instanceof URL ? linkHref.href : String(linkHref);
+            await db.updatePostUrl(existingPost.id, externalUrl);
+            try {
+              const linkPreview = await fetchOpenGraph(externalUrl);
+              if (linkPreview) await db.updatePostLinkPreview(existingPost.id, linkPreview);
+            } catch { /* ignore */ }
+            const escapedUrl = externalUrl.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const linkHtml = `<p><a href="${escapedUrl}">${escapedUrl}</a></p>`;
+            await db.updatePostContent(existingPost.id, content + linkHtml);
+          }
+          continue;
+        }
+
+        if (att instanceof Document || att instanceof Image) {
+          const attUrl = att.url;
+          let urlString: string | null = null;
+          if (attUrl instanceof URL) urlString = attUrl.href;
+          else if (typeof attUrl === 'string') urlString = attUrl;
+          else if (attUrl && 'href' in attUrl) urlString = String(attUrl.href);
+
+          if (urlString && !seenMediaUrls.has(urlString)) {
+            seenMediaUrls.add(urlString);
+            const mediaType = att.mediaType ?? "image/jpeg";
+            const altText = typeof att.name === 'string' ? att.name : att.name?.toString() ?? null;
+            await db.createMedia(existingPost.id, urlString, mediaType, altText, att.width ?? null, att.height ?? null);
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
+    console.log(`[Update] Post ${existingPost.id} updated by ${authorActor.handle}`);
     await invalidateProfileCache(authorActor.id);
   })
 
@@ -885,15 +1049,11 @@ federation
     if (!objectUri) return;
 
     const post = await db.getPostByUri(objectUri);
-    if (!post) {
-      console.log(`[Like] Post not found: ${objectUri}`);
-      return;
-    }
+    if (!post) return;
 
     await db.addLike(likerActor.id, post.id);
     await updatePostScore(db, post.id);
     await createNotification(db, 'like', likerActor.id, post.actor_id, post.id);
-    console.log(`[Like] ${likerActor.handle} liked post ${post.id}`);
   })
 
   // ============ Announce Handler ============
@@ -1086,7 +1246,6 @@ federation
       await db.removeLike(actorRecord.id, post.id);
       await updatePostScore(db, post.id);
       await removeNotification(db, 'like', actorRecord.id, post.actor_id, post.id);
-      console.log(`[Undo Like] ${actorRecord.handle} unliked post ${post.id}`);
     }
 
     // Undo Announce

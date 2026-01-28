@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS posts (
   actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   url TEXT,
-  in_reply_to_id INTEGER REFERENCES posts(id) ON DELETE SET NULL,
+  in_reply_to_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
   community_id INTEGER REFERENCES actors(id) ON DELETE SET NULL,
   addressed_to TEXT[] NOT NULL DEFAULT '{}',
   likes_count INTEGER NOT NULL DEFAULT 0,

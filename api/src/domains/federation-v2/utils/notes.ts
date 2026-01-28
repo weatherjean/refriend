@@ -221,6 +221,7 @@ export async function fetchAndStoreNote(
     // Extract attachments
     try {
       const attachments = await note.getAttachments();
+      const seenMediaUrls = new Set<string>();
       for await (const att of attachments) {
         // Handle Link attachments (Lemmy/kbin external URLs) - only for Page/Article, not Note
         if (att instanceof Link && (note instanceof Page || note instanceof Article)) {
@@ -264,7 +265,8 @@ export async function fetchAndStoreNote(
             attUrlString = String(attUrl.href);
           }
 
-          if (attUrlString) {
+          if (attUrlString && !seenMediaUrls.has(attUrlString)) {
+            seenMediaUrls.add(attUrlString);
             const mediaType = att.mediaType ?? "image/jpeg";
             const altText = typeof att.name === 'string' ? att.name : att.name?.toString() ?? null;
             const width = att.width ?? null;
