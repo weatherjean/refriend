@@ -21,7 +21,7 @@ import type { CommunityDB } from "../communities/repository.ts";
 import * as service from "./service.ts";
 import { getCachedHashtagPosts, setCachedHashtagPosts, invalidateProfileCache } from "../../cache.ts";
 import { saveMedia, deleteMedia } from "../../storage.ts";
-import { safeSendActivity } from "../federation-v2/index.ts";
+import { safeSendActivity, sendToCommunity } from "../federation-v2/index.ts";
 import { rateLimit } from "../../middleware/rate-limit.ts";
 import { parseIntSafe } from "../../shared/utils.ts";
 
@@ -479,9 +479,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       ccs: ccRecipients,
     });
 
-    // Send to followers (standard Fedify approach)
-    // Note: Lemmy community replies are stored locally but not federated to Lemmy
-    // (Lemmy has strict digest validation that's incompatible with current setup)
+    // Send to followers
     await safeSendActivity(ctx,
       { identifier: user.username },
       "followers",
@@ -489,6 +487,11 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       { preferSharedInbox: true }
     );
     console.log(`[Create] Sent to followers of ${user.username}`);
+
+    // Send to community inbox (for Lemmy federation) via manual signing
+    if (audienceUri) {
+      await sendToCommunity(ctx, user.username, createActivity, audienceUri.href);
+    }
 
     return c.json({ post: await service.enrichPost(db, post, actor?.id, domain, communityDb) });
   });
@@ -531,6 +534,14 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     // Invalidate the author's profile cache
     await invalidateProfileCache(actor.id);
 
+    // Build cc and audience for the Delete activity
+    const deleteCc: URL[] = [ctx.getFollowersUri(user.username)];
+    let deleteAudience: URL | undefined;
+    if (post.addressed_to && post.addressed_to.length > 0) {
+      deleteAudience = new URL(post.addressed_to[0]);
+      deleteCc.push(deleteAudience);
+    }
+
     // Create the Delete activity
     const deleteActivity = new Delete({
       id: new URL(`https://${domain}/#deletes/${crypto.randomUUID()}`),
@@ -539,6 +550,8 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
         id: new URL(post.uri),
       }),
       to: PUBLIC_COLLECTION,
+      ccs: deleteCc,
+      audience: deleteAudience,
     });
 
     // Send to followers
@@ -549,20 +562,10 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     );
     console.log(`[Delete] Sent to followers of ${user.username}`);
 
-    // Also send to communities the post was addressed to (for Lemmy compatibility)
+    // Send to communities via manual signing (for Lemmy compatibility)
     if (post.addressed_to && post.addressed_to.length > 0) {
       for (const communityUri of post.addressed_to) {
-        try {
-          const communityInbox = new URL(communityUri + "/inbox");
-          await safeSendActivity(ctx,
-            { identifier: user.username },
-            { inbox: communityInbox },
-            deleteActivity
-          );
-          console.log(`[Delete] Sent to community: ${communityUri}`);
-        } catch (e) {
-          console.error(`[Delete] Failed to send to community ${communityUri}:`, e);
-        }
+        await sendToCommunity(ctx, user.username, deleteActivity, communityUri);
       }
     }
 

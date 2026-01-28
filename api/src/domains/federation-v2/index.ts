@@ -22,7 +22,7 @@ export {
 } from "./utils/actor.ts";
 
 // Send utilities
-export { safeSendActivity } from "./utils/send.ts";
+export { safeSendActivity, sendToCommunity } from "./utils/send.ts";
 
 // Content utilities
 export {
