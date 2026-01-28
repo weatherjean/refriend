@@ -9,7 +9,7 @@ import type { Context } from "@fedify/fedify";
 import { isActor, lookupObject } from "@fedify/fedify";
 import type { DB } from "../../db.ts";
 import type { Actor } from "../../shared/types.ts";
-import { persistActor } from "../federation/actors.ts";
+import { persistActor } from "../federation-v2/utils/actor.ts";
 import { sanitizeActor, type SanitizedActor } from "../users/types.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
 import type { EnrichedPost } from "../posts/types.ts";

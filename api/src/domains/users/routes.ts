@@ -6,12 +6,15 @@
 
 import { Hono } from "@hono/hono";
 import { getCookie, setCookie, deleteCookie } from "@hono/hono/cookie";
+import { Delete, Tombstone, PUBLIC_COLLECTION } from "@fedify/fedify";
+import type { Federation } from "@fedify/fedify";
 import type { DB } from "../../db.ts";
 import type { User, Actor } from "../../shared/types.ts";
 import type { CommunityDB } from "../communities/repository.ts";
 import * as service from "./service.ts";
 import { sanitizeUser, sanitizeActor } from "./types.ts";
 import { saveAvatar } from "../../storage.ts";
+import { safeSendActivity } from "../federation-v2/index.ts";
 import { rateLimit } from "../../middleware/rate-limit.ts";
 import { parseIntSafe } from "../../shared/utils.ts";
 
@@ -25,7 +28,7 @@ interface UsersEnv {
   };
 }
 
-export function createUserRoutes(): Hono<UsersEnv> {
+export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
   const routes = new Hono<UsersEnv>();
 
   // ============ Auth Routes ============
@@ -176,7 +179,11 @@ export function createUserRoutes(): Hono<UsersEnv> {
   // DELETE /auth/account - Delete user account (rate limited)
   routes.delete("/auth/account", rateLimit("auth:delete"), async (c) => {
     const user = c.get("user");
-    if (!user) {
+    const actor = c.get("actor");
+    const db = c.get("db");
+    const domain = c.get("domain");
+
+    if (!user || !actor) {
       return c.json({ error: "Not authenticated" }, 401);
     }
 
@@ -185,10 +192,43 @@ export function createUserRoutes(): Hono<UsersEnv> {
       return c.json({ error: "Password required" }, 400);
     }
 
-    const result = await service.deleteAccount(c.get("db"), user.id, body.password);
-    if (!result.success) {
-      return c.json({ error: result.error }, 401);
+    // Verify password first before sending federation activities
+    const passwordValid = await service.verifyPassword(body.password, user.password_hash);
+    if (!passwordValid) {
+      return c.json({ error: "Incorrect password" }, 401);
     }
+
+    // Create federation context and send Delete activity BEFORE deleting locally
+    // (We need the actor's keys to sign the activity)
+    const ctx = federation.createContext(c.req.raw, undefined);
+    const actorUri = ctx.getActorUri(user.username);
+
+    const deleteActivity = new Delete({
+      id: new URL(`https://${domain}/#deletes/${crypto.randomUUID()}`),
+      actor: actorUri,
+      object: new Tombstone({
+        id: actorUri,
+      }),
+      to: PUBLIC_COLLECTION,
+    });
+
+    // Send to all followers - they should delete this account and all its content
+    try {
+      await safeSendActivity(ctx,
+        { identifier: user.username },
+        "followers",
+        deleteActivity,
+        { preferSharedInbox: true }
+      );
+      console.log(`[Delete Account] Sent to followers of ${user.username}`);
+    } catch (e) {
+      console.error(`[Delete Account] Failed to send federation activity:`, e);
+      // Continue with local deletion even if federation fails
+    }
+
+    // Now delete locally
+    await db.deleteUser(user.id);
+    console.log(`[Delete Account] User ${user.username} deleted`);
 
     deleteCookie(c, "session");
     return c.json({ ok: true });

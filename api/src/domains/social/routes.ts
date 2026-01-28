@@ -17,9 +17,10 @@ import {
 import type { Federation } from "@fedify/fedify";
 import type { DB } from "../../db.ts";
 import type { User, Actor } from "../../shared/types.ts";
-import { processActivity, persistActor } from "../../activities.ts";
+import { persistActor, safeSendActivity } from "../federation-v2/index.ts";
+import { updatePostScore } from "../../scoring.ts";
+import { createNotification, removeNotification } from "../notifications/routes.ts";
 import * as service from "./service.ts";
-import { sanitizeActor } from "../users/types.ts";
 import { rateLimit } from "../../middleware/rate-limit.ts";
 
 interface SocialEnv {
@@ -136,7 +137,7 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
       return c.json({ error: "Cannot follow yourself" }, 400);
     }
 
-    // Create and process the Follow activity
+    // Create the Follow activity
     const followActivity = new Follow({
       id: new URL(`https://${domain}/#follows/${crypto.randomUUID()}`),
       actor: ctx.getActorUri(user.username),
@@ -144,9 +145,27 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
       to: new URL(targetActor.uri),
     });
 
-    const result = await processActivity(ctx, db, domain, followActivity, "outbound", user.username);
-    if (!result.success) {
-      return c.json({ error: result.error || "Failed to follow" }, 500);
+    // V2: Direct database + send pattern
+    if (isLocalTarget) {
+      // Local: immediately accepted
+      await db.addFollow(actor.id, targetActor.id, 'accepted');
+      await createNotification(db, 'follow', actor.id, targetActor.id);
+      console.log(`[Follow] ${actor.handle} -> ${targetActor.handle}`);
+    } else {
+      // Remote: pending until Accept received
+      await db.addFollow(actor.id, targetActor.id, 'pending');
+      console.log(`[Follow] ${actor.handle} -> ${targetActor.handle} (pending)`);
+
+      // Send Follow to remote actor
+      await safeSendActivity(ctx,
+        { identifier: user.username },
+        {
+          id: new URL(targetActor.uri),
+          inboxId: new URL(targetActor.inbox_url),
+        },
+        followActivity
+      );
+      console.log(`[Follow] Sent request to ${targetActor.handle}`);
     }
 
     return c.json({ ok: true, message: isLocalTarget ? "Now following" : "Follow request sent" });
@@ -172,22 +191,35 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
 
     const ctx = federation.createContext(c.req.raw, undefined);
 
-    const followActivity = new Follow({
-      id: new URL(`https://${domain}/#follows/${crypto.randomUUID()}`),
-      actor: ctx.getActorUri(user.username),
-      object: new URL(targetActor.uri),
-    });
+    // V2: Direct database + send pattern
+    await db.removeFollow(actor.id, targetActor.id);
+    await removeNotification(db, 'follow', actor.id, targetActor.id);
+    console.log(`[Undo Follow] ${actor.handle} unfollowed ${targetActor.handle}`);
 
-    const undoActivity = new Undo({
-      id: new URL(`https://${domain}/#undos/${crypto.randomUUID()}`),
-      actor: ctx.getActorUri(user.username),
-      object: followActivity,
-      to: new URL(targetActor.uri),
-    });
+    // Send Undo(Follow) to remote actor if not local
+    if (!targetActor.user_id) {
+      const followActivity = new Follow({
+        id: new URL(`https://${domain}/#follows/${crypto.randomUUID()}`),
+        actor: ctx.getActorUri(user.username),
+        object: new URL(targetActor.uri),
+      });
 
-    const result = await processActivity(ctx, db, domain, undoActivity, "outbound", user.username);
-    if (!result.success) {
-      return c.json({ error: result.error || "Failed to unfollow" }, 500);
+      const undoActivity = new Undo({
+        id: new URL(`https://${domain}/#undos/${crypto.randomUUID()}`),
+        actor: ctx.getActorUri(user.username),
+        object: followActivity,
+        to: new URL(targetActor.uri),
+      });
+
+      await safeSendActivity(ctx,
+        { identifier: user.username },
+        {
+          id: new URL(targetActor.uri),
+          inboxId: new URL(targetActor.inbox_url),
+        },
+        undoActivity
+      );
+      console.log(`[Undo Follow] Sent to ${targetActor.handle}`);
     }
 
     return c.json({ ok: true });
@@ -214,15 +246,30 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
 
     const ctx = federation.createContext(c.req.raw, undefined);
 
-    const likeActivity = new Like({
-      id: new URL(`https://${domain}/#likes/${crypto.randomUUID()}`),
-      actor: ctx.getActorUri(user.username),
-      object: new URL(post.uri),
-    });
+    // V2: Direct database + send pattern
+    await db.addLike(actor.id, post.id);
+    await updatePostScore(db, post.id);
+    await createNotification(db, 'like', actor.id, post.actor_id, post.id);
+    console.log(`[Like] ${actor.handle} liked post ${post.id}`);
 
-    const result = await processActivity(ctx, db, domain, likeActivity, "outbound", user.username);
-    if (!result.success) {
-      return c.json({ error: result.error || "Failed to like post" }, 500);
+    // Send Like to post author if remote
+    const postAuthor = await db.getActorById(post.actor_id);
+    if (postAuthor && !postAuthor.user_id) {
+      const likeActivity = new Like({
+        id: new URL(`https://${domain}/#likes/${crypto.randomUUID()}`),
+        actor: ctx.getActorUri(user.username),
+        object: new URL(post.uri),
+      });
+
+      await safeSendActivity(ctx,
+        { identifier: user.username },
+        {
+          id: new URL(postAuthor.uri),
+          inboxId: new URL(postAuthor.inbox_url),
+        },
+        likeActivity
+      );
+      console.log(`[Like] Sent to ${postAuthor.handle}`);
     }
 
     return c.json({
@@ -251,21 +298,36 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
 
     const ctx = federation.createContext(c.req.raw, undefined);
 
-    const likeActivity = new Like({
-      id: new URL(`https://${domain}/#likes/${crypto.randomUUID()}`),
-      actor: ctx.getActorUri(user.username),
-      object: new URL(post.uri),
-    });
+    // V2: Direct database + send pattern
+    await db.removeLike(actor.id, post.id);
+    await updatePostScore(db, post.id);
+    await removeNotification(db, 'like', actor.id, post.actor_id, post.id);
+    console.log(`[Undo Like] ${actor.handle} unliked post ${post.id}`);
 
-    const undoActivity = new Undo({
-      id: new URL(`https://${domain}/#undos/${crypto.randomUUID()}`),
-      actor: ctx.getActorUri(user.username),
-      object: likeActivity,
-    });
+    // Send Undo(Like) to post author if remote
+    const postAuthor = await db.getActorById(post.actor_id);
+    if (postAuthor && !postAuthor.user_id) {
+      const likeActivity = new Like({
+        id: new URL(`https://${domain}/#likes/${crypto.randomUUID()}`),
+        actor: ctx.getActorUri(user.username),
+        object: new URL(post.uri),
+      });
 
-    const result = await processActivity(ctx, db, domain, undoActivity, "outbound", user.username);
-    if (!result.success) {
-      return c.json({ error: result.error || "Failed to unlike post" }, 500);
+      const undoActivity = new Undo({
+        id: new URL(`https://${domain}/#undos/${crypto.randomUUID()}`),
+        actor: ctx.getActorUri(user.username),
+        object: likeActivity,
+      });
+
+      await safeSendActivity(ctx,
+        { identifier: user.username },
+        {
+          id: new URL(postAuthor.uri),
+          inboxId: new URL(postAuthor.inbox_url),
+        },
+        undoActivity
+      );
+      console.log(`[Undo Like] Sent to ${postAuthor.handle}`);
     }
 
     return c.json({
@@ -300,6 +362,13 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
 
     const ctx = federation.createContext(c.req.raw, undefined);
 
+    // V2: Direct database + send pattern
+    await db.addBoost(actor.id, post.id);
+    await updatePostScore(db, post.id);
+    await createNotification(db, 'boost', actor.id, post.actor_id, post.id);
+    console.log(`[Announce] ${actor.handle} boosted post ${post.id}`);
+
+    // Create Announce activity
     const announceActivity = new Announce({
       id: new URL(`https://${domain}/#announces/${crypto.randomUUID()}`),
       actor: ctx.getActorUri(user.username),
@@ -308,9 +377,27 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
       cc: ctx.getFollowersUri(user.username),
     });
 
-    const result = await processActivity(ctx, db, domain, announceActivity, "outbound", user.username);
-    if (!result.success) {
-      return c.json({ error: result.error || "Failed to boost post" }, 500);
+    // Send to followers
+    await safeSendActivity(ctx,
+      { identifier: user.username },
+      "followers",
+      announceActivity,
+      { preferSharedInbox: true }
+    );
+    console.log(`[Announce] Sent to followers of ${user.username}`);
+
+    // Also send to post author if remote
+    const postAuthor = await db.getActorById(post.actor_id);
+    if (postAuthor && !postAuthor.user_id && postAuthor.inbox_url) {
+      await safeSendActivity(ctx,
+        { identifier: user.username },
+        {
+          id: new URL(postAuthor.uri),
+          inboxId: new URL(postAuthor.inbox_url),
+        },
+        announceActivity
+      );
+      console.log(`[Announce] Sent to ${postAuthor.handle}`);
     }
 
     return c.json({
@@ -339,6 +426,13 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
 
     const ctx = federation.createContext(c.req.raw, undefined);
 
+    // V2: Direct database + send pattern
+    await db.removeBoost(actor.id, post.id);
+    await updatePostScore(db, post.id);
+    await removeNotification(db, 'boost', actor.id, post.actor_id, post.id);
+    console.log(`[Undo Announce] ${actor.handle} unboosted post ${post.id}`);
+
+    // Create Undo(Announce) activity
     const announceActivity = new Announce({
       id: new URL(`https://${domain}/#announces/${crypto.randomUUID()}`),
       actor: ctx.getActorUri(user.username),
@@ -351,9 +445,27 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
       object: announceActivity,
     });
 
-    const result = await processActivity(ctx, db, domain, undoActivity, "outbound", user.username);
-    if (!result.success) {
-      return c.json({ error: result.error || "Failed to unboost post" }, 500);
+    // Send to followers
+    await safeSendActivity(ctx,
+      { identifier: user.username },
+      "followers",
+      undoActivity,
+      { preferSharedInbox: true }
+    );
+    console.log(`[Undo Announce] Sent to followers of ${user.username}`);
+
+    // Also send to post author if remote
+    const postAuthor = await db.getActorById(post.actor_id);
+    if (postAuthor && !postAuthor.user_id && postAuthor.inbox_url) {
+      await safeSendActivity(ctx,
+        { identifier: user.username },
+        {
+          id: new URL(postAuthor.uri),
+          inboxId: new URL(postAuthor.inbox_url),
+        },
+        undoActivity
+      );
+      console.log(`[Undo Announce] Sent to ${postAuthor.handle}`);
     }
 
     return c.json({

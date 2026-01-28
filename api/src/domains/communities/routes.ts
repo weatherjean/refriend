@@ -6,7 +6,7 @@ import { CommunityDB, type Community } from "./repository.ts";
 import { CommunityModeration } from "./moderation.ts";
 import { announcePost, getCommunityActorUri } from "./federation.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
-import { processActivity } from "../../activities.ts";
+import { safeSendActivity } from "../federation-v2/index.ts";
 import { deleteMedia } from "../../storage.ts";
 import { getCachedTrendingCommunities, setCachedTrendingCommunities, clearCachedTrendingCommunities } from "../../cache.ts";
 import { formatDate } from "../../shared/formatting.ts";
@@ -356,10 +356,19 @@ export function createCommunityRoutes(
         to: new URL(community.uri),
       });
 
-      const result = await processActivity(ctx, db, domain, followActivity, "outbound", user.username);
-      if (!result.success) {
-        return c.json({ error: result.error || "Failed to join community" }, 500);
-      }
+      // V2: Direct database + send pattern
+      await db.addFollow(actor.id, community.id, 'pending');
+      console.log(`[Follow] ${actor.handle} -> ${community.handle} (pending)`);
+
+      await safeSendActivity(ctx,
+        { identifier: user.username },
+        {
+          id: new URL(community.uri),
+          inboxId: new URL(community.inbox_url),
+        },
+        followActivity
+      );
+      console.log(`[Follow] Sent request to ${community.handle}`);
 
       return c.json({ ok: true, is_member: true, message: "Join request sent" });
     } else {
@@ -412,10 +421,19 @@ export function createCommunityRoutes(
         to: new URL(community.uri),
       });
 
-      const result = await processActivity(ctx, db, domain, undoActivity, "outbound", user.username);
-      if (!result.success) {
-        return c.json({ error: result.error || "Failed to leave community" }, 500);
-      }
+      // V2: Direct database + send pattern
+      await db.removeFollow(actor.id, community.id);
+      console.log(`[Undo Follow] ${actor.handle} unfollowed ${community.handle}`);
+
+      await safeSendActivity(ctx,
+        { identifier: user.username },
+        {
+          id: new URL(community.uri),
+          inboxId: new URL(community.inbox_url),
+        },
+        undoActivity
+      );
+      console.log(`[Undo Follow] Sent to ${community.handle}`);
 
       return c.json({ ok: true, is_member: false });
     } else {
@@ -1240,7 +1258,14 @@ export function createCommunityRoutes(
           }),
           to: PUBLIC_COLLECTION,
         });
-        await processActivity(ctx, db, domain, deleteActivity, "outbound", communitySlug);
+
+        // V2: Direct send to followers
+        await safeSendActivity(ctx,
+          { identifier: communitySlug },
+          "followers",
+          deleteActivity
+        );
+        console.log(`[Delete] Sent to followers of ${communitySlug}`);
       } catch (e) {
         console.error(`[Community] Failed to send Delete activity for post ${postUri}:`, e);
       }

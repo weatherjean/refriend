@@ -479,6 +479,7 @@ export async function enrichPostsBatch(
         avatar_url: communityInfo.avatar_url,
         is_local: communityInfo.is_local,
       } : null,
+      addressed_to: post.addressed_to ?? null,
     };
   });
 }

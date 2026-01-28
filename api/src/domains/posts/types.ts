@@ -90,6 +90,7 @@ export interface EnrichedPost {
     handle: string;
     avatar_url: string | null;
   } | null;
+  addressed_to: string[] | null;
   boosted_by?: {
     id: string;
     handle: string;

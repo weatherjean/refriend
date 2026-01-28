@@ -10,13 +10,13 @@ declare module "@hono/hono" {
   }
 }
 import { DB } from "./db.ts";
-import { federation, setDomain, setDB } from "./domains/federation/setup.ts";
+import { federation, setDomain, setDB } from "./domains/federation-v2/setup.ts";
 import { createApiRoutes } from "./api-routes.ts";
 import { initStorage } from "./storage.ts";
 import { initCache } from "./cache.ts";
 import { CommunityDB } from "./domains/communities/repository.ts";
 import { addCommunityFederationRoutes, setCommunityDB as setCommunityDBFed } from "./domains/communities/federation.ts";
-import { setCommunityDb as setActivityCommunityDb } from "./activities.ts";
+import { setCommunityDb as setActivityCommunityDb } from "./domains/federation-v2/utils/actor.ts";
 import { logger } from "./logger.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");

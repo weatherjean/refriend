@@ -99,7 +99,7 @@ export function createApiRoutes(
   // These handle the migrated endpoints and take precedence
 
   // User auth and profiles: /auth/*, /users/*
-  api.route("/", createUserRoutes());
+  api.route("/", createUserRoutes(federation));
 
   // Social interactions: /follow, /unfollow, /posts/:id/like, /posts/:id/boost, /block, /mute
   api.route("/", createSocialRoutes(federation));

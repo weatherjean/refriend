@@ -1,20 +1,15 @@
 /**
  * Activities - Federation Activity Processing
  *
- * This module re-exports from the modular federation domain.
- * The actual implementation has been split into:
- * - domains/federation/processor.ts - Main processActivity orchestrator
- * - domains/federation/actor-persistence.ts - persistActor, setCommunityDb
- * - domains/federation/handlers/*.ts - Individual activity handlers
- * - domains/federation/utils/*.ts - Shared utilities
+ * This module re-exports from the federation-v2 domain.
+ * Legacy compatibility file - imports should use federation-v2 directly.
  */
-
-export {
-  processActivity,
-  type ProcessResult,
-} from "./domains/federation/processor.ts";
 
 export {
   persistActor,
   setCommunityDb,
-} from "./domains/federation/actor-persistence.ts";
+} from "./domains/federation-v2/utils/actor.ts";
+
+export {
+  safeSendActivity,
+} from "./domains/federation-v2/utils/send.ts";

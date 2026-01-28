@@ -9,7 +9,6 @@ import {
   Create,
   Delete,
   Document,
-  Group,
   Hashtag,
   Note,
   Tombstone,
@@ -22,7 +21,7 @@ import type { CommunityDB } from "../communities/repository.ts";
 import * as service from "./service.ts";
 import { getCachedHashtagPosts, setCachedHashtagPosts, invalidateProfileCache } from "../../cache.ts";
 import { saveMedia, deleteMedia } from "../../storage.ts";
-import { processActivity } from "../../activities.ts";
+import { safeSendActivity } from "../federation-v2/index.ts";
 import { rateLimit } from "../../middleware/rate-limit.ts";
 import { parseIntSafe } from "../../shared/utils.ts";
 
@@ -319,7 +318,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     return c.json({ url: mediaUrl, media_type: `image/${format}` });
   });
 
-  // POST /posts - Create post via ActivityPub Create activity (rate limited)
+  // POST /posts - Create post (V2: direct database + send)
   routes.post("/posts", rateLimit("post:create"), async (c) => {
     const user = c.get("user");
     const actor = c.get("actor");
@@ -412,7 +411,50 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       console.log(`[Create] Reply inherits audience: ${audienceUri.href}`);
     }
 
-    // Create the Note
+    // V2: Create post directly in database
+    const post = await db.createPost({
+      uri: noteUri,
+      actor_id: actor.id,
+      content: safeContent,
+      url: noteUrl,
+      in_reply_to_id: replyToPost?.id ?? null,
+      sensitive: sensitive ?? false,
+      addressed_to: audienceUri ? [audienceUri.href] : undefined,
+    });
+
+    // Store hashtags
+    for (const name of hashtagNames) {
+      const hashtag = await db.getOrCreateHashtag(name);
+      await db.addPostHashtag(post.id, hashtag.id);
+    }
+
+    // Store media attachments
+    for (const att of attachments ?? []) {
+      const mediaUrl = att.url.startsWith("http") ? att.url : `https://${domain}${att.url}`;
+      await db.createMedia(post.id, mediaUrl, "image/webp", att.alt_text ?? null, att.width, att.height);
+    }
+
+    // Store link preview if we have one
+    if (linkPreview) {
+      await db.updatePostLinkPreview(post.id, linkPreview);
+      post.link_preview = linkPreview;
+    }
+
+    // Store video embed if we have one
+    if (videoEmbed) {
+      await db.updatePostVideoEmbed(post.id, videoEmbed);
+      post.video_embed = videoEmbed;
+    }
+
+    // Invalidate the author's profile cache
+    await invalidateProfileCache(actor.id);
+
+    // Create notifications for mentioned users
+    await service.notifyMentions(db, mentions, actor.id, post.id, domain);
+
+    console.log(`[Create] Post from ${actor.handle}: ${post.id}`);
+
+    // Create the Note for federation
     const note = new Note({
       id: new URL(noteUri),
       attribution: ctx.getActorUri(user.username),
@@ -437,43 +479,21 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       ccs: ccRecipients,
     });
 
-    // Process through unified pipeline
-    const result = await processActivity(ctx, db, domain, createActivity, "outbound", user.username);
-    if (!result.success) {
-      return c.json({ error: result.error || "Failed to create post" }, 500);
-    }
-
-    // Retrieve the created post
-    const post = await db.getPostByUri(noteUri);
-    if (!post) {
-      return c.json({ error: "Post not found after creation" }, 500);
-    }
-
-    // Store link preview if we have one
-    if (linkPreview) {
-      await db.updatePostLinkPreview(post.id, linkPreview);
-      post.link_preview = linkPreview;
-    }
-
-    // Store video embed if we have one
-    if (videoEmbed) {
-      await db.updatePostVideoEmbed(post.id, videoEmbed);
-      post.video_embed = videoEmbed;
-    }
-
-    // Note: Media records are created by processCreate from the Note attachments
-    // No need to create them here again
-
-    // Invalidate the author's profile cache
-    await invalidateProfileCache(actor.id);
-
-    // Create notifications for mentioned users
-    await service.notifyMentions(db, mentions, actor.id, post.id, domain);
+    // Send to followers (standard Fedify approach)
+    // Note: Lemmy community replies are stored locally but not federated to Lemmy
+    // (Lemmy has strict digest validation that's incompatible with current setup)
+    await safeSendActivity(ctx,
+      { identifier: user.username },
+      "followers",
+      createActivity,
+      { preferSharedInbox: true }
+    );
+    console.log(`[Create] Sent to followers of ${user.username}`);
 
     return c.json({ post: await service.enrichPost(db, post, actor?.id, domain, communityDb) });
   });
 
-  // DELETE /posts/:id - Delete post via ActivityPub Delete activity
+  // DELETE /posts/:id - Delete post (V2: direct database + send)
   routes.delete("/posts/:id", async (c) => {
     const publicId = c.req.param("id");
     const user = c.get("user");
@@ -495,21 +515,9 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
 
     const ctx = federation.createContext(c.req.raw, undefined);
 
-    // Create the Delete activity
-    const deleteActivity = new Delete({
-      id: new URL(`https://${domain}/#deletes/${crypto.randomUUID()}`),
-      actor: ctx.getActorUri(user.username),
-      object: new Tombstone({
-        id: new URL(post.uri),
-      }),
-      to: PUBLIC_COLLECTION,
-    });
-
-    // Process through unified pipeline
-    const result = await processActivity(ctx, db, domain, deleteActivity, "outbound", user.username);
-    if (!result.success) {
-      return c.json({ error: result.error || "Failed to delete post" }, 500);
-    }
+    // V2: Delete post directly from database
+    await db.deletePost(post.id);
+    console.log(`[Delete] Post ${post.id} by ${actor.handle}`);
 
     // Clean up local media files from disk
     for (const media of mediaFiles) {
@@ -522,6 +530,41 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
 
     // Invalidate the author's profile cache
     await invalidateProfileCache(actor.id);
+
+    // Create the Delete activity
+    const deleteActivity = new Delete({
+      id: new URL(`https://${domain}/#deletes/${crypto.randomUUID()}`),
+      actor: ctx.getActorUri(user.username),
+      object: new Tombstone({
+        id: new URL(post.uri),
+      }),
+      to: PUBLIC_COLLECTION,
+    });
+
+    // Send to followers
+    await safeSendActivity(ctx,
+      { identifier: user.username },
+      "followers",
+      deleteActivity
+    );
+    console.log(`[Delete] Sent to followers of ${user.username}`);
+
+    // Also send to communities the post was addressed to (for Lemmy compatibility)
+    if (post.addressed_to && post.addressed_to.length > 0) {
+      for (const communityUri of post.addressed_to) {
+        try {
+          const communityInbox = new URL(communityUri + "/inbox");
+          await safeSendActivity(ctx,
+            { identifier: user.username },
+            { inbox: communityInbox },
+            deleteActivity
+          );
+          console.log(`[Delete] Sent to community: ${communityUri}`);
+        } catch (e) {
+          console.error(`[Delete] Failed to send to community ${communityUri}:`, e);
+        }
+      }
+    }
 
     return c.json({ ok: true });
   });

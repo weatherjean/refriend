@@ -51,8 +51,7 @@ export {
   getDB,
   getDomain,
   persistActor,
-  processActivity,
-} from "./federation/index.ts";
+} from "./federation-v2/index.ts";
 
 // Communities Domain
 export {
