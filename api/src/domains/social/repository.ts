@@ -37,6 +37,14 @@ export async function getFollowingCount(db: DB, actorId: number): Promise<number
   return db.getFollowingCount(actorId);
 }
 
+export async function getFollowingByType(db: DB, actorId: number, actorType: 'Person' | 'Group', limit: number, offset: number): Promise<Actor[]> {
+  return db.getFollowingByType(actorId, actorType, limit, offset);
+}
+
+export async function getFollowingCountByType(db: DB, actorId: number, actorType: 'Person' | 'Group'): Promise<number> {
+  return db.getFollowingCountByType(actorId, actorType);
+}
+
 // ============ Likes ============
 
 export async function addLike(db: DB, actorId: number, postId: number): Promise<void> {

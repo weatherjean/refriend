@@ -369,6 +369,14 @@ export const follows = {
       method: 'POST',
       body: JSON.stringify({ actor_id: actorId }),
     }),
+  getFollowingPeople: (limit = 20, offset = 0) =>
+    fetchJson<{ actors: Actor[]; total: number; has_more: boolean }>(
+      `/following/people?limit=${limit}&offset=${offset}`
+    ),
+  getFollowingCommunities: (limit = 20, offset = 0) =>
+    fetchJson<{ actors: Actor[]; total: number; has_more: boolean }>(
+      `/following/communities?limit=${limit}&offset=${offset}`
+    ),
 };
 
 // Search

@@ -126,6 +126,9 @@ export function Layout({ children }: LayoutProps) {
                     <span className="badge bg-danger rounded-pill ms-auto">{unreadCount > 99 ? '99+' : unreadCount}</span>
                   )}
                 </Link>
+                <Link to="/following" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
+                  <i className="bi bi-people-fill me-2"></i> Following
+                </Link>
                 <Link to={`/u/${username}`} className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
                   <i className="bi bi-person-fill me-2"></i> Profile
                 </Link>

@@ -42,6 +42,25 @@ export async function isFollowing(
   return repository.isFollowing(db, followerId, followingId);
 }
 
+export async function getFollowingByType(
+  db: DB,
+  actorId: number,
+  actorType: 'Person' | 'Group',
+  limit: number,
+  offset: number,
+  domain?: string
+): Promise<{ actors: ReturnType<typeof sanitizeActor>[]; total: number; has_more: boolean }> {
+  const [actors, total] = await Promise.all([
+    repository.getFollowingByType(db, actorId, actorType, limit, offset),
+    repository.getFollowingCountByType(db, actorId, actorType),
+  ]);
+  return {
+    actors: actors.map((a) => sanitizeActor(a, domain)),
+    total,
+    has_more: offset + actors.length < total,
+  };
+}
+
 // ============ Likes ============
 
 export interface LikeResult {

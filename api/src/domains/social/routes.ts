@@ -35,6 +35,42 @@ interface SocialEnv {
 export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv> {
   const routes = new Hono<SocialEnv>();
 
+  // ============ Following (by type) ============
+
+  // GET /following/people
+  routes.get("/following/people", async (c) => {
+    const actor = c.get("actor");
+    const db = c.get("db");
+    const domain = c.get("domain");
+
+    if (!actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 100);
+    const offset = parseInt(c.req.query("offset") || "0");
+
+    const result = await service.getFollowingByType(db, actor.id, "Person", limit, offset, domain);
+    return c.json(result);
+  });
+
+  // GET /following/communities
+  routes.get("/following/communities", async (c) => {
+    const actor = c.get("actor");
+    const db = c.get("db");
+    const domain = c.get("domain");
+
+    if (!actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 100);
+    const offset = parseInt(c.req.query("offset") || "0");
+
+    const result = await service.getFollowingByType(db, actor.id, "Group", limit, offset, domain);
+    return c.json(result);
+  });
+
   // ============ Follow Routes ============
 
   // GET /users/:username/followers

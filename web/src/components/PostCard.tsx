@@ -289,8 +289,7 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
                     setLightboxIndex(index);
                     setLightboxOpen(true);
                   }}
-                  disableVideo={linkToPost}
-                  onVideoClick={() => navigate(postLink)}
+                  disableVideo
                 />
               </div>
             )}
@@ -353,7 +352,6 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
             {post.video_embed && (
               <VideoEmbed
                 video={post.video_embed}
-                onPlayClick={linkToPost ? () => navigate(postLink) : undefined}
               />
             )}
           </>
@@ -465,6 +463,7 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
               isOwnPost={post.author?.id === actor?.id}
               onDelete={onDelete}
               originalUrl={post.url}
+              remoteUrl={post.author?.is_local === false ? post.uri : null}
             />
           )}
         </div>

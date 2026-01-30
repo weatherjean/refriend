@@ -9,6 +9,7 @@ import { PostPage } from './pages/PostPage';
 import { ActorPage } from './pages/ActorPage';
 import { SearchPage } from './pages/SearchPage';
 import { TagPage } from './pages/TagPage';
+import { FollowingPage } from './pages/FollowingPage';
 import { ExplorePage } from './pages/ExplorePage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { ActorByIdPage } from './pages/ActorByIdPage';
@@ -37,6 +38,7 @@ export const modalRoutes = [
   { path: '/u/:handle/*', element: <ActorPage /> },
   { path: '/actor/:id', element: <ActorByIdPage /> },
   { path: '/tags/:tag', element: <TagPage /> },
+  { path: '/following', element: <FollowingPage /> },
   { path: '/install', element: <InstallPage /> },
   { path: '/all', element: <AllActivityPage /> },
   { path: '/policy', element: <ContentPolicyPage /> },

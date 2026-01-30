@@ -73,7 +73,7 @@ export function ImageLightbox({ attachments, initialIndex, isOpen, onClose }: Im
       <div
         className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
         style={{ backgroundColor: 'rgba(0,0,0,0.9)' }}
-        onClick={onClose}
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
       >
         <button
           className="btn btn-link text-white position-absolute end-0 fs-3"
@@ -104,6 +104,7 @@ export function ImageLightbox({ attachments, initialIndex, isOpen, onClose }: Im
             style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain' }}
             onClick={(e) => e.stopPropagation()}
             preload="metadata"
+            autoPlay
             loop
             playsInline
             controls

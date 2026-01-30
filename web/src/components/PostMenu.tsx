@@ -9,9 +9,10 @@ interface PostMenuProps {
   isOwnPost?: boolean;
   onDelete?: () => void;
   originalUrl?: string | null;
+  remoteUrl?: string | null;
 }
 
-export function PostMenu({ postId, isOwnPost = false, onDelete, originalUrl }: PostMenuProps) {
+export function PostMenu({ postId, isOwnPost = false, onDelete, originalUrl, remoteUrl }: PostMenuProps) {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -91,6 +92,18 @@ export function PostMenu({ postId, isOwnPost = false, onDelete, originalUrl }: P
             >
               <i className="bi bi-box-arrow-up-right"></i>
               <span>View original</span>
+            </a>
+          )}
+          {remoteUrl && remoteUrl !== originalUrl && (
+            <a
+              className="post-menu-item"
+              href={remoteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <i className="bi bi-globe2"></i>
+              <span>View on remote instance</span>
             </a>
           )}
           {!isOwnPost && (

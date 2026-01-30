@@ -709,6 +709,30 @@ export class DB {
     });
   }
 
+  async getFollowingByType(actorId: number, actorType: 'Person' | 'Group', limit: number, offset: number): Promise<Actor[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor>`
+        SELECT a.* FROM actors a
+        JOIN follows f ON a.id = f.following_id
+        WHERE f.follower_id = ${actorId} AND f.status = 'accepted' AND a.actor_type = ${actorType}
+        ORDER BY f.created_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+      return result.rows;
+    });
+  }
+
+  async getFollowingCountByType(actorId: number, actorType: 'Person' | 'Group'): Promise<number> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ count: bigint }>`
+        SELECT COUNT(*) as count FROM follows f
+        JOIN actors a ON a.id = f.following_id
+        WHERE f.follower_id = ${actorId} AND f.status = 'accepted' AND a.actor_type = ${actorType}
+      `;
+      return Number(result.rows[0].count);
+    });
+  }
+
   async getLikedPostsPaginated(actorId: number, limit: number, offset: number): Promise<Post[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Post>`

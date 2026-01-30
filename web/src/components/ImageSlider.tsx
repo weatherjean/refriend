@@ -4,8 +4,7 @@ import { Attachment } from '../api';
 interface ImageSliderProps {
   attachments: Attachment[];
   onOpenLightbox: (index: number) => void;
-  disableVideo?: boolean;  // Show placeholder instead of video (for feeds)
-  onVideoClick?: () => void;  // Called when video placeholder is clicked
+  disableVideo?: boolean;  // Show placeholder instead of video
 }
 
 function isVideoType(mediaType: string): boolean {
@@ -21,7 +20,7 @@ function getProxyUrl(url: string): string {
   return `/api/proxy/media?url=${encodeURIComponent(url)}`;
 }
 
-export function ImageSlider({ attachments, onOpenLightbox, disableVideo, onVideoClick }: ImageSliderProps) {
+export function ImageSlider({ attachments, onOpenLightbox, disableVideo }: ImageSliderProps) {
   const [sliderIndex, setSliderIndex] = useState(0);
   const [imageLoaded, setImageLoaded] = useState<Record<number, boolean>>({});
   const [imageError, setImageError] = useState<Record<number, boolean>>({});
@@ -70,7 +69,7 @@ export function ImageSlider({ attachments, onOpenLightbox, disableVideo, onVideo
             onClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
-              onVideoClick?.();
+              onOpenLightbox(sliderIndex);
             }}
           >
             {/* Try to show first frame via metadata preload */}
