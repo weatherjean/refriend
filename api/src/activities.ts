@@ -7,7 +7,6 @@
 
 export {
   persistActor,
-  setCommunityDb,
 } from "./domains/federation-v2/utils/actor.ts";
 
 export {

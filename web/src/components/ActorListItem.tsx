@@ -22,7 +22,17 @@ export function ActorListItem({ actor, onClick, actionButton }: ActorListItemPro
         className="me-2"
       />
       <div className="flex-grow-1" style={{ minWidth: 0 }}>
-        <div className="fw-semibold text-truncate">{actor.name || username}</div>
+        <div className="d-flex align-items-center gap-1">
+          <span className="fw-semibold text-truncate">{actor.name || username}</span>
+          {!actor.is_local && (
+            <i className="bi bi-globe2 flex-shrink-0" style={{ fontSize: '0.8em', color: '#fbbf24' }}></i>
+          )}
+          {actor.actor_type === 'Group' && (
+            <span className="badge bg-info flex-shrink-0" style={{ fontSize: '0.6em' }}>
+              <i className="bi bi-people-fill me-1"></i>Group
+            </span>
+          )}
+        </div>
         <small className="text-muted text-truncate d-block">{actor.handle}</small>
       </div>
       {actionButton && <div className="ms-2">{actionButton}</div>}

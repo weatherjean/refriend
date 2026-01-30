@@ -10,7 +10,7 @@ import { Delete, Tombstone, PUBLIC_COLLECTION } from "@fedify/fedify";
 import type { Federation } from "@fedify/fedify";
 import type { DB } from "../../db.ts";
 import type { User, Actor } from "../../shared/types.ts";
-import type { CommunityDB } from "../communities/repository.ts";
+
 import * as service from "./service.ts";
 import { sanitizeUser, sanitizeActor } from "./types.ts";
 import { saveAvatar } from "../../storage.ts";
@@ -21,7 +21,7 @@ import { parseIntSafe } from "../../shared/utils.ts";
 interface UsersEnv {
   Variables: {
     db: DB;
-    communityDb: CommunityDB;
+
     domain: string;
     user: User | null;
     actor: Actor | null;
@@ -264,7 +264,7 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
     const db = c.get("db");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
-    const communityDb = c.get("communityDb");
+
     const filter = c.req.query("filter");
     const sort = c.req.query("sort") === "hot" ? "hot" : "new";
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
@@ -277,7 +277,7 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
       before,
       currentActorId: currentActor?.id,
       domain,
-      communityDb,
+
     });
 
     if (!result) {
@@ -291,11 +291,11 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
   routes.get("/users/:username/pinned", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
+
     const domain = c.get("domain");
     const currentActor = c.get("actor");
 
-    const result = await service.getUserPinnedPosts(db, username, currentActor?.id, domain, communityDb);
+    const result = await service.getUserPinnedPosts(db, username, currentActor?.id, domain);
 
     if (!result) {
       return c.json({ error: "User not found" }, 404);
@@ -308,7 +308,7 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
   routes.get("/users/:username/boosts", async (c) => {
     const username = c.req.param("username");
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
+
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
@@ -319,7 +319,7 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
       before,
       currentActorId: currentActor?.id,
       domain,
-      communityDb,
+
     });
 
     if (!result) {
@@ -353,7 +353,7 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
     const db = c.get("db");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
-    const communityDb = c.get("communityDb");
+
     const filter = c.req.query("filter");
     const sort = c.req.query("sort") === "hot" ? "hot" : "new";
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
@@ -366,7 +366,7 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
       before,
       currentActorId: currentActor?.id,
       domain,
-      communityDb,
+
     });
 
     if (!result) {
@@ -382,11 +382,11 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
   routes.get("/actors/:id/pinned", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
+
     const domain = c.get("domain");
     const currentActor = c.get("actor");
 
-    const result = await service.getActorPinnedPosts(db, publicId, currentActor?.id, domain, communityDb);
+    const result = await service.getActorPinnedPosts(db, publicId, currentActor?.id, domain);
 
     if (!result) {
       return c.json({ error: "Actor not found" }, 404);
@@ -399,7 +399,7 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
   routes.get("/actors/:id/boosts", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
+
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
@@ -410,7 +410,7 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
       before,
       currentActorId: currentActor?.id,
       domain,
-      communityDb,
+
     });
 
     if (!result) {

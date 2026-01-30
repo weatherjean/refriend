@@ -1,29 +1,25 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { posts as postsApi, communities as communitiesApi } from '../api';
-import { SuggestToCommunityModal } from './SuggestToCommunityModal';
+import { posts as postsApi } from '../api';
 import { ReportPostModal } from './ReportPostModal';
 import { ConfirmModal } from './ConfirmModal';
 
 interface PostMenuProps {
   postId: string;
   isOwnPost?: boolean;
-  isCommunityAdmin?: boolean;
-  communityName?: string;
   onDelete?: () => void;
   originalUrl?: string | null;
 }
 
-export function PostMenu({ postId, isOwnPost = false, isCommunityAdmin = false, communityName, onDelete, originalUrl }: PostMenuProps) {
+export function PostMenu({ postId, isOwnPost = false, onDelete, originalUrl }: PostMenuProps) {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
-  const [showSuggestModal, setShowSuggestModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const canDelete = isOwnPost || isCommunityAdmin;
+  const canDelete = isOwnPost;
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -43,12 +39,6 @@ export function PostMenu({ postId, isOwnPost = false, isCommunityAdmin = false, 
     setIsOpen(!isOpen);
   };
 
-  const handleSuggestClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsOpen(false);
-    setShowSuggestModal(true);
-  };
-
   const handleReportClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsOpen(false);
@@ -64,11 +54,7 @@ export function PostMenu({ postId, isOwnPost = false, isCommunityAdmin = false, 
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      if (isCommunityAdmin && communityName) {
-        await communitiesApi.deletePost(communityName, postId);
-      } else {
-        await postsApi.delete(postId);
-      }
+      await postsApi.delete(postId);
       setShowDeleteConfirm(false);
       if (onDelete) {
         onDelete();
@@ -107,13 +93,6 @@ export function PostMenu({ postId, isOwnPost = false, isCommunityAdmin = false, 
               <span>View original</span>
             </a>
           )}
-          <button
-            className="post-menu-item"
-            onClick={handleSuggestClick}
-          >
-            <i className="bi bi-send-plus"></i>
-            <span>Suggest to community</span>
-          </button>
           {!isOwnPost && (
             <button
               className="post-menu-item post-menu-item-danger"
@@ -144,13 +123,6 @@ export function PostMenu({ postId, isOwnPost = false, isCommunityAdmin = false, 
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteConfirm(false)}
       />
-
-      {showSuggestModal && (
-        <SuggestToCommunityModal
-          postId={postId}
-          onClose={() => setShowSuggestModal(false)}
-        />
-      )}
 
       {showReportModal && (
         <ReportPostModal

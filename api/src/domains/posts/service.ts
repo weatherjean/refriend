@@ -45,9 +45,8 @@ export function decodeHtmlEntities(text: string): string {
 
 /**
  * Process post content: escape HTML, convert newlines, linkify mentions and hashtags
- * Looks up mentions in database to determine if they're communities or users
  */
-export async function processContent(db: DB, text: string, domain: string): Promise<{ html: string; mentions: string[] }> {
+export async function processContent(_db: DB, text: string, domain: string): Promise<{ html: string; mentions: string[] }> {
   // First escape HTML
   let html = escapeHtml(text);
 
@@ -55,45 +54,12 @@ export async function processContent(db: DB, text: string, domain: string): Prom
   const mentionMatches = text.match(/@[\w.-]+(?:@[\w.-]+)?/g) || [];
   const mentions = [...new Set(mentionMatches.map(m => m.startsWith('@') ? m : `@${m}`))];
 
-  // Extract local mention names for lookup (only local domain or no domain specified)
-  const localMentionNames: string[] = [];
-  for (const mention of mentions) {
-    const match = mention.match(/^@([\w.-]+)(?:@([\w.-]+))?$/);
-    if (match) {
-      const name = match[1];
-      const mentionDomain = match[2];
-      // Only lookup local mentions (no domain or matching our domain)
-      if (!mentionDomain || mentionDomain === domain) {
-        localMentionNames.push(name);
-      }
-    }
-  }
-
-  // Batch lookup to determine which mentions are communities
-  const actorLookup = await db.getActorsAndCommunitiesByNames(localMentionNames);
-
   // Convert @mentions to links
   // Match @username or @username@domain
   html = html.replace(/@([\w.-]+(?:@[\w.-]+)?)/g, (_match, handle: string) => {
-    // Parse the handle
-    const parts = handle.split('@');
-    const name = parts[0];
-    const mentionDomain = parts[1];
-
     // If it's just @username, assume local domain
     const fullHandle = handle.includes('@') ? `@${handle}` : `@${handle}@${domain}`;
-
-    // Check if this is a local mention and if it's a community
-    const isLocal = !mentionDomain || mentionDomain === domain;
-    const lookup = isLocal ? actorLookup.get(name.toLowerCase()) : undefined;
-
-    if (lookup?.isCommunity) {
-      // Community - link to /c/name
-      return `<a href="/c/${name}" class="mention">@${handle}</a>`;
-    } else {
-      // User (or unknown/remote) - link to /u/handle
-      return `<a href="/u/${fullHandle}" class="mention">@${handle}</a>`;
-    }
+    return `<a href="/u/${fullHandle}" class="mention">@${handle}</a>`;
   });
 
   // Convert #hashtags to links
@@ -255,8 +221,6 @@ export interface CreatePostParams {
 export async function validateCreatePost(
   db: DB,
   params: CreatePostParams,
-  communityDb?: { getCommunityForPost: (postId: number) => Promise<{ id: number } | null>; isBanned: (communityId: number, actorId: number) => Promise<boolean> },
-  actorId?: number
 ): Promise<{ valid: boolean; error?: string; replyToPost?: Post; linkPreview?: LinkPreview | null; videoEmbed?: VideoEmbed | null }> {
   const { content, inReplyTo, attachments, linkUrl, videoUrl } = params;
 
@@ -327,17 +291,6 @@ export async function validateCreatePost(
     if (!replyToPost) {
       return { valid: false, error: "Parent post not found" };
     }
-
-    // Check if the parent post belongs to a community and if user is banned
-    if (communityDb && actorId) {
-      const community = await communityDb.getCommunityForPost(replyToPost.id);
-      if (community) {
-        const isBanned = await communityDb.isBanned(community.id, actorId);
-        if (isBanned) {
-          return { valid: false, error: "You are banned from this community" };
-        }
-      }
-    }
   }
 
   return { valid: true, replyToPost, linkPreview, videoEmbed };
@@ -387,11 +340,10 @@ export async function enrichPost(
   post: Post,
   currentActorId?: number,
   domain?: string,
-  communityDb?: { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null; is_local: boolean }>> }
 ): Promise<EnrichedPost> {
   const author = await db.getActorById(post.actor_id);
   const postWithActor: PostWithActor = { ...post, author: author! };
-  const enriched = await enrichPostsBatch(db, [postWithActor], currentActorId, domain, communityDb);
+  const enriched = await enrichPostsBatch(db, [postWithActor], currentActorId, domain);
   return enriched[0];
 }
 
@@ -403,21 +355,19 @@ export async function enrichPostsBatch(
   posts: PostWithActor[],
   currentActorId?: number,
   domain?: string,
-  communityDb?: { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null; is_local: boolean }>> }
 ): Promise<EnrichedPost[]> {
   if (posts.length === 0) return [];
 
   const postIds = posts.map((p) => p.id);
 
   // Batch fetch all related data
-  const [hashtagsMap, mediaMap, likedSet, boostedSet, repliesMap, pinnedSet, communitiesMap] = await Promise.all([
+  const [hashtagsMap, mediaMap, likedSet, boostedSet, repliesMap, pinnedSet] = await Promise.all([
     repository.getBatchHashtags(db, postIds),
     repository.getBatchPostMedia(db, postIds),
     currentActorId ? db.getLikedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
     currentActorId ? db.getBoostedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
     db.getRepliesCounts(postIds),
     currentActorId ? db.getPinnedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
-    communityDb ? communityDb.getCommunitiesForPosts(postIds) : Promise.resolve(new Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null; is_local: boolean }>()),
   ]);
 
   // Collect parent post IDs for replies
@@ -444,7 +394,6 @@ export async function enrichPostsBatch(
 
   return posts.map((post) => {
     const parentPost = post.in_reply_to_id ? parentPostsMap.get(post.in_reply_to_id) : null;
-    const communityInfo = communitiesMap.get(post.id);
 
     return {
       id: post.public_id,
@@ -472,22 +421,12 @@ export async function enrichPostsBatch(
       attachments: mediaMap.get(post.id) ?? [],
       link_preview: post.link_preview,
       video_embed: post.video_embed,
-      community: communityInfo ? {
-        id: communityInfo.public_id,
-        name: communityInfo.name,
-        handle: communityInfo.handle,
-        avatar_url: communityInfo.avatar_url,
-        is_local: communityInfo.is_local,
-      } : null,
       addressed_to: post.addressed_to ?? null,
     };
   });
 }
 
 // ============ Post Retrieval ============
-
-// Type for communityDb parameter
-type CommunityDbForEnrich = { getCommunitiesForPosts: (postIds: number[]) => Promise<Map<number, { public_id: string; name: string | null; handle: string; avatar_url: string | null; is_local: boolean }>> };
 
 /**
  * Get recent posts (public feed)
@@ -498,14 +437,13 @@ export async function getRecentPosts(
   before?: number,
   currentActorId?: number,
   domain?: string,
-  communityDb?: CommunityDbForEnrich
 ): Promise<PostsListResponse> {
   const posts = await repository.getRecentPosts(db, limit + 1, before);
   const hasMore = posts.length > limit;
   const resultPosts = hasMore ? posts.slice(0, limit) : posts;
   const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : null;
 
-  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain, communityDb);
+  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain);
 
   return {
     posts: enrichedPosts,
@@ -521,10 +459,9 @@ export async function getHotPosts(
   limit: number,
   currentActorId?: number,
   domain?: string,
-  communityDb?: CommunityDbForEnrich
 ): Promise<EnrichedPost[]> {
   const posts = await repository.getHotPosts(db, limit);
-  return enrichPostsBatch(db, posts, currentActorId, domain, communityDb);
+  return enrichPostsBatch(db, posts, currentActorId, domain);
 }
 
 /**
@@ -537,7 +474,7 @@ export async function getTimelinePosts(
   before?: number,
   sort: "new" | "hot" = "new",
   domain?: string,
-  communityDb?: CommunityDbForEnrich,
+  _communityDb?: unknown,
   offset?: number
 ): Promise<PostsListResponse> {
   const posts = await repository.getTimelinePosts(db, actorId, limit + 1, before, sort, offset);
@@ -556,7 +493,7 @@ export async function getTimelinePosts(
     }
   }
 
-  const enrichedPosts = await enrichPostsBatch(db, resultPosts, actorId, domain, communityDb);
+  const enrichedPosts = await enrichPostsBatch(db, resultPosts, actorId, domain);
 
   // Attach booster info to enriched posts
   for (const enrichedPost of enrichedPosts) {
@@ -587,11 +524,10 @@ export async function getPost(
   publicId: string,
   currentActorId?: number,
   domain?: string,
-  communityDb?: CommunityDbForEnrich
 ): Promise<EnrichedPost | null> {
   const post = await repository.getPostByPublicId(db, publicId);
   if (!post) return null;
-  return enrichPost(db, post, currentActorId, domain, communityDb);
+  return enrichPost(db, post, currentActorId, domain);
 }
 
 /**
@@ -602,13 +538,12 @@ export async function getReplies(
   publicId: string,
   currentActorId?: number,
   domain?: string,
-  communityDb?: CommunityDbForEnrich
 ): Promise<EnrichedPost[]> {
   const post = await repository.getPostByPublicId(db, publicId);
   if (!post) return [];
 
   const replies = await repository.getReplies(db, post.id);
-  return enrichPostsBatch(db, replies, currentActorId, domain, communityDb);
+  return enrichPostsBatch(db, replies, currentActorId, domain);
 }
 
 /**
@@ -620,10 +555,9 @@ export async function searchPosts(
   limit: number,
   currentActorId?: number,
   domain?: string,
-  communityDb?: CommunityDbForEnrich
 ): Promise<EnrichedPost[]> {
   const posts = await repository.searchPosts(db, query, limit);
-  return enrichPostsBatch(db, posts, currentActorId, domain, communityDb);
+  return enrichPostsBatch(db, posts, currentActorId, domain);
 }
 
 /**
@@ -636,14 +570,13 @@ export async function getPostsByHashtag(
   before?: number,
   currentActorId?: number,
   domain?: string,
-  communityDb?: CommunityDbForEnrich
 ): Promise<PostsListResponse> {
   const posts = await repository.getPostsByHashtag(db, hashtag, limit + 1, before);
   const hasMore = posts.length > limit;
   const resultPosts = hasMore ? posts.slice(0, limit) : posts;
   const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : null;
 
-  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain, communityDb);
+  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain);
 
   return {
     posts: enrichedPosts,

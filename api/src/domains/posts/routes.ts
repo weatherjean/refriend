@@ -18,7 +18,6 @@ import {
 import type { Federation } from "@fedify/fedify";
 import type { DB } from "../../db.ts";
 import type { User, Actor } from "../../shared/types.ts";
-import type { CommunityDB } from "../communities/repository.ts";
 import * as service from "./service.ts";
 import { getCachedHashtagPosts, setCachedHashtagPosts, invalidateProfileCache } from "../../cache.ts";
 import { saveMedia, deleteMedia } from "../../storage.ts";
@@ -29,7 +28,6 @@ import { parseIntSafe } from "../../shared/utils.ts";
 interface PostsEnv {
   Variables: {
     db: DB;
-    communityDb: CommunityDB;
     domain: string;
     user: User | null;
     actor: Actor | null;
@@ -47,7 +45,6 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     }
 
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
@@ -61,7 +58,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       : null;
 
     return c.json({
-      posts: await service.enrichPostsBatch(db, resultPosts, currentActor?.id, domain, communityDb),
+      posts: await service.enrichPostsBatch(db, resultPosts, currentActor?.id, domain),
       next_cursor: nextCursor,
     });
   });
@@ -74,12 +71,11 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     }
 
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
     const offset = parseIntSafe(c.req.query("offset")) ?? undefined;
 
-    const result = await service.getTimelinePosts(db, actor.id, limit, undefined, "hot", domain, communityDb, offset);
+    const result = await service.getTimelinePosts(db, actor.id, limit, undefined, "hot", domain, undefined, offset);
     return c.json(result);
   });
 
@@ -91,13 +87,12 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     }
 
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
     const before = parseIntSafe(c.req.query("before")) ?? undefined;
     const sort = c.req.query("sort") === "hot" ? "hot" : "new";
 
-    const result = await service.getTimelinePosts(db, actor.id, limit, before, sort, domain, communityDb);
+    const result = await service.getTimelinePosts(db, actor.id, limit, before, sort, domain);
     return c.json(result);
   });
 
@@ -105,7 +100,6 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
   routes.get("/posts/:id", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
 
@@ -116,10 +110,10 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
 
     // Get ancestor chain using batch fetch (single recursive CTE query)
     const ancestorPosts = await db.getAncestorChainWithActor(post.id, 50);
-    const ancestors = await service.enrichPostsBatch(db, ancestorPosts, currentActor?.id, domain, communityDb);
+    const ancestors = await service.enrichPostsBatch(db, ancestorPosts, currentActor?.id, domain);
 
     // Enrich the main post
-    const enrichedPost = await service.enrichPost(db, post, currentActor?.id, domain, communityDb);
+    const enrichedPost = await service.enrichPost(db, post, currentActor?.id, domain);
 
     return c.json({ post: enrichedPost, ancestors });
   });
@@ -128,7 +122,6 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
   routes.get("/posts/:id/replies", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
 
@@ -154,7 +147,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       : null;
 
     return c.json({
-      replies: await service.enrichPostsBatch(db, resultReplies, currentActor?.id, domain, communityDb),
+      replies: await service.enrichPostsBatch(db, resultReplies, currentActor?.id, domain),
       next_cursor: nextCursor,
       op_author_id: parentAuthor?.public_id || null,
     });
@@ -164,7 +157,6 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
   routes.get("/hashtag/:tag", async (c) => {
     const tag = c.req.param("tag").toLowerCase();
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
@@ -178,7 +170,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       }
     }
 
-    const result = await service.getPostsByHashtag(db, tag, limit, before, currentActor?.id, domain, communityDb);
+    const result = await service.getPostsByHashtag(db, tag, limit, before, currentActor?.id, domain);
 
     // Cache for unauthenticated users
     if (!currentActor && !before) {
@@ -326,7 +318,6 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const actor = c.get("actor");
     const domain = c.get("domain");
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
 
     if (!user || !actor) {
       return c.json({ error: "Authentication required" }, 401);
@@ -352,8 +343,6 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const validation = await service.validateCreatePost(
       db,
       { content, inReplyTo: in_reply_to, attachments, sensitive, linkUrl: link_url, videoUrl: video_url },
-      communityDb ? { getCommunityForPost: communityDb.getCommunityForPost.bind(communityDb), isBanned: communityDb.isBanned.bind(communityDb) } : undefined,
-      actor.id
     );
 
     if (!validation.valid) {
@@ -558,7 +547,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       await sendToCommunity(ctx, user.username, createActivity, audienceUri.href);
     }
 
-    return c.json({ post: await service.enrichPost(db, post, actor?.id, domain, communityDb) });
+    return c.json({ post: await service.enrichPost(db, post, actor?.id, domain) });
   });
 
   // DELETE /posts/:id - Delete post (V2: direct database + send)

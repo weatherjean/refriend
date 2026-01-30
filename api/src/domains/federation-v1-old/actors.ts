@@ -5,4 +5,4 @@
  */
 
 // Re-export from the new modular actor-persistence module
-export { persistActor, setCommunityDb, getCommunityDb } from "./actor-persistence.ts";
+export { persistActor } from "./actor-persistence.ts";

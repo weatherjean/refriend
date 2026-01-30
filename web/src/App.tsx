@@ -12,9 +12,6 @@ import { TagPage } from './pages/TagPage';
 import { ExplorePage } from './pages/ExplorePage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { ActorByIdPage } from './pages/ActorByIdPage';
-import { CommunitiesPage } from './pages/CommunitiesPage';
-import { CommunityPage } from './pages/CommunityPage';
-import { CreateCommunityPage } from './pages/CreateCommunityPage';
 import { InstallPage } from './pages/InstallPage';
 import { AllActivityPage } from './pages/AllActivityPage';
 import { ContentPolicyPage } from './pages/ContentPolicyPage';
@@ -40,9 +37,6 @@ export const modalRoutes = [
   { path: '/u/:handle/*', element: <ActorPage /> },
   { path: '/actor/:id', element: <ActorByIdPage /> },
   { path: '/tags/:tag', element: <TagPage /> },
-  { path: '/communities', element: <CommunitiesPage /> },
-  { path: '/communities/new', element: <CreateCommunityPage /> },
-  { path: '/c/:name', element: <CommunityPage /> },
   { path: '/install', element: <InstallPage /> },
   { path: '/all', element: <AllActivityPage /> },
   { path: '/policy', element: <ContentPolicyPage /> },

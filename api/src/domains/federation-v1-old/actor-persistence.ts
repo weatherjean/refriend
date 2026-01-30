@@ -6,24 +6,6 @@
 
 import { Group, type Actor as APActor } from "@fedify/fedify";
 import type { DB, Actor } from "../../db.ts";
-import { CommunityDB } from "../communities/repository.ts";
-
-// Community DB instance (set during initialization)
-let communityDb: CommunityDB | null = null;
-
-/**
- * Set the community DB for actor persistence
- */
-export function setCommunityDb(db: CommunityDB) {
-  communityDb = db;
-}
-
-/**
- * Get the community DB
- */
-export function getCommunityDb(): CommunityDB | null {
-  return communityDb;
-}
 
 /**
  * Persist a remote actor to the database
@@ -38,14 +20,8 @@ export async function persistActor(db: DB, domain: string, actor: APActor): Prom
   if (actor.id.host === domain.replace(/:\d+$/, "") || actor.id.host === domain) {
     const username = actor.preferredUsername?.toString();
     if (username) {
-      // For groups, check by community name
-      if (isGroup && communityDb) {
-        const existing = await communityDb.getCommunityByName(username);
-        if (existing) return existing;
-      } else {
-        const existing = await db.getActorByUsername(username);
-        if (existing) return existing;
-      }
+      const existing = await db.getActorByUsername(username);
+      if (existing) return existing;
     }
   }
 

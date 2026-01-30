@@ -83,3 +83,11 @@ web/
 | `PORT` | `8000` | API server port |
 | `STATIC_DIR` | - | Optional: serve static files from this directory (not used when Caddy/Vite handles static) |
 | `DENO_KV_PATH` | - | Path for persistent Deno KV storage (e.g., `/data/kv.sqlite`) |
+
+### Browsing JSR (Deno) Package Source
+
+JSR package landing pages (e.g. `https://jsr.io/@fedify/testing`) return 404. To read source for a JSR dependency:
+
+1. Find the exact version in `api/deno.lock` or run `deno info jsr:@scope/pkg@version`
+2. Source files are at `https://jsr.io/@scope/pkg/VERSION/src/FILE.ts` — e.g. `https://jsr.io/@fedify/testing/1.10.2/src/mod.ts`
+3. Or read directly from the Deno cache: `deno info jsr:@scope/pkg@version` prints the local cache path, then read that file

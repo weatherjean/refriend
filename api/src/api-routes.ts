@@ -10,7 +10,6 @@ import { cors } from "@hono/hono/cors";
 import { getCookie } from "@hono/hono/cookie";
 import type { Federation } from "@fedify/fedify";
 import type { DB, User, Actor } from "./db.ts";
-import type { CommunityDB } from "./domains/communities/repository.ts";
 import { generalRateLimit } from "./middleware/rate-limit.ts";
 import { csrfMiddleware } from "./middleware/csrf.ts";
 
@@ -19,7 +18,6 @@ import { createNotificationRoutes } from "./domains/notifications/routes.ts";
 import { createUserRoutes } from "./domains/users/routes.ts";
 import { createSocialRoutes } from "./domains/social/routes.ts";
 import { createPostRoutes } from "./domains/posts/routes.ts";
-import { createCommunityRoutes } from "./domains/communities/routes.ts";
 import { createTagRoutes } from "./domains/tags/routes.ts";
 import { createSearchRoutes } from "./domains/search/index.ts";
 
@@ -29,7 +27,6 @@ import { getCachedMedia, cacheRemoteMedia } from "./storage.ts";
 type Env = {
   Variables: {
     db: DB;
-    communityDb: CommunityDB;
     domain: string;
     user: User | null;
     actor: Actor | null;
@@ -39,7 +36,6 @@ type Env = {
 export function createApiRoutes(
   db: DB,
   federation: Federation<void>,
-  communityDb: CommunityDB
 ): Hono<Env> {
   const api = new Hono<Env>();
 
@@ -68,7 +64,6 @@ export function createApiRoutes(
   // Inject db, domain, and session user
   api.use("/*", async (c, next) => {
     c.set("db", db);
-    c.set("communityDb", communityDb);
     const domain = c.get("domain") || new URL(c.req.url).host;
     c.set("domain", domain);
 
@@ -112,9 +107,6 @@ export function createApiRoutes(
 
   // Notifications: /notifications/*
   api.route("/notifications", createNotificationRoutes());
-
-  // Communities: /communities/*
-  api.route("/communities", createCommunityRoutes(db, federation));
 
   // Tags: /tags/*
   api.route("/", createTagRoutes());

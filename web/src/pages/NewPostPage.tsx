@@ -1,11 +1,10 @@
-import { useState, useRef, useEffect, ChangeEvent } from 'react';
+import { useState, useRef, ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { posts, media, communities, AttachmentInput, type Community, type Actor } from '../api';
+import { posts, media, AttachmentInput, type Actor } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { resizeImageWithDimensions, ResizedImage } from '../utils/imageUtils';
 import { MentionPicker } from '../components/MentionPicker';
 import { PageHeader } from '../components/PageHeader';
-import { Avatar } from '../components/Avatar';
 import { getUsername } from '../utils';
 
 const MAX_CHARACTERS = 500;
@@ -31,7 +30,6 @@ export function NewPostPage() {
   const [showVideoInput, setShowVideoInput] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
   const [videoError, setVideoError] = useState('');
-  const [showCommunityInput, setShowCommunityInput] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -40,29 +38,6 @@ export function NewPostPage() {
   const [mentionQuery, setMentionQuery] = useState('');
   const [mentionStartIndex, setMentionStartIndex] = useState(0);
   const [mentionPickerPosition, setMentionPickerPosition] = useState({ top: 0, left: 0 });
-
-  // Community selection
-  const [joinedCommunities, setJoinedCommunities] = useState<Community[]>([]);
-  const [selectedCommunity, setSelectedCommunity] = useState<Community | null>(null);
-  const [communitySearch, setCommunitySearch] = useState('');
-  const [showCommunityDropdown, setShowCommunityDropdown] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      communities.getJoined().then(({ communities: c }) => {
-        setJoinedCommunities(c);
-      }).catch(() => {
-        // Error handled by global toast
-      });
-    }
-  }, [user]);
-
-  const filteredCommunities = communitySearch
-    ? joinedCommunities.filter(c =>
-        c.name?.toLowerCase().includes(communitySearch.toLowerCase()) ||
-        c.handle?.toLowerCase().includes(communitySearch.toLowerCase())
-      )
-    : joinedCommunities;
 
   const charactersRemaining = MAX_CHARACTERS - content.length;
   const isOverLimit = charactersRemaining < 0;
@@ -247,15 +222,6 @@ export function NewPostPage() {
       // Create post with attachments
       const { post } = await posts.create(trimmedContent, undefined, uploadedAttachments, sensitive, trimmedLink || undefined, trimmedVideo || undefined);
 
-      // Submit to community if selected
-      if (selectedCommunity) {
-        try {
-          await communities.submitPost(selectedCommunity.name!, post.id);
-        } catch {
-          // Error handled by global toast
-        }
-      }
-
       navigate(`/posts/${post.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create post');
@@ -402,97 +368,6 @@ export function NewPostPage() {
               </div>
             )}
 
-            {/* Community selector */}
-            {showCommunityInput && joinedCommunities.length > 0 && (
-              <div className="mb-3">
-                <div className="position-relative">
-                  {selectedCommunity ? (
-                    <div className="input-group">
-                      <span className="input-group-text">
-                        <i className="bi bi-people-fill"></i>
-                      </span>
-                      <div className="form-control d-flex align-items-center">
-                        <Avatar
-                          src={selectedCommunity.avatar_url}
-                          name={selectedCommunity.name || ''}
-                          size="xs"
-                          className="me-2"
-                        />
-                        <span>@{selectedCommunity.name}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary"
-                        onClick={() => setSelectedCommunity(null)}
-                        title="Remove community"
-                      >
-                        <i className="bi bi-x"></i>
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="input-group">
-                        <span className="input-group-text">
-                          <i className="bi bi-people-fill"></i>
-                        </span>
-                        <span className="input-group-text">@</span>
-                        <input
-                          type="text"
-                          className="form-control"
-                          placeholder="Search your communities..."
-                          value={communitySearch}
-                          onChange={(e) => setCommunitySearch(e.target.value)}
-                          onFocus={() => setShowCommunityDropdown(true)}
-                          onBlur={() => setTimeout(() => setShowCommunityDropdown(false), 150)}
-                          disabled={loading}
-                        />
-                        <button
-                          type="button"
-                          className="btn btn-outline-secondary"
-                          onClick={() => {
-                            setShowCommunityInput(false);
-                            setCommunitySearch('');
-                            setSelectedCommunity(null);
-                          }}
-                          title="Cancel"
-                        >
-                          <i className="bi bi-x"></i>
-                        </button>
-                      </div>
-                      {showCommunityDropdown && filteredCommunities.length > 0 && (
-                        <div className="position-absolute w-100 mt-1 bg-body border rounded shadow-sm" style={{ zIndex: 1000, maxHeight: 200, overflowY: 'auto' }}>
-                          {filteredCommunities.map(c => (
-                            <button
-                              key={c.id}
-                              type="button"
-                              className="d-flex align-items-center w-100 p-2 border-0 bg-transparent text-start"
-                              style={{ cursor: 'pointer' }}
-                              onMouseDown={() => {
-                                setSelectedCommunity(c);
-                                setCommunitySearch('');
-                                setShowCommunityDropdown(false);
-                              }}
-                            >
-                              <Avatar
-                                src={c.avatar_url}
-                                name={c.name || ''}
-                                size="xs"
-                                className="me-2"
-                              />
-                              <div>
-                                <div className="fw-semibold small">@{c.name}</div>
-                                <div className="text-muted" style={{ fontSize: '0.75rem' }}>{c.handle}</div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Actions row */}
             <div className="d-flex justify-content-between align-items-center pt-2 border-top">
               <div className="d-flex gap-2">
@@ -548,18 +423,6 @@ export function NewPostPage() {
                   <i className={`bi bi-eye${sensitive ? '-slash' : ''}-fill`}></i>
                 </button>
 
-                {/* Community selector toggle */}
-                {joinedCommunities.length > 0 && (
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${showCommunityInput || selectedCommunity ? 'btn-primary' : 'btn-outline-secondary'}`}
-                    onClick={() => setShowCommunityInput(!showCommunityInput)}
-                    disabled={loading}
-                    title="Post to community"
-                  >
-                    <i className="bi bi-people-fill"></i>
-                  </button>
-                )}
               </div>
 
               <button type="submit" className="btn btn-primary" disabled={!canSubmit}>

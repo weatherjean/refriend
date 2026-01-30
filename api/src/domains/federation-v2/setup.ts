@@ -41,14 +41,13 @@ import {
 import type { Federation } from "@fedify/fedify";
 import { DenoKvStore, DenoKvMessageQueue } from "@fedify/denokv";
 import type { DB, Actor } from "../../db.ts";
-import { persistActor, getCommunityDb } from "./utils/actor.ts";
+import { persistActor } from "./utils/actor.ts";
 import { validateAndSanitizeContent, MAX_CONTENT_SIZE } from "./utils/content.ts";
 import { fetchAndStoreNote } from "./utils/notes.ts";
 import { safeSendActivity } from "./utils/send.ts";
 import { invalidateProfileCache } from "../../cache.ts";
 import { updatePostScore, updateParentPostScore } from "../../scoring.ts";
 import { createNotification, removeNotification } from "../notifications/routes.ts";
-import { CommunityModeration } from "../communities/moderation.ts";
 import { fetchOpenGraph } from "../posts/service.ts";
 import { parseIntSafe } from "../../shared/utils.ts";
 
@@ -740,11 +739,6 @@ export function registerInboxHandlers(
 
       console.log(`[Create] Post from ${authorActor.handle}: ${post.id}`);
 
-      // Check for community submission
-      const communityDb = getCommunityDb();
-      if (communityDb) {
-        await checkAndSubmitToCommunity(object, post.id, authorActor.id);
-      }
 
       // Reply notifications and score updates
       if (inReplyToId) {
@@ -1383,50 +1377,3 @@ export function registerInboxHandlers(
 
 // ============ Helper: Check community submission ============
 
-async function checkAndSubmitToCommunity(
-  note: Note | Article | Page,
-  postId: number,
-  authorActorId: number
-): Promise<void> {
-  const communityDb = getCommunityDb();
-  if (!communityDb) return;
-
-  const communityModeration = new CommunityModeration(communityDb);
-  const recipients: string[] = [];
-
-  try {
-    const toRecipients = note.toIds;
-    if (toRecipients) {
-      for (const uri of toRecipients) {
-        if (uri instanceof URL) recipients.push(uri.href);
-      }
-    }
-  } catch { /* ignore */ }
-
-  try {
-    const ccRecipients = note.ccIds;
-    if (ccRecipients) {
-      for (const uri of ccRecipients) {
-        if (uri instanceof URL) recipients.push(uri.href);
-      }
-    }
-  } catch { /* ignore */ }
-
-  for (const uri of recipients) {
-    if (uri === PUBLIC_COLLECTION.href) continue;
-
-    const community = await communityDb.getCommunityByUri(uri);
-    if (community) {
-      const permission = await communityModeration.canPost(community.id, authorActorId);
-      if (!permission.allowed) {
-        console.log(`[Create] Post ${postId} rejected from community ${community.name}: ${permission.reason}`);
-        continue;
-      }
-
-      const autoApprove = await communityModeration.shouldAutoApprove(community.id, authorActorId);
-      await communityDb.submitCommunityPost(community.id, postId, autoApprove);
-      console.log(`[Create] Post ${postId} submitted to community ${community.name} (auto-approved: ${autoApprove})`);
-      return;
-    }
-  }
-}

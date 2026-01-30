@@ -47,10 +47,19 @@ export function ProfileHeader({
           <h4 className="mb-0 mt-3">{displayName}</h4>
           <div className="text-muted small" style={{ wordBreak: 'break-all' }}>{actor.handle}</div>
 
-          {!actor.is_local && (
-            <span className="badge bg-secondary mt-2">
-              <i className="bi bi-globe me-1"></i>Remote
-            </span>
+          {(!actor.is_local || actor.actor_type === 'Group') && (
+            <div className="mt-2 d-flex justify-content-center gap-1">
+              {!actor.is_local && (
+                <span className="badge bg-secondary">
+                  <i className="bi bi-globe me-1"></i>Remote
+                </span>
+              )}
+              {actor.actor_type === 'Group' && (
+                <span className="badge bg-info">
+                  <i className="bi bi-people-fill me-1"></i>Group
+                </span>
+              )}
+            </div>
           )}
 
           {actor.bio && (
@@ -105,10 +114,19 @@ export function ProfileHeader({
             <h4 className="mb-0">{displayName}</h4>
             <div className="text-muted">{actor.handle}</div>
 
-            {!actor.is_local && (
-              <span className="badge bg-secondary mt-1">
-                <i className="bi bi-globe me-1"></i>Remote
-              </span>
+            {(!actor.is_local || actor.actor_type === 'Group') && (
+              <div className="mt-1 d-flex gap-1">
+                {!actor.is_local && (
+                  <span className="badge bg-secondary">
+                    <i className="bi bi-globe me-1"></i>Remote
+                  </span>
+                )}
+                {actor.actor_type === 'Group' && (
+                  <span className="badge bg-info">
+                    <i className="bi bi-people-fill me-1"></i>Group
+                  </span>
+                )}
+              </div>
             )}
 
             {actor.bio && (

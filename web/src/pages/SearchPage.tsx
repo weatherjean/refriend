@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { search, Actor, Post } from '../api';
-import { getUsername, getCommunitySlug } from '../utils';
+import { getUsername } from '../utils';
 import { Avatar } from '../components/Avatar';
 import { EmptyState } from '../components/EmptyState';
 import { PostCard } from '../components/PostCard';
@@ -125,10 +125,7 @@ export function SearchPage() {
                   <div className="list-group">
                     {userResults.map((actor) => {
                       const username = getUsername(actor.handle);
-                      const isCommunity = actor.actor_type === 'Group';
-                      const profileLink = isCommunity
-                        ? `/c/${getCommunitySlug(actor.handle, actor.is_local)}`
-                        : `/u/${actor.handle}`;
+                      const profileLink = `/u/${actor.handle}`;
 
                       return (
                         <Link
@@ -147,9 +144,9 @@ export function SearchPage() {
                                   <i className="bi bi-globe2 flex-shrink-0" style={{ fontSize: '0.8em', color: '#fbbf24' }}></i>
                                 )}
                               </div>
-                              {isCommunity && (
+                              {actor.actor_type === 'Group' && (
                                 <span className="badge bg-info" style={{ fontSize: '0.65em' }}>
-                                  <i className="bi bi-people-fill me-1"></i>Community
+                                  <i className="bi bi-people-fill me-1"></i>Group
                                 </span>
                               )}
                               <small className="text-muted d-block text-truncate">{actor.handle}</small>

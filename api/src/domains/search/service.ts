@@ -13,8 +13,6 @@ import { persistActor } from "../federation-v2/utils/actor.ts";
 import { sanitizeActor, type SanitizedActor } from "../users/types.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
 import type { EnrichedPost } from "../posts/types.ts";
-import type { CommunityDB } from "../communities/repository.ts";
-
 export interface SearchUserResult extends SanitizedActor {
   is_following: boolean;
   follow_status: 'pending' | 'accepted' | null;
@@ -41,10 +39,9 @@ export async function search(
     limit?: number;
     currentActorId?: number;
     currentUsername?: string;
-    communityDb?: CommunityDB;
   } = {}
 ): Promise<SearchResult> {
-  const { type = "all", handleOnly = false, limit = 20, currentActorId, currentUsername, communityDb } = options;
+  const { type = "all", handleOnly = false, limit = 20, currentActorId, currentUsername } = options;
 
   let users: SearchUserResult[] = [];
   let posts: EnrichedPost[] = [];
@@ -70,27 +67,20 @@ export async function search(
           if (wfResponse.ok) {
             const wfData = await wfResponse.json();
             // Find all self links with ActivityPub type
-            const selfLinks = wfData.links?.filter((l: { rel: string; type?: string }) =>
+            const selfLinks = (wfData.links?.filter((l: { rel: string; type?: string }) =>
               l.rel === "self" && l.type?.includes("activity")
-            ) || [];
-            // Prefer Group (community) over Person if both exist
-            // Check the properties field for type hint
-            const selfLink = selfLinks.find((l: { properties?: Record<string, string> }) =>
-              l.properties?.["https://www.w3.org/ns/activitystreams#type"] === "Group"
-            ) || selfLinks[0];
+            ) || []) as { href?: string }[];
 
-            if (selfLink?.href) {
-              // SECURITY: Validate that the actor URI domain matches the requested domain
-              // This prevents SSRF attacks where a malicious WebFinger response could
-              // redirect to internal services
+            // Validate all self links (security: domain match + no private IPs)
+            const validHrefs: string[] = [];
+            for (const link of selfLinks) {
+              if (!link.href) continue;
               try {
-                const actorUrl = new URL(selfLink.href);
+                const actorUrl = new URL(link.href);
                 if (actorUrl.host !== handleDomain) {
                   console.warn(`[search] WebFinger returned actor from different domain: ${actorUrl.host} != ${handleDomain}`);
-                  // Skip this result - potential SSRF attempt
-                  throw new Error("Domain mismatch");
+                  continue;
                 }
-                // Also block private/internal IPs
                 const hostname = actorUrl.hostname;
                 if (
                   hostname === "localhost" ||
@@ -102,13 +92,15 @@ export async function search(
                   hostname === "0.0.0.0"
                 ) {
                   console.warn(`[search] WebFinger returned private/internal IP: ${hostname}`);
-                  throw new Error("Private IP not allowed");
+                  continue;
                 }
-              } catch (urlErr) {
-                console.error("[search] Invalid actor URL from WebFinger:", urlErr);
-                throw urlErr;
+                validHrefs.push(link.href);
+              } catch {
+                console.error("[search] Invalid actor URL from WebFinger:", link.href);
               }
+            }
 
+            if (validHrefs.length > 0) {
               let documentLoader = ctx.documentLoader;
 
               // Use current user's identity to sign requests (for secure mode instances)
@@ -122,28 +114,39 @@ export async function search(
                 }
               }
 
-              // Use lookupObject with the signed document loader
-              const actor = await lookupObject(selfLink.href, {
-                documentLoader,
-                contextLoader: ctx.contextLoader,
-              });
+              // Look up ALL self links and persist all actors
+              const remoteUsers: SearchUserResult[] = [];
+              for (const href of validHrefs) {
+                try {
+                  const actor = await lookupObject(href, {
+                    documentLoader,
+                    contextLoader: ctx.contextLoader,
+                  });
 
-              if (actor && isActor(actor)) {
-                const persisted = await persistActor(db, domain, actor);
-                if (persisted) {
-                  const followStatus = currentActorId
-                    ? await db.getFollowStatus(currentActorId, persisted.id)
-                    : null;
-                  return {
-                    users: [{
-                      ...sanitizeActor(persisted, domain),
-                      is_following: followStatus === 'accepted',
-                      follow_status: followStatus,
-                    }],
-                    posts: [],
-                    postsLowConfidence: false,
-                  };
+                  if (actor && isActor(actor)) {
+                    const persisted = await persistActor(db, domain, actor);
+                    if (persisted) {
+                      const followStatus = currentActorId
+                        ? await db.getFollowStatus(currentActorId, persisted.id)
+                        : null;
+                      remoteUsers.push({
+                        ...sanitizeActor(persisted, domain),
+                        is_following: followStatus === 'accepted',
+                        follow_status: followStatus,
+                      });
+                    }
+                  }
+                } catch (lookupErr) {
+                  console.error(`[search] Failed to look up ${href}:`, lookupErr);
                 }
+              }
+
+              if (remoteUsers.length > 0) {
+                return {
+                  users: remoteUsers,
+                  posts: [],
+                  postsLowConfidence: false,
+                };
               }
             }
           }
@@ -174,7 +177,7 @@ export async function search(
   // Search posts (fuzzy search with pg_trgm)
   if ((type === "all" || type === "posts") && query.length >= 3) {
     const result = await db.searchPosts(query, limit);
-    posts = await enrichPostsBatch(db, result.posts, currentActorId, domain, communityDb);
+    posts = await enrichPostsBatch(db, result.posts, currentActorId, domain);
     postsLowConfidence = result.lowConfidence;
   }
 

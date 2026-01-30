@@ -41,8 +41,6 @@ CREATE TABLE IF NOT EXISTS actors (
   actor_type TEXT NOT NULL DEFAULT 'Person' CHECK (actor_type IN ('Person', 'Group')),
   follower_count INTEGER NOT NULL DEFAULT 0,
   following_count INTEGER NOT NULL DEFAULT 0,
-  require_approval BOOLEAN DEFAULT false,
-  created_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -78,7 +76,6 @@ CREATE TABLE IF NOT EXISTS posts (
   content TEXT NOT NULL,
   url TEXT,
   in_reply_to_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
-  community_id INTEGER REFERENCES actors(id) ON DELETE SET NULL,
   addressed_to TEXT[] NOT NULL DEFAULT '{}',
   likes_count INTEGER NOT NULL DEFAULT 0,
   boosts_count INTEGER NOT NULL DEFAULT 0,
@@ -196,62 +193,6 @@ CREATE TABLE IF NOT EXISTS jobs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Community admins (owners and admins - followers are regular members)
-CREATE TABLE IF NOT EXISTS community_admins (
-  id SERIAL PRIMARY KEY,
-  community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
-  actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK (role IN ('owner', 'admin')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (community_id, actor_id)
-);
-
--- Community bans
-CREATE TABLE IF NOT EXISTS community_bans (
-  id SERIAL PRIMARY KEY,
-  community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
-  actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
-  reason TEXT,
-  banned_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (community_id, actor_id)
-);
-
--- Community posts with approval workflow
-CREATE TABLE IF NOT EXISTS community_posts (
-  id SERIAL PRIMARY KEY,
-  community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
-  post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-  is_announcement BOOLEAN NOT NULL DEFAULT false,
-  submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  reviewed_at TIMESTAMPTZ,
-  reviewed_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
-  suggested_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
-  UNIQUE (community_id, post_id)
-);
-
--- Pinned community posts
-CREATE TABLE IF NOT EXISTS community_pinned_posts (
-  community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
-  post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
-  pinned_by INTEGER REFERENCES actors(id) ON DELETE SET NULL,
-  pinned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (community_id, post_id)
-);
-
--- Community moderation logs
-CREATE TABLE IF NOT EXISTS community_mod_logs (
-  id SERIAL PRIMARY KEY,
-  community_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
-  actor_id INTEGER REFERENCES actors(id) ON DELETE SET NULL,
-  action TEXT NOT NULL,
-  target_type TEXT,
-  target_id TEXT,
-  details TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 -- Password reset tokens
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id SERIAL PRIMARY KEY,
@@ -332,7 +273,6 @@ CREATE INDEX IF NOT EXISTS idx_posts_actor_replies ON posts(actor_id, created_at
 CREATE INDEX IF NOT EXISTS idx_posts_actor_posts ON posts(actor_id, created_at DESC) WHERE in_reply_to_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_actor_hot ON posts(actor_id, hot_score DESC) WHERE in_reply_to_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_replies_hot ON posts(in_reply_to_id, hot_score DESC) WHERE in_reply_to_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_posts_community ON posts(community_id) WHERE community_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_content_trgm ON posts USING GIN (content gin_trgm_ops);
 
 -- Follows
@@ -371,17 +311,6 @@ CREATE INDEX IF NOT EXISTS idx_jobs_pending ON jobs(run_at) WHERE status = 'pend
 -- Notifications
 CREATE INDEX IF NOT EXISTS idx_notifications_target ON notifications(target_actor_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(target_actor_id, read) WHERE read = FALSE;
-
--- Communities
-CREATE INDEX IF NOT EXISTS idx_community_admins_community ON community_admins(community_id);
-CREATE INDEX IF NOT EXISTS idx_community_admins_actor ON community_admins(actor_id);
-CREATE INDEX IF NOT EXISTS idx_community_bans_community ON community_bans(community_id);
-CREATE INDEX IF NOT EXISTS idx_community_bans_actor ON community_bans(actor_id);
-CREATE INDEX IF NOT EXISTS idx_community_posts_community ON community_posts(community_id);
-CREATE INDEX IF NOT EXISTS idx_community_posts_status ON community_posts(community_id, status);
-CREATE INDEX IF NOT EXISTS idx_community_posts_post_id ON community_posts(post_id);
-CREATE INDEX IF NOT EXISTS idx_community_pinned_posts_community ON community_pinned_posts(community_id);
-CREATE INDEX IF NOT EXISTS idx_community_mod_logs_community ON community_mod_logs(community_id, created_at DESC);
 
 -- Password reset tokens
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);

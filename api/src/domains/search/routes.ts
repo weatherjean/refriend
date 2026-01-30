@@ -9,7 +9,6 @@ import { Hono } from "@hono/hono";
 import type { Federation } from "@fedify/fedify";
 import type { DB } from "../../db.ts";
 import type { User, Actor } from "../../shared/types.ts";
-import type { CommunityDB } from "../communities/repository.ts";
 import { search } from "./service.ts";
 import { rateLimit } from "../../middleware/rate-limit.ts";
 import { parseIntSafe } from "../../shared/utils.ts";
@@ -17,7 +16,6 @@ import { parseIntSafe } from "../../shared/utils.ts";
 interface SearchEnv {
   Variables: {
     db: DB;
-    communityDb: CommunityDB;
     domain: string;
     user: User | null;
     actor: Actor | null;
@@ -40,7 +38,6 @@ export function createSearchRoutes(federation: Federation<void>): Hono<SearchEnv
     }
 
     const db = c.get("db");
-    const communityDb = c.get("communityDb");
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const currentUser = c.get("user");
@@ -58,7 +55,6 @@ export function createSearchRoutes(federation: Federation<void>): Hono<SearchEnv
       limit,
       currentActorId: currentActor?.id,
       currentUsername: currentUser?.username,
-      communityDb,
     });
 
     return c.json(result);

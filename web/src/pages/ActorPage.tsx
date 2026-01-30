@@ -144,7 +144,9 @@ export function ActorPage() {
       // Search for remote user
       const { users: searchResults } = await search.query(fullHandle);
       if (searchResults.length > 0) {
-        const remoteActor = searchResults[0];
+        // Prefer exact case-sensitive handle match (handles are case-sensitive)
+        const normalizedHandle = fullHandle.startsWith('@') ? fullHandle : `@${fullHandle}`;
+        const remoteActor = searchResults.find(a => a.handle === normalizedHandle) || searchResults[0];
         setActor(remoteActor);
         setStats({ followers: 0, following: 0 });
         setFollowers([]);
@@ -229,7 +231,7 @@ export function ActorPage() {
         }
         toast.info('Unfollowed');
       } else {
-        const response = await follows.follow(actor.handle);
+        const response = await follows.follow(actor.handle, actor.id);
         // For remote actors, start as pending; for local, immediately accepted
         const newStatus = actor.is_local ? 'accepted' : 'pending';
         setIsFollowing(newStatus === 'accepted');

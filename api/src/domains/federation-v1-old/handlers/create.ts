@@ -18,14 +18,13 @@ import {
   type Context,
 } from "@fedify/fedify";
 import type { DB, Actor } from "../../../db.ts";
-import { persistActor, getCommunityDb } from "../actor-persistence.ts";
+import { persistActor } from "../actor-persistence.ts";
 import { validateAndSanitizeContent, MAX_CONTENT_SIZE } from "../utils/content.ts";
 import { safeSendActivity } from "../utils/send.ts";
 import { fetchAndStoreNote } from "../utils/notes.ts";
 import { invalidateProfileCache } from "../../../cache.ts";
 import { updateParentPostScore } from "../../../scoring.ts";
 import { createNotification } from "../../notifications/routes.ts";
-import { CommunityModeration } from "../../communities/moderation.ts";
 import { fetchOpenGraph } from "../../posts/service.ts";
 
 /**
@@ -285,12 +284,6 @@ export async function processCreate(
 
   console.log(`[Create] Post from ${authorActor.handle}: ${post.id}`);
 
-  // Check if this post is addressed to a community (via to/cc)
-  const communityDb = getCommunityDb();
-  if (communityDb && direction === "inbound") {
-    await checkAndSubmitToCommunity(db, object, post.id, authorActor.id, inReplyToId);
-  }
-
   // If this is a reply, update the parent post's hot score and notify
   if (inReplyToId) {
     await updateParentPostScore(db, inReplyToId);
@@ -363,74 +356,3 @@ export async function processCreate(
   await invalidateProfileCache(authorActor.id);
 }
 
-/**
- * Check if a post is addressed to a community and submit it
- */
-async function checkAndSubmitToCommunity(
-  db: DB,
-  note: Note | Article | Page,
-  postId: number,
-  authorActorId: number,
-  inReplyToId: number | null
-): Promise<void> {
-  const communityDb = getCommunityDb();
-  if (!communityDb) return;
-
-  const communityModeration = new CommunityModeration(communityDb);
-
-  // Get all recipients from to/cc
-  const recipients: string[] = [];
-
-  // Get 'to' recipients
-  try {
-    const toRecipients = note.toIds;
-    if (toRecipients) {
-      for (const uri of toRecipients) {
-        if (uri instanceof URL) {
-          recipients.push(uri.href);
-        }
-      }
-    }
-  } catch {
-    // Ignore errors
-  }
-
-  // Get 'cc' recipients
-  try {
-    const ccRecipients = note.ccIds;
-    if (ccRecipients) {
-      for (const uri of ccRecipients) {
-        if (uri instanceof URL) {
-          recipients.push(uri.href);
-        }
-      }
-    }
-  } catch {
-    // Ignore errors
-  }
-
-  // Check each recipient to see if it's a community
-  for (const uri of recipients) {
-    if (uri === PUBLIC_COLLECTION.href) continue;
-
-    const community = await communityDb.getCommunityByUri(uri);
-    if (community) {
-      // Found a community! Check if the author can post
-      const permission = await communityModeration.canPost(community.id, authorActorId);
-      if (!permission.allowed) {
-        console.log(`[Create] Post ${postId} rejected from community ${community.name}: ${permission.reason}`);
-        continue;
-      }
-
-      // Submit the post to the community
-      const autoApprove = await communityModeration.shouldAutoApprove(community.id, authorActorId);
-      await communityDb.submitCommunityPost(community.id, postId, autoApprove);
-      console.log(`[Create] Post ${postId} submitted to community ${community.name} (auto-approved: ${autoApprove})`);
-      return; // Only submit to one community
-    }
-  }
-
-  // Note: Replies to community posts are NOT added to community_posts table.
-  // They are just regular replies that show up under their parent post.
-  // Only top-level posts addressed directly to a community go into community_posts.
-}

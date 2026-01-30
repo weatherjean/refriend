@@ -53,9 +53,3 @@ export {
   persistActor,
 } from "./federation-v2/index.ts";
 
-// Communities Domain
-export {
-  createCommunityRoutes,
-  CommunityDB,
-  CommunityModeration,
-} from "./communities/index.ts";

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Post, posts as postsApi } from '../api';
-import { formatTimeAgo, getUsername, sanitizeHtml, getCommunitySlug } from '../utils';
+import { formatTimeAgo, getUsername, sanitizeHtml } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import { TagBadge } from './TagBadge';
 import { Avatar } from './Avatar';
@@ -10,30 +10,14 @@ import { ImageLightbox } from './ImageLightbox';
 import { PostMenu } from './PostMenu';
 import { VideoEmbed } from './VideoEmbed';
 
-interface CommunityInfo {
-  id: string;
-  name: string;
-  handle: string;
-  avatar_url?: string | null;
-  is_local: boolean;
-}
-
 interface PostCardProps {
   post: Post;
   linkToPost?: boolean;
-  community?: CommunityInfo;
   isOP?: boolean;
-  pinnedInCommunity?: boolean;
-  canPinInCommunity?: boolean;
-  onCommunityPin?: () => void;
-  canUnboost?: boolean;
-  onUnboost?: () => void;
-  isCommunityAdmin?: boolean;
   onDelete?: () => void;
-  communityName?: string;
 }
 
-export function PostCard({ post, linkToPost = true, community: communityProp, isOP, pinnedInCommunity, canPinInCommunity, onCommunityPin, canUnboost, onUnboost, isCommunityAdmin, onDelete, communityName: communityNameProp }: PostCardProps) {
+export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardProps) {
   const navigate = useNavigate();
   const { user, actor } = useAuth();
   const [liked, setLiked] = useState(post.liked ?? false);
@@ -60,7 +44,6 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
   }, [linkToPost, post.content]);
 
   const isOwnPost = !!(actor && post.author && actor.id === post.author.id);
-  const community = post.community || communityProp;
 
   if (!post.author) return null;
 
@@ -146,14 +129,6 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
       style={{ cursor: linkToPost ? 'pointer' : 'default' }}
     >
       <div className="card-body">
-        {/* Pinned indicator */}
-        {pinnedInCommunity && (
-          <div className="post-pinned-indicator">
-            <i className="bi bi-pin-fill"></i>
-            <span>Pinned</span>
-          </div>
-        )}
-
         {/* Boosted by indicator */}
         {post.boosted_by && (
           <div className="post-boosted-indicator">
@@ -168,23 +143,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
           </div>
         )}
 
-        {/* Community pill - shown above header on mobile */}
-        {community && (
-          <Link
-            to={`/c/${getCommunitySlug(community.handle, community.is_local)}`}
-            className="community-pill community-pill-mobile"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {community.avatar_url ? (
-              <img src={community.avatar_url} alt="" />
-            ) : (
-              <i className="bi bi-people-fill"></i>
-            )}
-            <span>{community.name}</span>
-          </Link>
-        )}
-
-        {/* Header: Avatar + Meta + Community */}
+        {/* Header: Avatar + Meta */}
         <div className="post-header">
           <Link to={authorLink} onClick={(e) => e.stopPropagation()} className="post-avatar-link">
             <Avatar
@@ -214,20 +173,6 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
             </div>
             <div className="post-handle">{post.author.handle}</div>
           </div>
-          {community && (
-            <Link
-              to={`/c/${getCommunitySlug(community.handle, community.is_local)}`}
-              className="community-pill community-pill-desktop"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {community.avatar_url ? (
-                <img src={community.avatar_url} alt="" />
-              ) : (
-                <i className="bi bi-people-fill"></i>
-              )}
-              <span>{community.name}</span>
-            </Link>
-          )}
         </div>
 
         {/* Reply indicator */}
@@ -411,7 +356,7 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
             </button>
           )}
 
-          {isOwnPost && !community && (
+          {isOwnPost && (
             <button
               className={`post-action-btn ${pinned ? 'pinned' : ''}`}
               onClick={handlePin}
@@ -426,38 +371,10 @@ export function PostCard({ post, linkToPost = true, community: communityProp, is
             </button>
           )}
 
-          {canPinInCommunity && onCommunityPin && (
-            <button
-              className={`post-action-btn ${pinnedInCommunity ? 'pinned' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCommunityPin();
-              }}
-              title={pinnedInCommunity ? 'Unpin from community' : 'Pin in community'}
-            >
-              <i className={`bi ${pinnedInCommunity ? 'bi-pin-fill' : 'bi-pin'}`}></i>
-            </button>
-          )}
-
-          {canUnboost && onUnboost && (
-            <button
-              className="post-action-btn text-danger"
-              onClick={(e) => {
-                e.stopPropagation();
-                onUnboost();
-              }}
-              title="Remove from community"
-            >
-              <i className="bi bi-x-circle"></i>
-            </button>
-          )}
-
           {user && (
             <PostMenu
               postId={post.id}
               isOwnPost={post.author?.id === actor?.id}
-              isCommunityAdmin={isCommunityAdmin}
-              communityName={community?.name || communityNameProp}
               onDelete={onDelete}
               originalUrl={post.url}
             />

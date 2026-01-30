@@ -25,7 +25,7 @@ import {
   setCachedProfilePosts,
 } from "../../cache.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
-import type { CommunityDB } from "../communities/repository.ts";
+
 
 // ============ Password Hashing ============
 
@@ -495,7 +495,7 @@ export async function getUserPosts(
     before?: number;
     currentActorId?: number;
     domain?: string;
-    communityDb?: CommunityDB;
+    communityDb?: unknown;
   }
 ): Promise<UserPostsResult | null> {
   const { filter, sort = "new", limit = 20, before, currentActorId, domain, communityDb } = options;
@@ -524,7 +524,7 @@ export async function getUserPosts(
     ? resultPosts[resultPosts.length - 1].id
     : null;
 
-  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain, communityDb);
+  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain);
 
   const result = {
     posts: enrichedPosts,
@@ -544,7 +544,7 @@ export async function getUserPinnedPosts(
   username: string,
   currentActorId?: number,
   domain?: string,
-  communityDb?: CommunityDB
+
 ): Promise<{ posts: unknown[] } | null> {
   const actor = await db.getActorByUsername(username);
   if (!actor) {
@@ -553,7 +553,7 @@ export async function getUserPinnedPosts(
 
   const posts = await db.getPinnedPostsWithActor(actor.id);
   return {
-    posts: await enrichPostsBatch(db, posts, currentActorId, domain, communityDb),
+    posts: await enrichPostsBatch(db, posts, currentActorId, domain),
   };
 }
 
@@ -565,7 +565,7 @@ export async function getUserBoostedPosts(
     before?: number;
     currentActorId?: number;
     domain?: string;
-    communityDb?: CommunityDB;
+    communityDb?: unknown;
   }
 ): Promise<{ posts: unknown[]; next_cursor: number | null } | null> {
   const { limit = 20, before, currentActorId, domain, communityDb } = options;
@@ -583,7 +583,7 @@ export async function getUserBoostedPosts(
     ? resultPosts[resultPosts.length - 1].id
     : null;
 
-  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain, communityDb);
+  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain);
 
   // Add boosted_by info since these are all posts boosted by this actor
   const postsWithBooster = enrichedPosts.map(post => ({
@@ -636,7 +636,7 @@ export async function getActorPosts(
     before?: number;
     currentActorId?: number;
     domain?: string;
-    communityDb?: CommunityDB;
+    communityDb?: unknown;
   }
 ): Promise<UserPostsResult | null> {
   const { filter, sort = "new", limit = 20, before, currentActorId, domain, communityDb } = options;
@@ -665,7 +665,7 @@ export async function getActorPosts(
     ? resultPosts[resultPosts.length - 1].id
     : null;
 
-  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain, communityDb);
+  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain);
 
   const result = {
     posts: enrichedPosts,
@@ -685,7 +685,7 @@ export async function getActorPinnedPosts(
   publicId: string,
   currentActorId?: number,
   domain?: string,
-  communityDb?: CommunityDB
+
 ): Promise<{ posts: unknown[]; isLocal: boolean } | null> {
   const actor = await db.getActorByPublicId(publicId);
   if (!actor) {
@@ -696,7 +696,7 @@ export async function getActorPinnedPosts(
   if (actor.user_id !== null) {
     const posts = await db.getPinnedPostsWithActor(actor.id);
     return {
-      posts: await enrichPostsBatch(db, posts, currentActorId, domain, communityDb),
+      posts: await enrichPostsBatch(db, posts, currentActorId, domain),
       isLocal: true,
     };
   }
@@ -713,7 +713,7 @@ export async function getActorBoostedPosts(
     before?: number;
     currentActorId?: number;
     domain?: string;
-    communityDb?: CommunityDB;
+    communityDb?: unknown;
   }
 ): Promise<{ posts: unknown[]; next_cursor: number | null } | null> {
   const { limit = 20, before, currentActorId, domain, communityDb } = options;
@@ -732,7 +732,7 @@ export async function getActorBoostedPosts(
     ? resultPosts[resultPosts.length - 1].id
     : null;
 
-  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain, communityDb);
+  const enrichedPosts = await enrichPostsBatch(db, resultPosts, currentActorId, domain);
 
   // Add boosted_by info since these are all posts boosted by this actor
   const postsWithBooster = enrichedPosts.map(post => ({

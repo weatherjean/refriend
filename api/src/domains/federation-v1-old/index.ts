@@ -15,8 +15,6 @@ export {
 
 export {
   persistActor,
-  setCommunityDb,
-  getCommunityDb,
 } from "./actor-persistence.ts";
 
 export {

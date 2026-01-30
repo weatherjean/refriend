@@ -5,7 +5,6 @@
  */
 
 import { DB } from "../db.ts";
-import { CommunityDB } from "../domains/communities/repository.ts";
 import { createApiRoutes } from "../api-routes.ts";
 import type { User, Actor, Post } from "../db.ts";
 
@@ -17,7 +16,6 @@ const TEST_DATABASE_URL = `postgres://${TEST_DB_USER}:${TEST_DB_PASS}@localhost:
 const CONTAINER_NAME = "riff-test-db";
 
 let _db: DB | null = null;
-let _communityDb: CommunityDB | null = null;
 let _containerStarted = false;
 
 /**
@@ -102,22 +100,10 @@ export async function getTestDB(): Promise<DB> {
 }
 
 /**
- * Get or create the test community database
- */
-export async function getTestCommunityDB(): Promise<CommunityDB> {
-  if (!_communityDb) {
-    const db = await getTestDB();
-    _communityDb = new CommunityDB(db.getPool());
-  }
-  return _communityDb;
-}
-
-/**
  * Create the API instance with real database
  */
 export async function createTestApi() {
   const db = await getTestDB();
-  const communityDb = await getTestCommunityDB();
 
   // Mock federation - ActivityPub federation tested separately
   const mockFederation = {
@@ -128,7 +114,7 @@ export async function createTestApi() {
     }),
   };
 
-  return createApiRoutes(db as any, mockFederation as any, communityDb);
+  return createApiRoutes(db as any, mockFederation as any);
 }
 
 /**
@@ -163,7 +149,6 @@ export async function closeTestDB(): Promise<void> {
   if (_db) {
     await _db.close();
     _db = null;
-    _communityDb = null;
   }
 }
 
@@ -337,20 +322,4 @@ export async function loginUser(
   }
   const data = await res.json();
   return { cookie, csrfToken: data.csrfToken };
-}
-
-export async function createTestCommunity(
-  creatorActor: { id: number },
-  data: { name?: string; bio?: string; require_approval?: boolean } = {}
-) {
-  const communityDb = await getTestCommunityDB();
-  const name = data.name || `testcommunity_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  const domain = "test.local";
-
-  const community = await communityDb.createCommunity(name, domain, creatorActor.id, {
-    bio: data.bio,
-    requireApproval: data.require_approval,
-  });
-
-  return community;
 }

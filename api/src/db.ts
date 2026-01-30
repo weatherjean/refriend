@@ -42,8 +42,6 @@ export interface Actor {
   actor_type: "Person" | "Group";
   follower_count: number;
   following_count: number;
-  require_approval: boolean | null;  // null for Person actors
-  created_by: number | null;  // creator actor_id for communities
   created_at: string;
 }
 
@@ -87,7 +85,6 @@ export interface Post {
   content: string;
   url: string | null;
   in_reply_to_id: number | null;
-  community_id: number | null;  // community actor_id for community posts/replies
   addressed_to: string[];  // ActivityPub to/cc recipients (actor URIs)
   likes_count: number;
   sensitive: boolean;
@@ -306,13 +303,13 @@ export class DB {
 
   // ============ Actors ============
 
-  async createActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "follower_count" | "following_count" | "require_approval" | "created_by"> & { follower_count?: number; following_count?: number; require_approval?: boolean | null; created_by?: number | null }): Promise<Actor> {
+  async createActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "follower_count" | "following_count"> & { follower_count?: number; following_count?: number }): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
-        INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type, follower_count, require_approval, created_by)
+        INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type, follower_count)
         VALUES (${actor.uri}, ${actor.handle}, ${actor.name}, ${actor.bio}, ${actor.avatar_url},
                 ${actor.inbox_url}, ${actor.shared_inbox_url}, ${actor.url}, ${actor.user_id}, ${actor.actor_type},
-                ${actor.follower_count ?? 0}, ${actor.require_approval ?? null}, ${actor.created_by ?? null})
+                ${actor.follower_count ?? 0})
         RETURNING *
       `;
       return result.rows[0];
@@ -370,22 +367,12 @@ export class DB {
 
   async getActorByUsername(username: string): Promise<Actor | null> {
     return this.query(async (client) => {
-      // First try to find a user by username
       const userResult = await client.queryObject<Actor>`
         SELECT a.* FROM actors a
         JOIN users u ON a.user_id = u.id
         WHERE u.username = ${username}
       `;
-      if (userResult.rows[0]) {
-        return userResult.rows[0];
-      }
-
-      // Then try to find a community (Group) by name
-      const communityResult = await client.queryObject<Actor>`
-        SELECT * FROM actors
-        WHERE actor_type = 'Group' AND name = ${username}
-      `;
-      return communityResult.rows[0] || null;
+      return userResult.rows[0] || null;
     });
   }
 
@@ -483,7 +470,7 @@ export class DB {
     });
   }
 
-  async upsertActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "user_id" | "follower_count" | "following_count" | "require_approval" | "created_by">): Promise<Actor> {
+  async upsertActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "user_id" | "follower_count" | "following_count">): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type)
@@ -764,7 +751,7 @@ export class DB {
 
   // ============ Posts ============
 
-  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score" | "addressed_to" | "link_preview" | "video_embed" | "community_id"> & { created_at?: string; addressed_to?: string[]; link_preview?: LinkPreview | null; video_embed?: VideoEmbed | null; community_id?: number | null }): Promise<Post> {
+  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score" | "addressed_to" | "link_preview" | "video_embed"> & { created_at?: string; addressed_to?: string[]; link_preview?: LinkPreview | null; video_embed?: VideoEmbed | null }): Promise<Post> {
     return this.query(async (client) => {
       await client.queryArray`BEGIN`;
       try {
@@ -772,28 +759,17 @@ export class DB {
         const linkPreview = post.link_preview ? JSON.stringify(post.link_preview) : null;
         const videoEmbed = post.video_embed ? JSON.stringify(post.video_embed) : null;
 
-        // Inherit community_id from parent post if this is a reply
-        let communityId = post.community_id ?? null;
-        if (post.in_reply_to_id && !communityId) {
-          const parentResult = await client.queryObject<{ community_id: number | null }>`
-            SELECT community_id FROM posts WHERE id = ${post.in_reply_to_id}
-          `;
-          if (parentResult.rows[0]?.community_id) {
-            communityId = parentResult.rows[0].community_id;
-          }
-        }
-
         let result;
         if (post.created_at) {
           result = await client.queryObject<Post>`
-            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, video_embed, community_id, created_at)
-            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${videoEmbed}, ${communityId}, ${post.created_at})
+            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, video_embed, created_at)
+            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${videoEmbed}, ${post.created_at})
             RETURNING *
           `;
         } else {
           result = await client.queryObject<Post>`
-            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, video_embed, community_id)
-            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${videoEmbed}, ${communityId})
+            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, video_embed)
+            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${videoEmbed})
             RETURNING *
           `;
         }
@@ -954,7 +930,6 @@ export class DB {
       content: row.content as string,
       url: row.url as string | null,
       in_reply_to_id: row.in_reply_to_id as number | null,
-      community_id: row.community_id as number | null,
       addressed_to: (row.addressed_to as string[]) || [],
       likes_count: row.likes_count as number,
       sensitive: row.sensitive as boolean,
@@ -976,8 +951,6 @@ export class DB {
         actor_type: (row.author_actor_type as "Person" | "Group") || "Person",
         follower_count: (row.author_follower_count as number) || 0,
         following_count: (row.author_following_count as number) || 0,
-        require_approval: row.author_require_approval as boolean | null,
-        created_by: row.author_created_by as number | null,
         created_at: String(row.author_created_at),
       },
     };
@@ -1001,12 +974,12 @@ export class DB {
   }
 
   private readonly postWithActorSelect = `
-    p.id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.community_id, p.addressed_to, p.likes_count, p.sensitive, p.link_preview, p.video_embed, p.created_at,
+    p.id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.addressed_to, p.likes_count, p.sensitive, p.link_preview, p.video_embed, p.created_at,
     a.id as author_id, a.public_id as author_public_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
     a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
     a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,
     a.actor_type as author_actor_type, a.follower_count as author_follower_count, a.following_count as author_following_count,
-    a.require_approval as author_require_approval, a.created_by as author_created_by, a.created_at as author_created_at
+    a.created_at as author_created_at
   `;
 
   async getPublicTimelineWithActor(limit = 20, before?: number): Promise<PostWithActor[]> {
@@ -1042,20 +1015,10 @@ export class DB {
   async getHotPosts(limit = 10): Promise<PostWithActor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject(`
-        SELECT DISTINCT ON (p.hot_score, p.id) ${this.postWithActorSelect} FROM (
-          -- Regular posts with engagement
-          SELECT p.id FROM posts p
-          WHERE p.in_reply_to_id IS NULL AND p.hot_score > 0
-
-          UNION
-
-          -- Approved community posts with engagement
-          SELECT p.id FROM posts p
-          JOIN community_posts cp ON p.id = cp.post_id
-          WHERE cp.status = 'approved' AND p.in_reply_to_id IS NULL AND p.hot_score > 0
-        ) AS post_ids
-        JOIN posts p ON p.id = post_ids.id
+        SELECT ${this.postWithActorSelect}
+        FROM posts p
         JOIN actors a ON p.actor_id = a.id
+        WHERE p.in_reply_to_id IS NULL AND p.hot_score > 0
         ORDER BY p.hot_score DESC, p.id DESC LIMIT $1
       `, [limit]);
       return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
@@ -1074,21 +1037,10 @@ export class DB {
 
       const baseQuery = `
         WITH timeline_posts AS (
-          -- Posts from followed users (Person actors) - no booster
+          -- Posts from followed users - no booster
           (SELECT p.id, p.hot_score, NULL::integer as booster_actor_id FROM posts p
            JOIN follows f ON p.actor_id = f.following_id
-           JOIN actors a ON f.following_id = a.id
-           WHERE f.follower_id = $1 AND f.status = 'accepted' AND p.in_reply_to_id IS NULL AND a.actor_type = 'Person'
-             ${useBefore ? 'AND p.id < $2' : ''}
-           ORDER BY ${orderBy} LIMIT ${branchLimit})
-
-          UNION ALL
-
-          -- Approved posts from joined communities - no booster
-          (SELECT p.id, p.hot_score, NULL::integer as booster_actor_id FROM posts p
-           JOIN community_posts cp ON p.id = cp.post_id
-           JOIN follows f ON cp.community_id = f.following_id
-           WHERE f.follower_id = $1 AND f.status = 'accepted' AND cp.status = 'approved' AND p.in_reply_to_id IS NULL
+           WHERE f.follower_id = $1 AND f.status = 'accepted' AND p.in_reply_to_id IS NULL
              ${useBefore ? 'AND p.id < $2' : ''}
            ORDER BY ${orderBy} LIMIT ${branchLimit})
 
@@ -1997,7 +1949,7 @@ export class DB {
           JOIN ancestors a ON p.id = a.in_reply_to_id
           WHERE a.depth < ${limit}
         )
-        SELECT id, public_id, uri, actor_id, content, url, in_reply_to_id, community_id,
+        SELECT id, public_id, uri, actor_id, content, url, in_reply_to_id,
                addressed_to, likes_count, sensitive, link_preview, video_embed, created_at
         FROM ancestors WHERE id != ${postId} ORDER BY depth DESC
       `;
@@ -2048,7 +2000,7 @@ export class DB {
   }
 
   /**
-   * Batch lookup actors (users and communities) by names.
+   * Batch lookup actors by names.
    * Returns a map of lowercase name -> { actor, isCommunity }
    */
   async getActorsAndCommunitiesByNames(names: string[]): Promise<Map<string, { actor: Actor; isCommunity: boolean }>> {
@@ -2056,31 +2008,16 @@ export class DB {
     return this.query(async (client) => {
       const lowerNames = names.map(n => n.toLowerCase());
 
-      // Query users by username
       const usersResult = await client.queryObject<Actor & { lookup_name: string }>`
         SELECT a.*, LOWER(u.username) as lookup_name FROM actors a
         JOIN users u ON a.user_id = u.id
         WHERE LOWER(u.username) = ANY(${lowerNames})
       `;
 
-      // Query communities by name
-      const communitiesResult = await client.queryObject<Actor & { lookup_name: string }>`
-        SELECT a.*, LOWER(a.name) as lookup_name FROM actors a
-        WHERE a.actor_type = 'Group' AND LOWER(a.name) = ANY(${lowerNames})
-      `;
-
       const map = new Map<string, { actor: Actor; isCommunity: boolean }>();
-
-      // Add users first
       for (const row of usersResult.rows) {
         map.set(row.lookup_name, { actor: row, isCommunity: false });
       }
-
-      // Communities override users if there's a conflict (unlikely but handle it)
-      for (const row of communitiesResult.rows) {
-        map.set(row.lookup_name, { actor: row, isCommunity: true });
-      }
-
       return map;
     });
   }

@@ -3,10 +3,10 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useFeed } from '../context/FeedContext';
 import { useScrollLockEffect } from '../context/ScrollLockContext';
-import { getUsername, getCommunitySlug } from '../utils';
-import { tags, notifications as notificationsApi, communities, type TrendingCommunity } from '../api';
+import { getUsername } from '../utils';
+import { tags, notifications as notificationsApi } from '../api';
 import { TagBadge } from './TagBadge';
-import { Avatar, CommunityAvatar } from './Avatar';
+import { Avatar } from './Avatar';
 import { ToastContainer } from './ToastContainer';
 import { CookieBanner } from './CookieBanner';
 
@@ -20,7 +20,6 @@ export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
-  const [trendingCommunities, setTrendingCommunities] = useState<TrendingCommunity[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -37,9 +36,6 @@ export function Layout({ children }: LayoutProps) {
   useEffect(() => {
     tags.getPopular()
       .then(({ tags }) => setPopularTags(tags))
-      .catch(() => {});
-    communities.getTrending()
-      .then(({ communities }) => setTrendingCommunities(communities))
       .catch(() => {});
   }, []);
 
@@ -122,9 +118,6 @@ export function Layout({ children }: LayoutProps) {
             <Link to="/explore" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
               <i className="bi bi-hash me-2"></i> Tags
             </Link>
-            <Link to="/communities" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
-              <i className="bi bi-people-fill me-2"></i> Communities
-            </Link>
             {user && actor && (
               <>
                 <Link to="/notifications" className="list-group-item list-group-item-action d-flex align-items-center" onClick={() => setMobileMenuOpen(false)}>
@@ -176,36 +169,6 @@ export function Layout({ children }: LayoutProps) {
                   {popularTags.map((tag) => (
                     <TagBadge key={tag.name} tag={tag.name} onClick={() => setMobileMenuOpen(false)} />
                   ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Rising Communities */}
-          {trendingCommunities.length > 0 && (
-            <div className="card mb-4">
-              <div className="card-body">
-                <h6 className="card-title mb-3">Rising Communities</h6>
-                <div className="d-flex flex-column">
-                  {trendingCommunities.slice(0, 3).map((community) => {
-                    const slug = getCommunitySlug(community.handle, community.is_local);
-                    return (
-                      <Link
-                        key={community.id}
-                        to={`/c/${slug}`}
-                        className="d-flex align-items-center text-decoration-none text-reset py-1"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        <CommunityAvatar
-                          src={community.avatar_url}
-                          size={32}
-                          className="flex-shrink-0"
-                        />
-                        <span className="ms-2 text-truncate" style={{ fontSize: '0.9rem' }}>{community.name || slug}</span>
-                        <small className="text-muted ms-auto flex-shrink-0">+{community.new_members}</small>
-                      </Link>
-                    );
-                  })}
                 </div>
               </div>
             </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { posts as postsApi, communities as communitiesApi, Post, AttachmentInput } from '../api';
+import { posts as postsApi, Post, AttachmentInput } from '../api';
 import { PostCard } from '../components/PostCard';
 import { PostThread } from '../components/PostThread';
 import { PostComposer } from '../components/PostComposer';
@@ -21,9 +21,6 @@ export function PostPage() {
   const [replySort, setReplySort] = useState<'new' | 'hot'>('hot');
   const [opAuthorId, setOpAuthorId] = useState<string | null>(null);
   const [showReplyComposer, setShowReplyComposer] = useState(false);
-  const [isCommunityAdmin, setIsCommunityAdmin] = useState(false);
-  const [communityName, setCommunityName] = useState<string | null>(null);
-
   const fetchReplies = useCallback(async (cursor?: number) => {
     const data = await postsApi.getReplies(id!, replySort, cursor);
     setOpAuthorId(data.op_author_id);
@@ -44,28 +41,10 @@ export function PostPage() {
     const load = async () => {
       setLoading(true);
       setPost(null); // Clear post to trigger reply reload
-      setIsCommunityAdmin(false);
-      setCommunityName(null);
       try {
         const postData = await postsApi.get(id!);
         setPost(postData.post);
         setAncestors(postData.ancestors || []);
-
-        // Check if user is admin of the post's community
-        // For replies, the community may be on an ancestor, not the post itself
-        const community = postData.post.community
-          || postData.ancestors?.find(a => a.community)?.community;
-        if (community && user) {
-          try {
-            // Handle format: @name@domain - extract the name part
-            const cName = community.handle.replace(/^@/, '').split('@')[0];
-            setCommunityName(cName);
-            const { moderation } = await communitiesApi.get(cName);
-            setIsCommunityAdmin(moderation?.isAdmin || false);
-          } catch {
-            // Ignore - user is not admin
-          }
-        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load post');
       } finally {
@@ -101,7 +80,7 @@ export function PostPage() {
 
   return (
     <div>
-      <PostThread post={post} ancestors={ancestors} isCommunityAdmin={isCommunityAdmin} communityName={communityName || undefined} />
+      <PostThread post={post} ancestors={ancestors} />
 
       {user && (
         <div className="mt-4">
@@ -149,8 +128,6 @@ export function PostPage() {
               key={reply.id}
               post={reply}
               isOP={reply.author?.id === opAuthorId}
-              isCommunityAdmin={isCommunityAdmin}
-              communityName={communityName || undefined}
               onDelete={() => setReplies(prev => prev.filter(r => r.id !== reply.id))}
             />
           ))}

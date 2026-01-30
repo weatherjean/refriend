@@ -17,8 +17,6 @@ export {
 // Actor persistence
 export {
   persistActor,
-  setCommunityDb,
-  getCommunityDb,
 } from "./utils/actor.ts";
 
 // Send utilities

@@ -14,9 +14,6 @@ import { federation, setDomain, setDB } from "./domains/federation-v2/setup.ts";
 import { createApiRoutes } from "./api-routes.ts";
 import { initStorage } from "./storage.ts";
 import { initCache } from "./cache.ts";
-import { CommunityDB } from "./domains/communities/repository.ts";
-import { addCommunityFederationRoutes, setCommunityDB as setCommunityDBFed } from "./domains/communities/federation.ts";
-import { setCommunityDb as setActivityCommunityDb } from "./domains/federation-v2/utils/actor.ts";
 import { logger } from "./logger.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
@@ -104,11 +101,6 @@ app.get("/:username{@.+}", async (c) => {
   const username = usernameWithAt.slice(1); // Remove leading @
   const domain = c.get("domain");
 
-  // Check if this is a community (Group) or user (Person)
-  const actor = await db.getActorByUsername(username);
-  if (actor?.actor_type === "Group") {
-    return c.redirect(`/c/${username}`);
-  }
   return c.redirect(`/u/@${username}@${domain}`);
 });
 
@@ -126,14 +118,8 @@ if (Deno.env.get("NODE_TYPE") === "worker") {
   federation.startQueue();
 }
 
-// Initialize community federation
-const communityDb = new CommunityDB(db.getPool());
-setCommunityDBFed(communityDb);
-addCommunityFederationRoutes(app);
-setActivityCommunityDb(communityDb);
-
 // API routes for the React frontend - pass domain dynamically
-app.route("/api", createApiRoutes(db, federation, communityDb));
+app.route("/api", createApiRoutes(db, federation));
 
 // Health check - comprehensive check of all services
 app.get("/health", async (c) => {
