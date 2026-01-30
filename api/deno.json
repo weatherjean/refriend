@@ -12,6 +12,7 @@
     "@fedify/fedify/x/hono": "jsr:@fedify/fedify@^1.10.2/x/hono",
     "@fedify/hono": "jsr:@fedify/hono@^1.10.0",
     "@fedify/denokv": "jsr:@fedify/denokv@^1.10.2",
+    "@fedify/testing": "jsr:@fedify/testing@^1.10.0",
     "postgres": "https://deno.land/x/postgres@v0.19.3/mod.ts",
     "stringify-entities": "npm:stringify-entities@^4.0.4",
     "@aws-sdk/client-s3": "npm:@aws-sdk/client-s3@^3.975.0"

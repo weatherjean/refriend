@@ -10,6 +10,7 @@ import {
   Delete,
   Document,
   Hashtag,
+  Mention,
   Note,
   Tombstone,
   PUBLIC_COLLECTION,
@@ -382,10 +383,33 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const ctx = federation.createContext(c.req.raw, undefined);
 
     // Create Hashtag objects for the Note
-    const noteTags = hashtagNames.map(name => new Hashtag({
+    // deno-lint-ignore no-explicit-any
+    const noteTags: any[] = hashtagNames.map(name => new Hashtag({
       name: `#${name}`,
       href: new URL(`https://${domain}/tags/${name}`),
     }));
+
+    // Look up mentioned actors and create Mention tags
+    const mentionedActors: Actor[] = [];
+    for (const mention of mentions) {
+      const match = mention.match(/^@([\w.-]+)(?:@([\w.-]+))?$/);
+      if (!match) continue;
+      const [, username, mentionDomain] = match;
+
+      // Build handle to look up
+      const handle = mentionDomain
+        ? `@${username}@${mentionDomain}`
+        : `@${username}@${domain}`;
+
+      const mentionedActor = await db.getActorByHandle(handle);
+      if (mentionedActor) {
+        mentionedActors.push(mentionedActor);
+        noteTags.push(new Mention({
+          href: new URL(mentionedActor.uri),
+          name: handle,
+        }));
+      }
+    }
 
     // Generate a unique ID for this note
     const noteId = crypto.randomUUID();
@@ -410,6 +434,22 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       // Add community to cc recipients so it receives the activity
       ccRecipients.push(audienceUri);
       console.log(`[Create] Reply inherits audience: ${audienceUri.href}`);
+    }
+
+    // Add parent post author to cc so they get notified of the reply
+    let replyToAuthor: Actor | null = null;
+    if (replyToPost) {
+      replyToAuthor = await db.getActorById(replyToPost.actor_id);
+      if (replyToAuthor) {
+        ccRecipients.push(new URL(replyToAuthor.uri));
+      }
+    }
+
+    // Add mentioned actors to cc (avoid duplicates with replyToAuthor)
+    for (const mentionedActor of mentionedActors) {
+      if (!replyToAuthor || mentionedActor.id !== replyToAuthor.id) {
+        ccRecipients.push(new URL(mentionedActor.uri));
+      }
     }
 
     // V2: Create post directly in database
@@ -489,6 +529,30 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     );
     console.log(`[Create] Sent to followers of ${user.username}`);
 
+    // Send to reply target author (if remote) - Fedify requires separate call
+    if (replyToAuthor && replyToAuthor.inbox_url && !replyToAuthor.user_id) {
+      await safeSendActivity(ctx,
+        { identifier: user.username },
+        { id: new URL(replyToAuthor.uri), inboxId: new URL(replyToAuthor.inbox_url) },
+        createActivity
+      );
+      console.log(`[Create] Sent reply to ${replyToAuthor.handle}`);
+    }
+
+    // Send to mentioned actors (if remote and not already sent as replyToAuthor)
+    for (const mentionedActor of mentionedActors) {
+      if (mentionedActor.inbox_url && !mentionedActor.user_id) {
+        // Skip if same as replyToAuthor (already sent)
+        if (replyToAuthor && mentionedActor.id === replyToAuthor.id) continue;
+        await safeSendActivity(ctx,
+          { identifier: user.username },
+          { id: new URL(mentionedActor.uri), inboxId: new URL(mentionedActor.inbox_url) },
+          createActivity
+        );
+        console.log(`[Create] Sent mention to ${mentionedActor.handle}`);
+      }
+    }
+
     // Send to community inbox (for Lemmy federation) via manual signing
     if (audienceUri) {
       await sendToCommunity(ctx, user.username, createActivity, audienceUri.href);
@@ -517,6 +581,15 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     // Get media files before deleting (CASCADE will delete DB records)
     const mediaFiles = await db.getMediaByPostId(post.id);
 
+    // Get reply target author before deleting (if this is a reply)
+    let deleteReplyToAuthor: Actor | null = null;
+    if (post.in_reply_to_id) {
+      const parentPost = await db.getPostById(post.in_reply_to_id);
+      if (parentPost) {
+        deleteReplyToAuthor = await db.getActorById(parentPost.actor_id);
+      }
+    }
+
     const ctx = federation.createContext(c.req.raw, undefined);
 
     // V2: Delete post directly from database
@@ -542,6 +615,10 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       deleteAudience = new URL(post.addressed_to[0]);
       deleteCc.push(deleteAudience);
     }
+    // Add reply target author to cc
+    if (deleteReplyToAuthor) {
+      deleteCc.push(new URL(deleteReplyToAuthor.uri));
+    }
 
     // Create the Delete activity
     const deleteActivity = new Delete({
@@ -562,6 +639,16 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       deleteActivity
     );
     console.log(`[Delete] Sent to followers of ${user.username}`);
+
+    // Send to reply target author (if remote)
+    if (deleteReplyToAuthor && deleteReplyToAuthor.inbox_url && !deleteReplyToAuthor.user_id) {
+      await safeSendActivity(ctx,
+        { identifier: user.username },
+        { id: new URL(deleteReplyToAuthor.uri), inboxId: new URL(deleteReplyToAuthor.inbox_url) },
+        deleteActivity
+      );
+      console.log(`[Delete] Sent to reply author ${deleteReplyToAuthor.handle}`);
+    }
 
     // Send to communities via manual signing (for Lemmy compatibility)
     if (post.addressed_to && post.addressed_to.length > 0) {

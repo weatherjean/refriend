@@ -247,6 +247,31 @@ export async function createTestPost(
   return post;
 }
 
+export async function createRemoteActor(data?: {
+  handle?: string;
+  name?: string;
+  actor_type?: "Person" | "Group";
+  uri?: string;
+  inbox_url?: string;
+}): Promise<Actor> {
+  const db = await getTestDB();
+  const ts = Date.now();
+  const handle = data?.handle || `@remote_${ts}@remote.example`;
+  const uri = data?.uri || `https://remote.example/users/remote_${ts}`;
+  return db.createActor({
+    uri,
+    handle,
+    name: data?.name || null,
+    bio: null,
+    avatar_url: null,
+    inbox_url: data?.inbox_url || `${uri}/inbox`,
+    shared_inbox_url: "https://remote.example/inbox",
+    url: uri,
+    user_id: null,
+    actor_type: data?.actor_type || "Person",
+  });
+}
+
 // ============ Test Request Helper ============
 
 export async function testRequest(
