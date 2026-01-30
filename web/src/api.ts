@@ -420,6 +420,10 @@ export interface Notification {
   post: {
     id: string;
     content: string;
+    author: {
+      handle: string;
+      is_local: boolean;
+    };
   } | null;
 }
 

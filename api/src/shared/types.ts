@@ -162,6 +162,8 @@ export interface NotificationWithActor extends Notification {
     id: number;
     public_id: string;
     content: string;
+    author_handle: string;
+    author_is_local: boolean;
   };
 }
 

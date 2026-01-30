@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { resizeImageWithDimensions, ResizedImage } from '../utils/imageUtils';
 import { MentionPicker } from '../components/MentionPicker';
 import { PageHeader } from '../components/PageHeader';
-import { getUsername } from '../utils';
+import { getUsername, getPostLink } from '../utils';
 
 const MAX_CHARACTERS = 500;
 const MAX_IMAGES = 4;
@@ -222,7 +222,7 @@ export function NewPostPage() {
       // Create post with attachments
       const { post } = await posts.create(trimmedContent, undefined, uploadedAttachments, sensitive, trimmedLink || undefined, trimmedVideo || undefined);
 
-      navigate(`/posts/${post.id}`);
+      navigate(getPostLink(post));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create post');
     } finally {

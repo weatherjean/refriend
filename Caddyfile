@@ -11,15 +11,24 @@
         format console
     }
 
-    # Proxy API and federation routes to the backend
+    # Backend routes (API, well-known, federation infrastructure)
     @backend {
-        path /api/* /.well-known/* /users/* /nodeinfo/* /inbox /@* /health
+        path /api/* /.well-known/* /nodeinfo/* /inbox /health
     }
     handle @backend {
         reverse_proxy api:8000
     }
 
-    # Serve static files (SPA with fallback to index.html)
+    # ActivityPub content negotiation for /@* paths
+    @ap_request {
+        path /@*
+        header_regexp Accept (application/activity\+json|application/ld\+json)
+    }
+    handle @ap_request {
+        reverse_proxy api:8000
+    }
+
+    # Everything else (including browser /@* requests) -> SPA
     handle {
         root * /srv/web
         try_files {path} /index.html

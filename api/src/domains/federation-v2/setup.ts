@@ -49,7 +49,6 @@ import { invalidateProfileCache } from "../../cache.ts";
 import { updatePostScore, updateParentPostScore } from "../../scoring.ts";
 import { createNotification, removeNotification } from "../notifications/routes.ts";
 import { fetchOpenGraph } from "../posts/service.ts";
-import { parseIntSafe } from "../../shared/utils.ts";
 
 // Domain will be set at runtime
 let DOMAIN = "localhost:8000";
@@ -199,7 +198,7 @@ federation.setNodeInfoDispatcher("/nodeinfo/2.1", async () => {
 // ============ Actor Dispatcher ============
 
 federation
-  .setActorDispatcher("/users/{identifier}", async (ctx, identifier) => {
+  .setActorDispatcher("/@{identifier}", async (ctx, identifier) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
 
@@ -227,7 +226,7 @@ federation
         summary: actor.bio ?? undefined,
         icon,
         published: parseTimestamp(actor.created_at),
-        url: new URL(`https://${DOMAIN}/c/${identifier}`),
+        url: ctx.getActorUri(identifier),
         inbox: ctx.getInboxUri(identifier),
         endpoints: new Endpoints({ sharedInbox: ctx.getInboxUri() }),
         followers: ctx.getFollowersUri(identifier),
@@ -244,7 +243,7 @@ federation
       summary: actor.bio ?? undefined,
       icon,
       published: parseTimestamp(actor.created_at),
-      url: new URL(`https://${DOMAIN}/@${identifier}`),
+      url: ctx.getActorUri(identifier),
       inbox: ctx.getInboxUri(identifier),
       endpoints: new Endpoints({ sharedInbox: ctx.getInboxUri() }),
       followers: ctx.getFollowersUri(identifier),
@@ -303,7 +302,7 @@ const COLLECTION_PAGE_SIZE = 50;
 
 // Followers collection
 federation
-  .setFollowersDispatcher("/users/{identifier}/followers", async (_ctx, identifier, cursor) => {
+  .setFollowersDispatcher("/@{identifier}/followers", async (_ctx, identifier, cursor) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
 
@@ -354,7 +353,7 @@ federation
 
 // Following collection
 federation
-  .setFollowingDispatcher("/users/{identifier}/following", async (_ctx, identifier, cursor) => {
+  .setFollowingDispatcher("/@{identifier}/following", async (_ctx, identifier, cursor) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
 
@@ -387,7 +386,7 @@ federation
 
 // Liked collection
 federation
-  .setLikedDispatcher("/users/{identifier}/liked", async (_ctx, identifier, cursor) => {
+  .setLikedDispatcher("/@{identifier}/liked", async (_ctx, identifier, cursor) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
 
@@ -420,7 +419,7 @@ federation
 
 // Featured collection (pinned posts)
 federation
-  .setFeaturedDispatcher("/users/{identifier}/featured", async (ctx, identifier) => {
+  .setFeaturedDispatcher("/@{identifier}/featured", async (ctx, identifier) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
 
@@ -455,7 +454,7 @@ federation
 // ============ Outbox Collection (V2: Generate from posts table) ============
 
 federation
-  .setOutboxDispatcher("/users/{identifier}/outbox", async (ctx, identifier, cursor) => {
+  .setOutboxDispatcher("/@{identifier}/outbox", async (ctx, identifier, cursor) => {
     const actor = await db.getActorByUsername(identifier);
     if (!actor) return null;
 
@@ -511,13 +510,11 @@ federation
 
 // ============ Object Dispatcher (Notes/Posts) ============
 
-federation.setObjectDispatcher(Note, "/users/{identifier}/posts/{id}", async (ctx, { identifier, id }) => {
+federation.setObjectDispatcher(Note, "/@{identifier}/posts/{id}", async (ctx, { identifier, id }) => {
   const actor = await db.getActorByUsername(identifier);
   if (!actor) return null;
 
-  const postId = parseIntSafe(id);
-  if (!postId) return null;
-  const post = await db.getPostById(postId);
+  const post = await db.getPostByPublicId(id);
   if (!post || post.actor_id !== actor.id) return null;
 
   const mediaList = await db.getMediaByPostId(post.id);
@@ -555,7 +552,7 @@ export function registerInboxHandlers(
   getDomainFn: () => string,
 ): void {
   fed
-    .setInboxListeners("/users/{identifier}/inbox", "/inbox")
+    .setInboxListeners("/@{identifier}/inbox", "/inbox")
     .withIdempotency("per-inbox")
 
     // ============ Create Handler ============

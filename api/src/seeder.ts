@@ -172,16 +172,16 @@ export async function seed(db: DB, domain: string) {
     const passwordHash = await hashPassword(userData.password);
     const user = await db.createUser(userData.username, passwordHash, userData.email);
 
-    const actorUri = `https://${domain}/users/${userData.username}`;
+    const actorUri = `https://${domain}/@${userData.username}`;
     const actor = await db.createActor({
       uri: actorUri,
       handle: `@${userData.username}@${domain}`,
       name: userData.name,
       bio: userData.bio,
       avatar_url: userData.avatar_url,
-      inbox_url: `https://${domain}/users/${userData.username}/inbox`,
+      inbox_url: `https://${domain}/@${userData.username}/inbox`,
       shared_inbox_url: `https://${domain}/inbox`,
-      url: `https://${domain}/@${userData.username}`,
+      url: actorUri,
       user_id: user.id,
       actor_type: "Person",
     });
@@ -195,8 +195,8 @@ export async function seed(db: DB, domain: string) {
   for (const content of posts) {
     const randomActor = randomChoice(createdActors);
     const noteId = crypto.randomUUID();
-    const noteUri = `https://${domain}/users/${randomActor.username}/posts/${noteId}`;
-    const noteUrl = `https://${domain}/@${randomActor.username}/posts/${noteId}`;
+    const noteUri = `https://${domain}/@${randomActor.username}/posts/${noteId}`;
+    const noteUrl = noteUri;
     const safeContent = `<p>${content}</p>`;
 
     const post = await db.createPost({
@@ -229,8 +229,8 @@ export async function seed(db: DB, domain: string) {
       const replier = randomChoice(createdActors.filter(a => a.id !== parentPost.actorId));
       const content = randomChoice(replies);
       const noteId = crypto.randomUUID();
-      const noteUri = `https://${domain}/users/${replier.username}/posts/${noteId}`;
-      const noteUrl = `https://${domain}/@${replier.username}/posts/${noteId}`;
+      const noteUri = `https://${domain}/@${replier.username}/posts/${noteId}`;
+      const noteUrl = noteUri;
 
       await db.createPost({
         uri: noteUri,

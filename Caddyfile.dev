@@ -1,0 +1,26 @@
+# Dev Caddyfile - proxies to local Vite dev server + Docker API backend
+# Point ngrok here (port 9999). Caddy handles content negotiation.
+
+:9999 {
+    # Backend routes
+    @backend {
+        path /api/* /.well-known/* /nodeinfo/* /inbox /health
+    }
+    handle @backend {
+        reverse_proxy api:8000
+    }
+
+    # ActivityPub content negotiation for /@* paths
+    @ap_request {
+        path /@*
+        header_regexp Accept (application/activity\+json|application/ld\+json)
+    }
+    handle @ap_request {
+        reverse_proxy api:8000
+    }
+
+    # Everything else → Vite dev server
+    handle {
+        reverse_proxy web:5173
+    }
+}

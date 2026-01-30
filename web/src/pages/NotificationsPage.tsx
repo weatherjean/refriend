@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { notifications as notificationsApi, Notification } from '../api';
-import { formatTimeAgo } from '../utils';
+import { formatTimeAgo, getProfileLink, getPostLink } from '../utils';
 import { Avatar } from '../components/Avatar';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
@@ -73,8 +73,8 @@ export function NotificationsPage() {
   };
 
   const getNotificationLink = (n: Notification) => {
-    if (n.post) return `/posts/${n.post.id}`;
-    return `/actor/${n.actor.id}`;  // For follows, link to the actor
+    if (n.post) return getPostLink({ id: n.post.id, author: n.post.author });
+    return getProfileLink(n.actor);
   };
 
   if (loading) {

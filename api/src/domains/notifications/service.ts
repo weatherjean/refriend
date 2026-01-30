@@ -22,6 +22,10 @@ export interface NotificationDTO {
   post: {
     id: string;
     content: string;
+    author: {
+      handle: string;
+      is_local: boolean;
+    };
   } | null;
 }
 
@@ -50,6 +54,10 @@ function toDTO(n: NotificationWithActor): NotificationDTO {
     post: n.post ? {
       id: n.post.public_id,
       content: n.post.content.slice(0, 100), // Preview only
+      author: {
+        handle: n.post.author_handle,
+        is_local: n.post.author_is_local,
+      },
     } : null,
   };
 }

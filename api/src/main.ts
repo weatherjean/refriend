@@ -93,18 +93,7 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// Redirect /@username to profile page
-// This handles the ActivityPub actor URL (advertised in the 'url' field)
-// Must be before Fedify middleware
-app.get("/:username{@.+}", async (c) => {
-  const usernameWithAt = c.req.param("username");
-  const username = usernameWithAt.slice(1); // Remove leading @
-  const domain = c.get("domain");
-
-  return c.redirect(`/u/@${username}@${domain}`);
-});
-
-// Fedify middleware handles ActivityPub routes (including WebFinger)
+// Fedify middleware handles ActivityPub routes (including WebFinger and /@username content negotiation)
 app.use(fedifyIntegration(federation, () => undefined));
 
 // Set up database reference for federation

@@ -19,7 +19,6 @@ import { ContentPolicyPage } from './pages/ContentPolicyPage';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsPage } from './pages/TermsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
-import { AtRedirectPage } from './pages/AtRedirectPage';
 import { useAuth } from './context/AuthContext';
 import { StackedModals } from './components/StackedModals';
 import { useModalStack } from './context/ModalStackContext';
@@ -44,7 +43,6 @@ export const modalRoutes = [
   { path: '/policy', element: <ContentPolicyPage /> },
   { path: '/privacy', element: <PrivacyPolicyPage /> },
   { path: '/terms', element: <TermsPage /> },
-  { path: '/@:username', element: <AtRedirectPage /> },
   { path: '*', element: <NotFoundPage /> },
 ];
 

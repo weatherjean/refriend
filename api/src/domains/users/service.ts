@@ -146,16 +146,16 @@ export async function register(
   const user = await db.createUser(username, passwordHash, email);
 
   // Create actor for the user
-  const actorUri = `https://${domain}/users/${username}`;
+  const actorUri = `https://${domain}/@${username}`;
   const actor = await db.createActor({
     uri: actorUri,
     handle: `@${username}@${domain}`,
     name: null,
     bio: null,
     avatar_url: null,
-    inbox_url: `https://${domain}/users/${username}/inbox`,
+    inbox_url: `https://${domain}/@${username}/inbox`,
     shared_inbox_url: `https://${domain}/inbox`,
-    url: `https://${domain}/@${username}`,
+    url: actorUri,
     user_id: user.id,
     actor_type: "Person",
   });

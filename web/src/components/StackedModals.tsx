@@ -15,7 +15,16 @@ export function StackedModals() {
       {stack.map((entry, index) => {
         const isTop = index === stack.length - 1;
         // Parse the path to create a location object
-        const [pathname, search = ''] = entry.path.split('?');
+        const [rawPathname, search = ''] = entry.path.split('?');
+        // Rewrite /@username → /u/@username and /@username/posts/id → /posts/id
+        // so React Router can match them (it doesn't support literal @ in patterns)
+        let pathname = rawPathname;
+        const postMatch = rawPathname.match(/^\/@[^/]+\/posts\/(.+)$/);
+        if (postMatch) {
+          pathname = `/posts/${postMatch[1]}`;
+        } else if (/^\/@[^/]+/.test(rawPathname)) {
+          pathname = `/u/${rawPathname.slice(1)}`;
+        }
         const location = { pathname, search: search ? `?${search}` : '', hash: '', state: null, key: entry.key };
 
         return (

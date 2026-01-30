@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Actor } from '../api';
-import { getUsername } from '../utils';
+import { getUsername, getProfileLink } from '../utils';
 import { Avatar } from './Avatar';
 
 interface ActorListItemProps {
@@ -11,7 +11,7 @@ interface ActorListItemProps {
 
 export function ActorListItem({ actor, onClick, actionButton }: ActorListItemProps) {
   const username = getUsername(actor.handle);
-  const profileLink = `/u/${actor.handle}`;
+  const profileLink = getProfileLink(actor);
 
   const content = (
     <div className="d-flex align-items-center">

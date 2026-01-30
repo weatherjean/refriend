@@ -81,10 +81,12 @@ export async function getNotifications(
           n.id, n.type, n.actor_id, n.target_actor_id, n.post_id, n.read, n.created_at,
           a.public_id as actor_public_id, a.handle as actor_handle,
           a.name as actor_name, a.avatar_url as actor_avatar_url,
-          p.public_id as post_public_id, p.content as post_content
+          p.public_id as post_public_id, p.content as post_content,
+          pa.handle as post_author_handle, pa.user_id as post_author_user_id
         FROM notifications n
         JOIN actors a ON a.id = n.actor_id
         LEFT JOIN posts p ON p.id = n.post_id
+        LEFT JOIN actors pa ON pa.id = p.actor_id
         WHERE n.target_actor_id = $1 AND n.id < $2
         ORDER BY n.id DESC
         LIMIT $3`
@@ -92,10 +94,12 @@ export async function getNotifications(
           n.id, n.type, n.actor_id, n.target_actor_id, n.post_id, n.read, n.created_at,
           a.public_id as actor_public_id, a.handle as actor_handle,
           a.name as actor_name, a.avatar_url as actor_avatar_url,
-          p.public_id as post_public_id, p.content as post_content
+          p.public_id as post_public_id, p.content as post_content,
+          pa.handle as post_author_handle, pa.user_id as post_author_user_id
         FROM notifications n
         JOIN actors a ON a.id = n.actor_id
         LEFT JOIN posts p ON p.id = n.post_id
+        LEFT JOIN actors pa ON pa.id = p.actor_id
         WHERE n.target_actor_id = $1
         ORDER BY n.id DESC
         LIMIT $2`;
@@ -115,6 +119,8 @@ export async function getNotifications(
       actor_avatar_url: string | null;
       post_public_id: string | null;
       post_content: string | null;
+      post_author_handle: string | null;
+      post_author_user_id: number | null;
     }>(query, params);
 
     return result.rows.map((row) => ({
@@ -136,6 +142,8 @@ export async function getNotifications(
         id: row.post_id,
         public_id: row.post_public_id!,
         content: row.post_content!,
+        author_handle: row.post_author_handle!,
+        author_is_local: row.post_author_user_id != null,
       } : undefined,
     }));
   });

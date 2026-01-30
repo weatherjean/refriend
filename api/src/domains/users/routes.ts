@@ -6,7 +6,7 @@
 
 import { Hono } from "@hono/hono";
 import { getCookie, setCookie, deleteCookie } from "@hono/hono/cookie";
-import { Delete, Tombstone, PUBLIC_COLLECTION } from "@fedify/fedify";
+import { Delete, Tombstone, Update, PUBLIC_COLLECTION } from "@fedify/fedify";
 import type { Federation } from "@fedify/fedify";
 import type { DB } from "../../db.ts";
 import type { User, Actor } from "../../shared/types.ts";
@@ -451,6 +451,23 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
       return c.json({ error: result.error }, result.error === "Failed to update profile" ? 500 : 400);
     }
 
+    // Send Update(Person) to followers so remote instances update the profile
+    try {
+      const ctx = federation.createContext(c.req.raw, undefined);
+      const personObj = await ctx.getActor(user.username);
+      if (personObj) {
+        const update = new Update({
+          id: new URL(`https://${domain}/#updates/${crypto.randomUUID()}`),
+          actor: ctx.getActorUri(user.username),
+          object: personObj,
+          to: PUBLIC_COLLECTION,
+        });
+        await safeSendActivity(ctx, { identifier: user.username }, "followers", update, { preferSharedInbox: true });
+      }
+    } catch (e) {
+      console.error(`[Update Profile] Failed to send Update(Person):`, e);
+    }
+
     return c.json({ actor: result.actor });
   });
 
@@ -472,6 +489,23 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
 
     if (!result.success) {
       return c.json({ error: result.error }, result.error === "Failed to update avatar" ? 500 : 400);
+    }
+
+    // Send Update(Person) to followers so remote instances update the avatar
+    try {
+      const ctx = federation.createContext(c.req.raw, undefined);
+      const personObj = await ctx.getActor(user.username);
+      if (personObj) {
+        const update = new Update({
+          id: new URL(`https://${domain}/#updates/${crypto.randomUUID()}`),
+          actor: ctx.getActorUri(user.username),
+          object: personObj,
+          to: PUBLIC_COLLECTION,
+        });
+        await safeSendActivity(ctx, { identifier: user.username }, "followers", update, { preferSharedInbox: true });
+      }
+    } catch (e) {
+      console.error(`[Update Avatar] Failed to send Update(Person):`, e);
     }
 
     return c.json({ actor: result.actor, avatar_url: result.avatar_url });

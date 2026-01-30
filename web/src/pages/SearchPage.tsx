@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { search, Actor, Post } from '../api';
-import { getUsername } from '../utils';
+import { getUsername, getProfileLink } from '../utils';
 import { Avatar } from '../components/Avatar';
 import { EmptyState } from '../components/EmptyState';
 import { PostCard } from '../components/PostCard';
@@ -125,7 +125,7 @@ export function SearchPage() {
                   <div className="list-group">
                     {userResults.map((actor) => {
                       const username = getUsername(actor.handle);
-                      const profileLink = `/u/${actor.handle}`;
+                      const profileLink = getProfileLink(actor);
 
                       return (
                         <Link

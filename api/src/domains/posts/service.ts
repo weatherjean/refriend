@@ -57,9 +57,13 @@ export async function processContent(_db: DB, text: string, domain: string): Pro
   // Convert @mentions to links
   // Match @username or @username@domain
   html = html.replace(/@([\w.-]+(?:@[\w.-]+)?)/g, (_match, handle: string) => {
-    // If it's just @username, assume local domain
-    const fullHandle = handle.includes('@') ? `@${handle}` : `@${handle}@${domain}`;
-    return `<a href="/u/${fullHandle}" class="mention">@${handle}</a>`;
+    if (!handle.includes('@')) {
+      // Local mention — absolute URL with canonical /@username path
+      return `<a href="https://${domain}/@${handle}" class="mention">@${handle}</a>`;
+    }
+    // Remote mention — link to their home instance profile
+    const [user, remoteDomain] = handle.split('@');
+    return `<a href="https://${remoteDomain}/@${user}" class="mention">@${handle}</a>`;
   });
 
   // Convert #hashtags to links

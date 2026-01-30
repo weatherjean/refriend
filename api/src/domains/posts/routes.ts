@@ -446,8 +446,8 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
 
     // Generate a unique ID for this note
     const noteId = crypto.randomUUID();
-    const noteUri = `https://${domain}/users/${user.username}/posts/${noteId}`;
-    const noteUrl = `https://${domain}/@${user.username}/posts/${noteId}`;
+    const noteUri = `https://${domain}/@${user.username}/posts/${noteId}`;
+    const noteUrl = noteUri;
 
     // Build attachments for ActivityPub Note
     const noteAttachments = (attachments ?? []).map(att => new Document({

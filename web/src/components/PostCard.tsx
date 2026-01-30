@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Post, Actor, posts as postsApi } from '../api';
-import { formatTimeAgo, getUsername, sanitizeHtml } from '../utils';
+import { formatTimeAgo, getUsername, getProfileLink, getPostLink, sanitizeHtml } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import { TagBadge } from './TagBadge';
 import { Avatar } from './Avatar';
@@ -99,8 +99,8 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
   if (!post.author) return null;
 
   const username = getUsername(post.author.handle);
-  const authorLink = `/u/${post.author.handle}`;
-  const postLink = `/posts/${post.id}`;
+  const authorLink = getProfileLink(post.author);
+  const postLink = getPostLink(post);
 
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('a, button')) return;
@@ -183,7 +183,7 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
         {/* Boosted by indicator */}
         {post.boosted_by && (
           <Link
-            to={`/u/${post.boosted_by.handle}`}
+            to={getProfileLink(post.boosted_by)}
             onClick={(e) => e.stopPropagation()}
             className="d-flex align-items-center gap-2 text-decoration-none text-muted small px-3 py-2 mb-2"
             style={{ background: 'var(--bs-tertiary-bg)', margin: '-1rem -1rem 0.75rem -1rem', borderBottom: '1px solid var(--bs-border-color)' }}
@@ -241,7 +241,7 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
             <i className="bi bi-reply-fill"></i>
             <span>Replying to </span>
             <Link
-              to={`/u/${post.in_reply_to.author.handle}`}
+              to={getProfileLink(post.in_reply_to.author)}
               onClick={(e) => e.stopPropagation()}
             >
               {post.in_reply_to.author.name || post.in_reply_to.author.handle}

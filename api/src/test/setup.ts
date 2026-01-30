@@ -108,8 +108,8 @@ export async function createTestApi() {
   // Mock federation - ActivityPub federation tested separately
   const mockFederation = {
     createContext: (_req: Request, _data: unknown) => ({
-      getActorUri: (username: string) => new URL(`https://test.local/users/${username}`),
-      getFollowersUri: (username: string) => new URL(`https://test.local/users/${username}/followers`),
+      getActorUri: (username: string) => new URL(`https://test.local/@${username}`),
+      getFollowersUri: (username: string) => new URL(`https://test.local/@${username}/followers`),
       sendActivity: async () => {},
     }),
   };
@@ -195,12 +195,12 @@ export async function createTestUser(
 
   const domain = "test.local";
   const actor = await db.createActor({
-    uri: `https://${domain}/users/${username}`,
+    uri: `https://${domain}/@${username}`,
     handle: `@${username}@${domain}`,
     name: null,
     bio: null,
     avatar_url: null,
-    inbox_url: `https://${domain}/users/${username}/inbox`,
+    inbox_url: `https://${domain}/@${username}/inbox`,
     shared_inbox_url: `https://${domain}/inbox`,
     url: `https://${domain}/@${username}`,
     user_id: user.id,
@@ -221,7 +221,7 @@ export async function createTestPost(
   const domain = "test.local";
 
   const post = await db.createPost({
-    uri: `https://${domain}/users/${username}/posts/${postId}`,
+    uri: `https://${domain}/@${username}/posts/${postId}`,
     actor_id: actor.id,
     content: `<p>${content}</p>`,
     url: `https://${domain}/@${username}/posts/${postId}`,

@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
-import { actors } from '../api';
+import { actors, Actor } from '../api';
+import { getProfileLink } from '../utils';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 
 export function ActorByIdPage() {
   const { id } = useParams<{ id: string }>();
-  const [handle, setHandle] = useState<string | null>(null);
+  const [actor, setActor] = useState<Actor | null>(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!id) return;
 
     actors.get(id)
-      .then(({ actor }) => setHandle(actor.handle))
+      .then(({ actor }) => setActor(actor))
       .catch(() => setError(true));
   }, [id]);
 
@@ -24,9 +25,9 @@ export function ActorByIdPage() {
     );
   }
 
-  if (!handle) {
+  if (!actor) {
     return <LoadingSpinner />;
   }
 
-  return <Navigate to={`/u/${handle}`} replace />;
+  return <Navigate to={getProfileLink(actor)} replace />;
 }

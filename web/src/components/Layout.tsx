@@ -129,7 +129,7 @@ export function Layout({ children }: LayoutProps) {
                 <Link to="/following" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
                   <i className="bi bi-people-fill me-2"></i> Following
                 </Link>
-                <Link to={`/u/${username}`} className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
+                <Link to={`/@${username}`} className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
                   <i className="bi bi-person-fill me-2"></i> Profile
                 </Link>
               </>
@@ -198,7 +198,7 @@ export function Layout({ children }: LayoutProps) {
                 </div>
                 <div className="d-flex gap-2">
                   <Link
-                    to={`/u/${actor?.handle}`}
+                    to={`/@${username}`}
                     className="btn btn-outline-secondary btn-sm flex-grow-1"
                     onClick={() => setMobileMenuOpen(false)}
                   >
