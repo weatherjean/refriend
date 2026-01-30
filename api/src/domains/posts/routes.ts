@@ -12,6 +12,7 @@ import {
   Hashtag,
   Mention,
   Note,
+  Page,
   Tombstone,
   PUBLIC_COLLECTION,
 } from "@fedify/fedify";
@@ -458,13 +459,13 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       height: att.height,
     }));
 
-    // Check if parent post has audience (Lemmy community) - inherit it for replies
+    // Determine audience: inherited from reply parent (community thread replies)
     let audienceUri: URL | undefined;
     const ccRecipients: URL[] = [ctx.getFollowersUri(user.username)];
+
     if (replyToPost?.addressed_to && replyToPost.addressed_to.length > 0) {
-      // Use first audience URI (typically the community)
+      // Inherit audience from parent post (reply in community thread)
       audienceUri = new URL(replyToPost.addressed_to[0]);
-      // Add community to cc recipients so it receives the activity
       ccRecipients.push(audienceUri);
       console.log(`[Create] Reply inherits audience: ${audienceUri.href}`);
     }
@@ -487,6 +488,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
 
     // V2: Create post directly in database
     const post = await db.createPost({
+      public_id: noteId,
       uri: noteUri,
       actor_id: actor.id,
       content: safeContent,
@@ -528,8 +530,8 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
 
     console.log(`[Create] Post from ${actor.handle}: ${post.id}`);
 
-    // Create the Note for federation
-    const note = new Note({
+    // Build the ActivityPub Note object
+    const apObject = new Note({
       id: new URL(noteUri),
       attribution: ctx.getActorUri(user.username),
       to: PUBLIC_COLLECTION,
@@ -548,12 +550,12 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const createActivity = new Create({
       id: new URL(`${noteUri}#activity`),
       actor: ctx.getActorUri(user.username),
-      object: note,
+      object: apObject,
       to: PUBLIC_COLLECTION,
       ccs: ccRecipients,
     });
 
-    // Send to followers
+    // Send to followers (async — don't block on this)
     await safeSendActivity(ctx,
       { identifier: user.username },
       "followers",
@@ -586,12 +588,105 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       }
     }
 
-    // Send to community inbox (for Lemmy federation) via manual signing
+    // For replies in community threads, send to community
     if (audienceUri) {
       await sendToCommunity(ctx, user.username, createActivity, audienceUri.href);
     }
 
     return c.json({ post: await service.enrichPost(db, post, actor?.id, domain) });
+  });
+
+  // POST /posts/:id/submit-to-community - Submit existing post to a Lemmy community
+  routes.post("/posts/:id/submit-to-community", async (c) => {
+    const publicId = c.req.param("id");
+    const user = c.get("user");
+    const actor = c.get("actor");
+    const domain = c.get("domain");
+    const db = c.get("db");
+
+    if (!user || !actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const { title, community } = await c.req.json<{
+      title: string;
+      community: string;
+    }>();
+
+    // Validate title
+    if (!title?.trim()) {
+      return c.json({ error: "Title is required" }, 400);
+    }
+    if (title.length > 200) {
+      return c.json({ error: "Title too long (max 200 characters)" }, 400);
+    }
+
+    // Validate community URL
+    if (!community) {
+      return c.json({ error: "Community is required" }, 400);
+    }
+    try {
+      new URL(community);
+    } catch {
+      return c.json({ error: "Invalid community URL" }, 400);
+    }
+
+    // Fetch the post
+    const post = await db.getPostByPublicId(publicId);
+    if (!post) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    // Verify ownership
+    if (post.actor_id !== actor.id) {
+      return c.json({ error: "Not authorized" }, 403);
+    }
+
+    // Guard: reject if already a Page
+    if (post.type === 'Page') {
+      return c.json({ error: "Post has already been submitted to a community" }, 400);
+    }
+
+    const ctx = federation.createContext(c.req.raw, undefined);
+
+    // Build a Page AP object from the existing post
+    const audienceUri = new URL(community);
+    const ccRecipients: URL[] = [ctx.getFollowersUri(user.username), audienceUri];
+
+    const pageObject = new Page({
+      id: new URL(post.uri),
+      attribution: ctx.getActorUri(user.username),
+      to: PUBLIC_COLLECTION,
+      ccs: ccRecipients,
+      content: post.content,
+      name: title.trim(),
+      url: new URL(post.url || post.uri),
+      published: Temporal.Instant.from(new Date(post.created_at).toISOString()),
+      sensitive: post.sensitive,
+      audience: audienceUri,
+    });
+
+    const createActivity = new Create({
+      id: new URL(`${post.uri}#submit-community`),
+      actor: ctx.getActorUri(user.username),
+      object: pageObject,
+      to: PUBLIC_COLLECTION,
+      ccs: ccRecipients,
+    });
+
+    // Send synchronously — fail if community rejects
+    const result = await sendToCommunity(ctx, user.username, createActivity, community);
+    if (!result.ok) {
+      return c.json({ error: result.error || "Failed to send to community" }, 502);
+    }
+
+    // Success: update local post
+    await db.updatePostTitleAndType(post.id, title.trim(), 'Page');
+    await db.updatePostAddressedTo(post.id, [community]);
+
+    console.log(`[SubmitToCommunity] Post ${post.id} submitted to ${community}`);
+
+    return c.json({ post: await service.enrichPost(db, { ...post, type: 'Page', title: title.trim(), addressed_to: [community] }, actor?.id, domain) });
   });
 
   // DELETE /posts/:id - Delete post (V2: direct database + send)

@@ -66,6 +66,8 @@ export interface VideoEmbed {
 export interface Post {
   id: string;  // UUID
   uri: string;
+  type?: string;  // 'Note' | 'Page' | 'Article'
+  title?: string | null;
   content: string;
   url: string | null;
   created_at: string;
@@ -314,10 +316,22 @@ export const posts = {
       `/posts/${id}/replies${query ? `?${query}` : ''}`
     );
   },
-  create: (content: string, inReplyTo?: string, attachments?: AttachmentInput[], sensitive?: boolean, linkUrl?: string, videoUrl?: string) =>
+  create: (params: {
+    content: string;
+    in_reply_to?: string;
+    attachments?: AttachmentInput[];
+    sensitive?: boolean;
+    link_url?: string;
+    video_url?: string;
+  }) =>
     fetchJson<{ post: Post }>('/posts', {
       method: 'POST',
-      body: JSON.stringify({ content, in_reply_to: inReplyTo, attachments, sensitive, link_url: linkUrl, video_url: videoUrl }),
+      body: JSON.stringify(params),
+    }),
+  submitToCommunity: (id: string, params: { title: string; community: string }) =>
+    fetchJson<{ post: Post }>(`/posts/${id}/submit-to-community`, {
+      method: 'POST',
+      body: JSON.stringify(params),
     }),
   delete: (id: string) =>
     fetchJson<{ ok: boolean }>(`/posts/${id}`, { method: 'DELETE' }),

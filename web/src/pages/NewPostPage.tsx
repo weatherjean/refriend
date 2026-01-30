@@ -220,7 +220,13 @@ export function NewPostPage() {
       }
 
       // Create post with attachments
-      const { post } = await posts.create(trimmedContent, undefined, uploadedAttachments, sensitive, trimmedLink || undefined, trimmedVideo || undefined);
+      const { post } = await posts.create({
+        content: trimmedContent,
+        attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+        sensitive,
+        link_url: trimmedLink || undefined,
+        video_url: trimmedVideo || undefined,
+      });
 
       navigate(getPostLink(post));
     } catch (err) {
@@ -230,7 +236,11 @@ export function NewPostPage() {
     }
   };
 
-  const canSubmit = content.trim().length > 0 && !isOverLimit && !loading && !linkError && !videoError;
+  const canSubmit = content.trim().length > 0
+    && !isOverLimit
+    && !loading
+    && !linkError
+    && !videoError;
 
   return (
     <div>

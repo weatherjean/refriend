@@ -41,6 +41,12 @@ export async function safeSendActivity(
 
 const AS_PUBLIC_FULL = "https://www.w3.org/ns/activitystreams#Public";
 
+export interface SendToCommunityResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+}
+
 /**
  * Send an activity directly to a Lemmy community inbox using manual signing.
  *
@@ -48,6 +54,9 @@ const AS_PUBLIC_FULL = "https://www.w3.org/ns/activitystreams#Public";
  * requires the full URI "https://www.w3.org/ns/activitystreams#Public".
  * This function serializes via toJsonLd(), patches the public collection URI,
  * signs with the actor's RSA key, and POSTs directly.
+ *
+ * Returns a result indicating success/failure so callers can handle errors
+ * (e.g. rolling back a local post if the community rejects it).
  */
 // deno-lint-ignore no-explicit-any
 export async function sendToCommunity(
@@ -55,13 +64,13 @@ export async function sendToCommunity(
   username: string,
   activity: any,
   communityUri: string,
-): Promise<void> {
+): Promise<SendToCommunityResult> {
   try {
     // Get the actor's RSA key pair (first key pair is RSA)
     const keyPairs = await ctx.getActorKeyPairs(username);
     if (!keyPairs || keyPairs.length === 0) {
       console.error(`[SendToCommunity] No key pairs for ${username}`);
-      return;
+      return { ok: false, error: "No key pairs available for signing" };
     }
     const rsaKeyPair = keyPairs[0];
 
@@ -69,14 +78,14 @@ export async function sendToCommunity(
     const communityActor = await ctx.lookupObject(new URL(communityUri));
     if (!communityActor) {
       console.error(`[SendToCommunity] Could not look up community: ${communityUri}`);
-      return;
+      return { ok: false, error: "Community not found" };
     }
 
     // deno-lint-ignore no-explicit-any
     const inboxUrl = (communityActor as any).inboxId?.href;
     if (!inboxUrl) {
       console.error(`[SendToCommunity] No inbox found for community: ${communityUri}`);
-      return;
+      return { ok: false, error: "Community has no inbox" };
     }
 
     // Serialize to JSON-LD and fix "as:Public" → full URI
@@ -100,16 +109,20 @@ export async function sendToCommunity(
     const response = await fetch(signed);
     if (response.ok) {
       console.log(`[SendToCommunity] Sent to ${communityUri}: ${response.status}`);
+      return { ok: true, status: response.status };
     } else {
       const text = await response.text();
       console.error(`[SendToCommunity] Failed (${response.status}): ${text.slice(0, 500)}`);
+      return { ok: false, status: response.status, error: `Community rejected the post (${response.status})` };
     }
   } catch (e) {
     const errMsg = String(e);
     if (errMsg.includes("Localhost") || errMsg.includes("localhost")) {
       console.log(`[SendToCommunity] Skipped (localhost): ${communityUri}`);
+      return { ok: true }; // Treat localhost skip as success for dev
     } else {
       console.error(`[SendToCommunity] Error sending to ${communityUri}:`, e);
+      return { ok: false, error: `Failed to send to community: ${errMsg.slice(0, 200)}` };
     }
   }
 }

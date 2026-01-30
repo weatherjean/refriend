@@ -56,24 +56,44 @@ ngrok http 5173
 ```
 api/
   src/
-    main.ts           # Entry point, server setup
-    api.ts            # REST API routes (Hono)
-    federation.ts     # ActivityPub actors and handlers (Fedify)
-    db.ts             # Database queries and models
-    activities.ts     # ActivityPub activity processing
-    storage.ts        # File upload handling
-    cache.ts          # Caching utilities
-  schema.pg.sql       # PostgreSQL schema
+    main.ts                           # Entry point, server setup
+    api-routes.ts                     # REST API route aggregator (Hono)
+    db.ts                             # Database queries and models
+    storage.ts                        # File upload handling (S3/MinIO)
+    cache.ts                          # Caching utilities (Deno KV)
+    logger.ts                         # Logging
+    seeder.ts                         # Database seeder
+    domains/
+      index.ts                        # Central export for all domains
+      federation-v2/
+        setup.ts                      # Fedify federation setup (dispatchers + inbox handlers)
+        utils/actor.ts                # Remote actor persistence
+      federation-v1-old/              # Legacy federation code (being phased out)
+      users/                          # User auth, profiles, registration
+      posts/                          # Post CRUD, feeds, enrichment
+      social/                         # Follows, blocks, social graph
+      notifications/                  # Notification CRUD
+      search/                         # Search across actors and posts
+      tags/                           # Hashtag routes
+      push/                           # Web push notifications
+    shared/types.ts                   # Shared TypeScript types
+  schema.pg.sql                       # PostgreSQL schema
+  MIGRATION_REMOVE_COMMUNITIES.sql    # Migration: drop community tables
+  MIGRATION_UNIFIED_URLS.sql          # Migration: /users/ -> /@ URL scheme
 web/
-  src/                # React frontend
-  dist/               # Built static files (served by Caddy in prod)
+  src/                                # React frontend (Vite + TypeScript)
+  dist/                               # Built static files (served by Caddy in prod)
+Caddyfile                             # Production Caddy config (content negotiation + SPA)
+Caddyfile.dev                         # Dev Caddy config (proxies to Vite + API)
+docker-compose.yml                    # Dev stack: Postgres, MinIO, API, Vite, Caddy
 ```
 
 ### Backend Patterns
 
-- **Single-file modules:** Core logic consolidated in `api.ts`, `federation.ts`, `db.ts`
-- **Fedify integration:** ActivityPub federation via `@fedify/fedify` library
-- **Static serving:** In production, Caddy serves `web/dist/` and proxies API routes. In development, Vite serves frontend and proxies to API.
+- **Domain modules:** Code organized into `api/src/domains/` by feature area, each with routes, services, and repository files
+- **Fedify integration:** ActivityPub federation via `@fedify/fedify` — inbox handlers and dispatchers in `federation-v2/setup.ts`
+- **URL scheme:** Unified `/@username` and `/@username/posts/<uuid>` URLs with content negotiation (Caddy routes AP requests to backend, HTML requests to SPA)
+- **Static serving:** In production, Caddy serves `web/dist/` and proxies API + AP routes. In development, Caddy proxies to Vite dev server and API container
 
 ### Environment Variables
 

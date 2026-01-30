@@ -10,6 +10,14 @@
         reverse_proxy api:8000
     }
 
+    # Actor inbox routes (POST from remote servers)
+    @actor_inbox {
+        path /@*/inbox
+    }
+    handle @actor_inbox {
+        reverse_proxy api:8000
+    }
+
     # ActivityPub content negotiation for /@* paths
     @ap_request {
         path /@*

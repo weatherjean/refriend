@@ -82,6 +82,8 @@ export interface Post {
   public_id: string;
   uri: string;
   actor_id: number;
+  type: string;
+  title: string | null;
   content: string;
   url: string | null;
   in_reply_to_id: number | null;
@@ -776,25 +778,28 @@ export class DB {
 
   // ============ Posts ============
 
-  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score" | "addressed_to" | "link_preview" | "video_embed"> & { created_at?: string; addressed_to?: string[]; link_preview?: LinkPreview | null; video_embed?: VideoEmbed | null }): Promise<Post> {
+  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score" | "addressed_to" | "link_preview" | "video_embed" | "type" | "title"> & { public_id?: string; created_at?: string; addressed_to?: string[]; link_preview?: LinkPreview | null; video_embed?: VideoEmbed | null; type?: string; title?: string | null }): Promise<Post> {
     return this.query(async (client) => {
       await client.queryArray`BEGIN`;
       try {
         const addressedTo = post.addressed_to || [];
         const linkPreview = post.link_preview ? JSON.stringify(post.link_preview) : null;
         const videoEmbed = post.video_embed ? JSON.stringify(post.video_embed) : null;
+        const postType = post.type || 'Note';
+        const postTitle = post.title || null;
+        const publicId = post.public_id || crypto.randomUUID();
 
         let result;
         if (post.created_at) {
           result = await client.queryObject<Post>`
-            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, video_embed, created_at)
-            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${videoEmbed}, ${post.created_at})
+            INSERT INTO posts (public_id, uri, actor_id, type, title, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, video_embed, created_at)
+            VALUES (${publicId}, ${post.uri}, ${post.actor_id}, ${postType}, ${postTitle}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${videoEmbed}, ${post.created_at})
             RETURNING *
           `;
         } else {
           result = await client.queryObject<Post>`
-            INSERT INTO posts (uri, actor_id, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, video_embed)
-            VALUES (${post.uri}, ${post.actor_id}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${videoEmbed})
+            INSERT INTO posts (public_id, uri, actor_id, type, title, content, url, in_reply_to_id, sensitive, addressed_to, link_preview, video_embed)
+            VALUES (${publicId}, ${post.uri}, ${post.actor_id}, ${postType}, ${postTitle}, ${post.content}, ${post.url}, ${post.in_reply_to_id}, ${post.sensitive}, ${addressedTo}, ${linkPreview}, ${videoEmbed})
             RETURNING *
           `;
         }
@@ -830,6 +835,18 @@ export class DB {
   async updatePostSensitive(id: number, sensitive: boolean): Promise<void> {
     await this.query(async (client) => {
       await client.queryArray`UPDATE posts SET sensitive = ${sensitive} WHERE id = ${id}`;
+    });
+  }
+
+  async updatePostTitleAndType(id: number, title: string | null, type: string): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`UPDATE posts SET title = ${title}, type = ${type} WHERE id = ${id}`;
+    });
+  }
+
+  async updatePostAddressedTo(id: number, addressedTo: string[]): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`UPDATE posts SET addressed_to = ${addressedTo} WHERE id = ${id}`;
     });
   }
 
@@ -952,6 +969,8 @@ export class DB {
       public_id: row.public_id as string,
       uri: row.uri as string,
       actor_id: row.actor_id as number,
+      type: (row.type as string) || 'Note',
+      title: (row.title as string | null) ?? null,
       content: row.content as string,
       url: row.url as string | null,
       in_reply_to_id: row.in_reply_to_id as number | null,

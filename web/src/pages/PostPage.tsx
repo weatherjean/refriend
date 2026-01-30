@@ -64,7 +64,7 @@ export function PostPage() {
 
   const handleReply = async (content: string, attachments: AttachmentInput[], sensitive: boolean, linkUrl?: string) => {
     if (!post) return;
-    const { post: newReply } = await postsApi.create(content, post.id, attachments, sensitive, linkUrl);
+    const { post: newReply } = await postsApi.create({ content, in_reply_to: post.id, attachments, sensitive, link_url: linkUrl });
     setReplies(prev => [...prev, newReply]);
   };
 

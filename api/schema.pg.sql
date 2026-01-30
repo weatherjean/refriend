@@ -67,12 +67,14 @@ CREATE TABLE IF NOT EXISTS follows (
   PRIMARY KEY (follower_id, following_id)
 );
 
--- Posts: Notes/statuses
+-- Posts: Notes/Pages/Articles (ActivityPub objects)
 CREATE TABLE IF NOT EXISTS posts (
   id SERIAL PRIMARY KEY,
   public_id UUID NOT NULL DEFAULT gen_random_uuid() UNIQUE,
   uri TEXT NOT NULL UNIQUE,
   actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+  type TEXT NOT NULL DEFAULT 'Note' CHECK (type IN ('Note', 'Page', 'Article')),
+  title TEXT,
   content TEXT NOT NULL,
   url TEXT,
   in_reply_to_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,

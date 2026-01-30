@@ -79,6 +79,8 @@ export interface Post {
   public_id: string;
   uri: string;
   actor_id: number;
+  type: string;
+  title: string | null;
   content: string;
   url: string | null;
   in_reply_to_id: number | null;
@@ -191,6 +193,8 @@ export interface SanitizedActor {
 export interface EnrichedPost {
   id: string;
   uri: string;
+  type: string;
+  title: string | null;
   content: string;
   url: string | null;
   created_at: string;

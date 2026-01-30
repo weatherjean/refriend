@@ -150,6 +150,7 @@ export const federation = createFederation<void>({
   kv: new DenoKvStore(kv),
   queue,
   manuallyStartQueue,
+  behindProxy: true,
   // Use default firstKnock (rfc9421) - Fedify will fall back to draft-cavage if needed
   onOutboxError: (error, activity) => {
     const activityId = activity?.id?.href ?? "unknown";
@@ -476,7 +477,7 @@ federation
         height: m.height ?? undefined,
       }));
 
-      const note = new Note({
+      const commonProps = {
         id: new URL(p.uri),
         attribution: ctx.getActorUri(identifier),
         to: PUBLIC_COLLECTION,
@@ -486,12 +487,19 @@ federation
         published: parseTimestamp(p.created_at),
         sensitive: p.sensitive,
         attachments: attachments.length > 0 ? attachments : undefined,
-      });
+        audience: p.addressed_to?.length ? new URL(p.addressed_to[0]) : undefined,
+      };
+
+      const object = p.type === 'Page'
+        ? new Page({ ...commonProps, name: p.title ?? undefined })
+        : p.type === 'Article'
+        ? new Article({ ...commonProps, name: p.title ?? undefined })
+        : new Note(commonProps);
 
       return new Create({
         id: new URL(`${p.uri}#activity`),
         actor: ctx.getActorUri(identifier),
-        object: note,
+        object,
         to: PUBLIC_COLLECTION,
         cc: ctx.getFollowersUri(identifier),
         published: parseTimestamp(p.created_at),
@@ -510,7 +518,8 @@ federation
 
 // ============ Object Dispatcher (Notes/Posts) ============
 
-federation.setObjectDispatcher(Note, "/@{identifier}/posts/{id}", async (ctx, { identifier, id }) => {
+// Helper to build common object properties for dispatchers
+async function buildPostObjectProps(ctx: any, identifier: string, id: string) {
   const actor = await db.getActorByUsername(identifier);
   if (!actor) return null;
 
@@ -526,7 +535,18 @@ federation.setObjectDispatcher(Note, "/@{identifier}/posts/{id}", async (ctx, { 
     height: m.height ?? undefined,
   }));
 
-  return new Note({
+  return { post, attachments };
+}
+
+// Single object dispatcher for all post types (Note, Page, Article).
+// Fedify doesn't allow the same URI template for multiple types, so we
+// register under Note but return the correct AP type based on post.type.
+federation.setObjectDispatcher(Note, "/@{identifier}/posts/{id}", async (ctx, { identifier, id }) => {
+  const result = await buildPostObjectProps(ctx, identifier, id);
+  if (!result) return null;
+  const { post, attachments } = result;
+
+  const commonProps = {
     id: ctx.getObjectUri(Note, { identifier, id }),
     attribution: ctx.getActorUri(identifier),
     to: PUBLIC_COLLECTION,
@@ -536,7 +556,18 @@ federation.setObjectDispatcher(Note, "/@{identifier}/posts/{id}", async (ctx, { 
     published: parseTimestamp(post.created_at),
     sensitive: post.sensitive,
     attachments: attachments.length > 0 ? attachments : undefined,
-  });
+    audience: post.addressed_to?.length ? new URL(post.addressed_to[0]) : undefined,
+  };
+
+  if (post.type === 'Page') {
+    // deno-lint-ignore no-explicit-any
+    return new Page({ ...commonProps, name: post.title ?? undefined }) as any;
+  }
+  if (post.type === 'Article') {
+    // deno-lint-ignore no-explicit-any
+    return new Article({ ...commonProps, name: post.title ?? undefined }) as any;
+  }
+  return new Note(commonProps);
 });
 
 // ============ Inbox Handlers (V2: Inline, no processActivity orchestrator) ============
@@ -560,16 +591,24 @@ export function registerInboxHandlers(
       const _db = getDbFn();
       const _domain = getDomainFn();
       let object: Note | Article | Page | null = null;
-      let titlePrefix: string | null = null;
+      let incomingTitle: string | null = null;
+      let incomingType: 'Note' | 'Page' | 'Article' = 'Note';
 
       try {
         const obj = await create.getObject();
         if (obj instanceof Note) {
           object = obj;
-        } else if (obj instanceof Article || obj instanceof Page) {
+          incomingType = 'Note';
+        } else if (obj instanceof Page) {
           object = obj;
+          incomingType = 'Page';
           const title = typeof obj.name === 'string' ? obj.name : obj.name?.toString();
-          if (title) titlePrefix = title;
+          if (title) incomingTitle = title;
+        } else if (obj instanceof Article) {
+          object = obj;
+          incomingType = 'Article';
+          const title = typeof obj.name === 'string' ? obj.name : obj.name?.toString();
+          if (title) incomingTitle = title;
         }
       } catch {
         return;
@@ -593,18 +632,9 @@ export function registerInboxHandlers(
       const existingPost = await _db.getPostByUri(noteUri);
       if (existingPost) return;
 
-      let rawContent = typeof object.content === "string"
+      const rawContent = typeof object.content === "string"
         ? object.content
         : object.content?.toString() ?? "";
-
-      if (titlePrefix) {
-        const escapedTitle = titlePrefix
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-        const titleHtml = `<p><strong>${escapedTitle}</strong></p>`;
-        rawContent = rawContent ? `${titleHtml}\n${rawContent}` : titleHtml;
-      }
 
       const content = validateAndSanitizeContent(rawContent);
       if (content === null) {
@@ -674,6 +704,8 @@ export function registerInboxHandlers(
       const post = await _db.createPost({
         uri: noteUri,
         actor_id: authorActor.id,
+        type: incomingType,
+        title: incomingTitle,
         content,
         url: postUrlString,
         in_reply_to_id: inReplyToId,
@@ -805,25 +837,22 @@ export function registerInboxHandlers(
         return;
       }
 
-      // Extract and sanitize content
-      let titlePrefix: string | null = null;
-      if (object instanceof Article || object instanceof Page) {
+      // Extract title for Page/Article types
+      let updatedTitle: string | null = null;
+      let updatedType: 'Note' | 'Page' | 'Article' = 'Note';
+      if (object instanceof Page) {
+        updatedType = 'Page';
         const title = typeof object.name === 'string' ? object.name : object.name?.toString();
-        if (title) titlePrefix = title;
+        if (title) updatedTitle = title;
+      } else if (object instanceof Article) {
+        updatedType = 'Article';
+        const title = typeof object.name === 'string' ? object.name : object.name?.toString();
+        if (title) updatedTitle = title;
       }
 
-      let rawContent = typeof object.content === "string"
+      const rawContent = typeof object.content === "string"
         ? object.content
         : object.content?.toString() ?? "";
-
-      if (titlePrefix) {
-        const escapedTitle = titlePrefix
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-        const titleHtml = `<p><strong>${escapedTitle}</strong></p>`;
-        rawContent = rawContent ? `${titleHtml}\n${rawContent}` : titleHtml;
-      }
 
       const content = validateAndSanitizeContent(rawContent);
       if (content === null) {
@@ -831,8 +860,9 @@ export function registerInboxHandlers(
         return;
       }
 
-      // Update content
+      // Update content, title, and type
       await _db.updatePostContent(existingPost.id, content);
+      await _db.updatePostTitleAndType(existingPost.id, updatedTitle, updatedType);
 
       // Update sensitive flag
       const sensitive = object.sensitive ?? false;
@@ -916,6 +946,7 @@ export function registerInboxHandlers(
     .on(Follow, async (ctx, follow) => {
       const _db = getDbFn();
       const _domain = getDomainFn();
+      console.log(`[Follow] Incoming follow request: ${follow.id?.href}`);
       let followerActor: Actor | null = null;
       let followerAP = null;
 
@@ -924,13 +955,20 @@ export function registerInboxHandlers(
         if (followerAP && isActor(followerAP)) {
           followerActor = await persistActor(_db, _domain, followerAP);
         }
-      } catch {
+      } catch (e) {
+        console.error(`[Follow] Failed to resolve follower actor:`, e);
         return;
       }
-      if (!followerActor) return;
+      if (!followerActor) {
+        console.log(`[Follow] Could not persist follower actor, ignoring`);
+        return;
+      }
 
       const targetUri = follow.objectId?.href;
-      if (!targetUri) return;
+      if (!targetUri) {
+        console.log(`[Follow] No target URI in follow request`);
+        return;
+      }
 
       const targetActor = await _db.getActorByUri(targetUri);
       if (!targetActor) {

@@ -32,6 +32,8 @@ export interface CreatePostInput {
 export interface EnrichedPost {
   id: string;
   uri: string;
+  type: string;
+  title: string | null;
   content: string;
   url: string | null;
   created_at: string;
@@ -84,7 +86,7 @@ export interface EnrichedPost {
   }[];
   link_preview: LinkPreview | null;
   video_embed: VideoEmbed | null;
-  community: {
+  community?: {
     id: string;
     name: string | null;
     handle: string;

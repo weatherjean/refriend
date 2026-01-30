@@ -402,6 +402,8 @@ export async function enrichPostsBatch(
     return {
       id: post.public_id,
       uri: post.uri,
+      type: post.type || 'Note',
+      title: post.title || null,
       content: post.content,
       url: post.url,
       created_at: formatDate(post.created_at),
