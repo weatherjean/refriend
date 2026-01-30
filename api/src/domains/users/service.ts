@@ -566,16 +566,17 @@ export async function getUserBoostedPosts(
     currentActorId?: number;
     domain?: string;
     communityDb?: unknown;
+    postsOnly?: boolean;
   }
 ): Promise<{ posts: unknown[]; next_cursor: number | null } | null> {
-  const { limit = 20, before, currentActorId, domain, communityDb } = options;
+  const { limit = 20, before, currentActorId, domain, communityDb, postsOnly } = options;
 
   const actor = await db.getActorByUsername(username);
   if (!actor) {
     return null;
   }
 
-  const posts = await db.getBoostedPostsWithActor(actor.id, limit + 1, before);
+  const posts = await db.getBoostedPostsWithActor(actor.id, limit + 1, before, postsOnly);
 
   const hasMore = posts.length > limit;
   const resultPosts = hasMore ? posts.slice(0, limit) : posts;
@@ -714,9 +715,10 @@ export async function getActorBoostedPosts(
     currentActorId?: number;
     domain?: string;
     communityDb?: unknown;
+    postsOnly?: boolean;
   }
 ): Promise<{ posts: unknown[]; next_cursor: number | null } | null> {
-  const { limit = 20, before, currentActorId, domain, communityDb } = options;
+  const { limit = 20, before, currentActorId, domain, communityDb, postsOnly } = options;
 
   const actor = await db.getActorByPublicId(publicId);
   if (!actor) {
@@ -724,7 +726,7 @@ export async function getActorBoostedPosts(
   }
 
   // Both local and remote actors can have boost data (from Announce activities)
-  const posts = await db.getBoostedPostsWithActor(actor.id, limit + 1, before);
+  const posts = await db.getBoostedPostsWithActor(actor.id, limit + 1, before, postsOnly);
 
   const hasMore = posts.length > limit;
   const resultPosts = hasMore ? posts.slice(0, limit) : posts;

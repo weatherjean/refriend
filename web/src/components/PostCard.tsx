@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Post, posts as postsApi } from '../api';
+import { Post, Actor, posts as postsApi } from '../api';
 import { formatTimeAgo, getUsername, sanitizeHtml } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import { TagBadge } from './TagBadge';
@@ -9,6 +9,7 @@ import { ImageSlider } from './ImageSlider';
 import { ImageLightbox } from './ImageLightbox';
 import { PostMenu } from './PostMenu';
 import { VideoEmbed } from './VideoEmbed';
+import { ActorListModal } from './ActorListModal';
 
 interface PostCardProps {
   post: Post;
@@ -34,7 +35,15 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
   const [linkPreviewLightboxOpen, setLinkPreviewLightboxOpen] = useState(false);
   const [linkPreviewImageError, setLinkPreviewImageError] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
+  const [showInfoMenu, setShowInfoMenu] = useState(false);
+  const [showLikersModal, setShowLikersModal] = useState(false);
+  const [showBoostersModal, setShowBoostersModal] = useState(false);
+  const [likers, setLikers] = useState<Actor[]>([]);
+  const [boosters, setBoosters] = useState<Actor[]>([]);
+  const [likersLoading, setLikersLoading] = useState(false);
+  const [boostersLoading, setBoostersLoading] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const infoMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (linkToPost && contentRef.current) {
@@ -42,6 +51,48 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
       setIsTruncated(el.scrollHeight > el.clientHeight);
     }
   }, [linkToPost, post.content]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (infoMenuRef.current && !infoMenuRef.current.contains(event.target as Node)) {
+        setShowInfoMenu(false);
+      }
+    }
+    if (showInfoMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showInfoMenu]);
+
+  const openLikersModal = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowInfoMenu(false);
+    setShowLikersModal(true);
+    setLikersLoading(true);
+    try {
+      const result = await postsApi.getLikers(post.id);
+      setLikers(result.likers);
+    } catch {
+      // Error handled by global toast
+    } finally {
+      setLikersLoading(false);
+    }
+  };
+
+  const openBoostersModal = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowInfoMenu(false);
+    setShowBoostersModal(true);
+    setBoostersLoading(true);
+    try {
+      const result = await postsApi.getBoosters(post.id);
+      setBoosters(result.boosters);
+    } catch {
+      // Error handled by global toast
+    } finally {
+      setBoostersLoading(false);
+    }
+  };
 
   const isOwnPost = !!(actor && post.author && actor.id === post.author.id);
 
@@ -131,16 +182,25 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
       <div className="card-body">
         {/* Boosted by indicator */}
         {post.boosted_by && (
-          <div className="post-boosted-indicator">
-            <i className="bi bi-arrow-repeat"></i>
-            <Link
-              to={`/u/${post.boosted_by.handle}`}
-              onClick={(e) => e.stopPropagation()}
-              className="text-decoration-none"
-            >
-              {post.boosted_by.name || post.boosted_by.handle} boosted
-            </Link>
-          </div>
+          <Link
+            to={`/u/${post.boosted_by.handle}`}
+            onClick={(e) => e.stopPropagation()}
+            className="d-flex align-items-center gap-2 text-decoration-none text-muted small px-3 py-2 mb-2"
+            style={{ background: 'var(--bs-tertiary-bg)', margin: '-1rem -1rem 0.75rem -1rem', borderBottom: '1px solid var(--bs-border-color)' }}
+          >
+            <Avatar src={post.boosted_by.avatar_url} name={post.boosted_by.handle} size="sm" />
+            {post.boosted_by.actor_type === 'Group' ? (
+              <span>
+                shared into <strong>{post.boosted_by.name || post.boosted_by.handle}</strong>
+                {boostsCount > 1 && <span className="text-muted"> and {boostsCount - 1} {boostsCount - 1 === 1 ? 'other' : 'others'}</span>}
+              </span>
+            ) : (
+              <span>
+                boosted by <strong>{post.boosted_by.name || post.boosted_by.handle}</strong>
+                {boostsCount > 1 && <span className="text-muted"> and {boostsCount - 1} {boostsCount - 1 === 1 ? 'other' : 'others'}</span>}
+              </span>
+            )}
+          </Link>
         )}
 
         {/* Header: Avatar + Meta */}
@@ -371,6 +431,34 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
             </button>
           )}
 
+          {(likesCount > 0 || boostsCount > 0) && (
+            <div className="post-menu" ref={infoMenuRef}>
+              <button
+                className="post-action-btn"
+                onClick={(e) => { e.stopPropagation(); setShowInfoMenu(!showInfoMenu); }}
+                title="View likes and boosts"
+              >
+                <i className="bi bi-info-circle"></i>
+              </button>
+              {showInfoMenu && (
+                <div className="post-menu-dropdown">
+                  {likesCount > 0 && (
+                    <button className="post-menu-item" onClick={openLikersModal}>
+                      <i className="bi bi-heart"></i>
+                      <span>View likes ({likesCount})</span>
+                    </button>
+                  )}
+                  {boostsCount > 0 && (
+                    <button className="post-menu-item" onClick={openBoostersModal}>
+                      <i className="bi bi-arrow-repeat"></i>
+                      <span>View boosts ({boostsCount})</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {user && (
             <PostMenu
               postId={post.id}
@@ -381,6 +469,24 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
           )}
         </div>
       </div>
+
+      <ActorListModal
+        show={showLikersModal}
+        title="Likes"
+        actors={likers}
+        loading={likersLoading}
+        onClose={() => setShowLikersModal(false)}
+        emptyMessage="No likes yet"
+      />
+
+      <ActorListModal
+        show={showBoostersModal}
+        title="Boosts"
+        actors={boosters}
+        loading={boostersLoading}
+        onClose={() => setShowBoostersModal(false)}
+        emptyMessage="No boosts yet"
+      />
     </div>
   );
 }

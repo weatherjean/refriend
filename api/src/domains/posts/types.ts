@@ -96,6 +96,7 @@ export interface EnrichedPost {
     handle: string;
     name: string | null;
     avatar_url: string | null;
+    actor_type: string;
   };
 }
 

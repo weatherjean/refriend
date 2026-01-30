@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import { Actor } from '../api';
 import { Avatar } from './Avatar';
 import { sanitizeHtml } from '../utils';
@@ -34,6 +35,21 @@ export function ProfileHeader({
   const buttonClass = isFollowing ? 'btn-outline-primary' : isPending ? 'btn-outline-secondary' : 'btn-primary';
   const displayName = actor.name || username;
 
+  const [bioExpanded, setBioExpanded] = useState(false);
+  const [bioTruncated, setBioTruncated] = useState(false);
+  const bioRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setBioExpanded(false);
+    setBioTruncated(false);
+  }, [actor.id]);
+
+  useEffect(() => {
+    if (bioRef.current) {
+      setBioTruncated(bioRef.current.scrollHeight > bioRef.current.clientHeight);
+    }
+  }, [actor.bio, bioExpanded]);
+
   return (
     <div className="card mb-4">
       <div className="card-body">
@@ -50,12 +66,12 @@ export function ProfileHeader({
           {(!actor.is_local || actor.actor_type === 'Group') && (
             <div className="mt-2 d-flex justify-content-center gap-1">
               {!actor.is_local && (
-                <span className="badge bg-secondary">
+                <span className="badge" style={{ backgroundColor: '#fbbf24', color: '#000' }}>
                   <i className="bi bi-globe me-1"></i>Remote
                 </span>
               )}
               {actor.actor_type === 'Group' && (
-                <span className="badge bg-info">
+                <span className="badge" style={{ backgroundColor: '#4ade80', color: '#000' }}>
                   <i className="bi bi-people-fill me-1"></i>Group
                 </span>
               )}
@@ -63,7 +79,22 @@ export function ProfileHeader({
           )}
 
           {actor.bio && (
-            <div className="mt-2" dangerouslySetInnerHTML={{ __html: sanitizeHtml(actor.bio) }} />
+            <div>
+              <div
+                ref={bioRef}
+                className="mt-2"
+                style={!bioExpanded ? { maxHeight: '6em', overflow: 'hidden' } : undefined}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(actor.bio) }}
+              />
+              {(bioTruncated || bioExpanded) && (
+                <button
+                  className="btn btn-link btn-sm p-0 text-muted"
+                  onClick={() => setBioExpanded(!bioExpanded)}
+                >
+                  {bioExpanded ? 'Show less' : 'Show more'}
+                </button>
+              )}
+            </div>
           )}
 
           {actor.is_local && (
@@ -117,12 +148,12 @@ export function ProfileHeader({
             {(!actor.is_local || actor.actor_type === 'Group') && (
               <div className="mt-1 d-flex gap-1">
                 {!actor.is_local && (
-                  <span className="badge bg-secondary">
+                  <span className="badge" style={{ backgroundColor: '#fbbf24', color: '#000' }}>
                     <i className="bi bi-globe me-1"></i>Remote
                   </span>
                 )}
                 {actor.actor_type === 'Group' && (
-                  <span className="badge bg-info">
+                  <span className="badge" style={{ backgroundColor: '#4ade80', color: '#000' }}>
                     <i className="bi bi-people-fill me-1"></i>Group
                   </span>
                 )}
@@ -130,7 +161,22 @@ export function ProfileHeader({
             )}
 
             {actor.bio && (
-              <div className="mt-2" dangerouslySetInnerHTML={{ __html: sanitizeHtml(actor.bio) }} />
+              <div>
+                <div
+                  ref={bioRef}
+                  className="mt-2"
+                  style={!bioExpanded ? { maxHeight: '6em', overflow: 'hidden' } : undefined}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(actor.bio) }}
+                />
+                {(bioTruncated || bioExpanded) && (
+                  <button
+                    className="btn btn-link btn-sm p-0 text-muted"
+                    onClick={() => setBioExpanded(!bioExpanded)}
+                  >
+                    {bioExpanded ? 'Show less' : 'Show more'}
+                  </button>
+                )}
+              </div>
             )}
 
             {actor.is_local && (

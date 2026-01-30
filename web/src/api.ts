@@ -94,6 +94,7 @@ export interface Post {
     handle: string;
     name: string | null;
     avatar_url: string | null;
+    actor_type: string;
   };
 }
 
@@ -254,8 +255,8 @@ export const users = {
   },
   getPinned: (username: string) =>
     fetchJson<{ posts: Post[] }>(`/users/${username}/pinned`),
-  getBoosts: (username: string, params?: PaginationParams) =>
-    fetchJson<PaginatedPosts>(`/users/${username}/boosts${buildQuery({ limit: params?.limit, before: params?.before })}`),
+  getBoosts: (username: string, params?: PaginationParams & { filter?: string }) =>
+    fetchJson<PaginatedPosts>(`/users/${username}/boosts${buildQuery({ limit: params?.limit, before: params?.before, filter: params?.filter })}`),
   getFollowers: (username: string) =>
     fetchJson<{ followers: Actor[] }>(`/users/${username}/followers`),
   getFollowing: (username: string) =>
@@ -276,8 +277,8 @@ export const actors = {
   },
   getPinned: (actorId: string) =>
     fetchJson<{ posts: Post[] }>(`/actors/${actorId}/pinned`),
-  getBoosts: (actorId: string, params?: PaginationParams) =>
-    fetchJson<PaginatedPosts>(`/actors/${actorId}/boosts${buildQuery({ limit: params?.limit, before: params?.before })}`),
+  getBoosts: (actorId: string, params?: PaginationParams & { filter?: string }) =>
+    fetchJson<PaginatedPosts>(`/actors/${actorId}/boosts${buildQuery({ limit: params?.limit, before: params?.before, filter: params?.filter })}`),
 };
 
 // Posts
@@ -349,6 +350,10 @@ export const posts = {
       method: 'POST',
       body: JSON.stringify({ reason, details }),
     }),
+  getLikers: (id: string) =>
+    fetchJson<{ likers: Actor[] }>(`/posts/${id}/likers`),
+  getBoosters: (id: string) =>
+    fetchJson<{ boosters: Actor[] }>(`/posts/${id}/boosters`),
 };
 
 // Follows

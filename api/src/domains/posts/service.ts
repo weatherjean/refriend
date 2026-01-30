@@ -506,6 +506,7 @@ export async function getTimelinePosts(
         handle: booster.handle,
         name: booster.name,
         avatar_url: booster.avatar_url,
+        actor_type: booster.actor_type,
       };
     }
   }
@@ -527,7 +528,22 @@ export async function getPost(
 ): Promise<EnrichedPost | null> {
   const post = await repository.getPostByPublicId(db, publicId);
   if (!post) return null;
-  return enrichPost(db, post, currentActorId, domain);
+  const enriched = await enrichPost(db, post, currentActorId, domain);
+
+  // Attach boost attribution (e.g. Group that shared this post)
+  const boosters = await db.getPostBoosters(post.id, 1);
+  if (boosters.length > 0) {
+    const booster = boosters[0];
+    enriched.boosted_by = {
+      id: booster.public_id,
+      handle: booster.handle,
+      name: booster.name,
+      avatar_url: booster.avatar_url,
+      actor_type: booster.actor_type,
+    };
+  }
+
+  return enriched;
 }
 
 /**

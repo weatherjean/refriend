@@ -19,6 +19,7 @@ import type { Federation } from "@fedify/fedify";
 import type { DB } from "../../db.ts";
 import type { User, Actor } from "../../shared/types.ts";
 import * as service from "./service.ts";
+import { sanitizeActor } from "../users/types.ts";
 import { getCachedHashtagPosts, setCachedHashtagPosts, invalidateProfileCache } from "../../cache.ts";
 import { saveMedia, deleteMedia } from "../../storage.ts";
 import { safeSendActivity, sendToCommunity } from "../federation-v2/index.ts";
@@ -115,6 +116,19 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     // Enrich the main post
     const enrichedPost = await service.enrichPost(db, post, currentActor?.id, domain);
 
+    // Attach boost attribution (e.g. Group that shared this post)
+    const boosters = await db.getPostBoosters(post.id, 1);
+    if (boosters.length > 0) {
+      const booster = boosters[0];
+      enrichedPost.boosted_by = {
+        id: booster.public_id,
+        handle: booster.handle,
+        name: booster.name,
+        avatar_url: booster.avatar_url,
+        actor_type: booster.actor_type,
+      };
+    }
+
     return c.json({ post: enrichedPost, ancestors });
   });
 
@@ -151,6 +165,36 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
       next_cursor: nextCursor,
       op_author_id: parentAuthor?.public_id || null,
     });
+  });
+
+  // GET /posts/:id/likers - Get actors who liked a post
+  routes.get("/posts/:id/likers", async (c) => {
+    const publicId = c.req.param("id");
+    const db = c.get("db");
+    const domain = c.get("domain");
+
+    const post = await db.getPostByPublicId(publicId);
+    if (!post) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    const likers = await db.getPostLikers(post.id);
+    return c.json({ likers: likers.map(a => sanitizeActor(a, domain)) });
+  });
+
+  // GET /posts/:id/boosters - Get actors who boosted a post
+  routes.get("/posts/:id/boosters", async (c) => {
+    const publicId = c.req.param("id");
+    const db = c.get("db");
+    const domain = c.get("domain");
+
+    const post = await db.getPostByPublicId(publicId);
+    if (!post) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    const boosters = await db.getPostBoosters(post.id);
+    return c.json({ boosters: boosters.map(a => sanitizeActor(a, domain)) });
   });
 
   // GET /hashtag/:tag - Get posts by hashtag

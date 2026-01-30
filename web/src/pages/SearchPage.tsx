@@ -145,7 +145,7 @@ export function SearchPage() {
                                 )}
                               </div>
                               {actor.actor_type === 'Group' && (
-                                <span className="badge bg-info" style={{ fontSize: '0.65em' }}>
+                                <span className="badge" style={{ fontSize: '0.65em', backgroundColor: '#4ade80', color: '#000' }}>
                                   <i className="bi bi-people-fill me-1"></i>Group
                                 </span>
                               )}

@@ -314,12 +314,13 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
     const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
+    const filter = c.req.query("filter");
     const result = await service.getUserBoostedPosts(db, username, {
       limit,
       before,
       currentActorId: currentActor?.id,
       domain,
-
+      postsOnly: filter === 'posts',
     });
 
     if (!result) {
@@ -405,12 +406,13 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
     const before = parseIntSafe(c.req.query("before")) ?? undefined;
 
+    const filter = c.req.query("filter");
     const result = await service.getActorBoostedPosts(db, publicId, {
       limit,
       before,
       currentActorId: currentActor?.id,
       domain,
-
+      postsOnly: filter === 'posts',
     });
 
     if (!result) {

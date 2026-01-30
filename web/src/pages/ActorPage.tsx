@@ -31,7 +31,7 @@ export function ActorPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [followLoading, setFollowLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'boosts' | 'settings'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'boosts' | 'boosts_posts' | 'settings'>('posts');
   const [postSort, setPostSort] = useState<'new' | 'hot'>('new');
 
   // Follower/following state
@@ -100,6 +100,22 @@ export function ActorPage() {
     refresh: refreshBoosts,
   } = usePagination<Post>({ fetchFn: fetchBoosts, autoLoad: false });
 
+  // Boosted posts only (no replies) - for Group actors
+  const [boostsPostsLoaded, setBoostsPostsLoaded] = useState(false);
+  const fetchBoostsPosts = useCallback(async (cursor?: number) => {
+    if (!actor) return { items: [], next_cursor: null };
+    const data = await actors.getBoosts(actor.id, { before: cursor, filter: 'posts' });
+    return { items: data.posts, next_cursor: data.next_cursor };
+  }, [actor]);
+
+  const {
+    items: boostsPosts,
+    loadingMore: loadingMoreBoostsPosts,
+    hasMore: hasMoreBoostsPosts,
+    loadMore: loadMoreBoostsPosts,
+    refresh: refreshBoostsPosts,
+  } = usePagination<Post>({ fetchFn: fetchBoostsPosts, autoLoad: false });
+
   // Load profile
   const loadProfile = useCallback(async () => {
     if (!fullHandle) return;
@@ -108,8 +124,9 @@ export function ActorPage() {
     setError('');
     setRepliesLoaded(false);
     setBoostsLoaded(false);
+    setBoostsPostsLoaded(false);
     setPinnedPosts([]);
-    setActiveTab('posts');
+    setActiveTab('posts'); // will be overridden for Groups after profile loads
     setFollowersLoaded(false);
     setFollowingLoaded(false);
     setFollowers([]);
@@ -132,6 +149,9 @@ export function ActorPage() {
         setFollowStatus(profileData.follow_status ?? null);
         setIsOwnProfile(profileData.is_own_profile);
         setIsLocalUser(true);
+        if (profileData.actor.actor_type === 'Group') {
+          setActiveTab('boosts_posts');
+        }
 
         const pinnedData = await users.getPinned(username);
         setPinnedPosts(pinnedData.posts);
@@ -152,6 +172,9 @@ export function ActorPage() {
         setFollowers([]);
         setFollowing([]);
         setIsLocalUser(false);
+        if (remoteActor.actor_type === 'Group') {
+          setActiveTab('boosts_posts');
+        }
 
         const [actorData] = await Promise.all([
           actors.get(remoteActor.id).catch(() => ({ is_following: false, follow_status: null, is_own_profile: false })),
@@ -196,6 +219,13 @@ export function ActorPage() {
       refreshBoosts().then(() => setBoostsLoaded(true));
     }
   }, [activeTab, actor, boostsLoaded, refreshBoosts]);
+
+  // Load boosted posts (posts only) when switching to boosts_posts tab
+  useEffect(() => {
+    if (activeTab === 'boosts_posts' && actor && !boostsPostsLoaded) {
+      refreshBoostsPosts().then(() => setBoostsPostsLoaded(true));
+    }
+  }, [activeTab, actor, boostsPostsLoaded, refreshBoostsPosts]);
 
   // Load followers when modal opens
   useEffect(() => {
@@ -287,6 +317,7 @@ export function ActorPage() {
         activeTab={activeTab}
         showBoosts={true}
         showSettings={isOwnProfile}
+        actorType={actor.actor_type}
         onTabChange={setActiveTab}
       />
 
@@ -334,6 +365,23 @@ export function ActorPage() {
           ))}
           {hasMoreReplies && (
             <LoadMoreButton loading={loadingMoreReplies} onClick={loadMoreReplies} />
+          )}
+        </TabContent>
+      )}
+
+      {/* Boosted Posts Tab (posts only, for Groups) */}
+      {activeTab === 'boosts_posts' && (
+        <TabContent
+          loading={!boostsPostsLoaded}
+          empty={boostsPosts.length === 0}
+          emptyIcon="arrow-repeat"
+          emptyTitle="No boosted posts yet."
+        >
+          {boostsPosts.map((post) => (
+            <PostCard key={post.id} post={post} />
+          ))}
+          {hasMoreBoostsPosts && (
+            <LoadMoreButton loading={loadingMoreBoostsPosts} onClick={loadMoreBoostsPosts} />
           )}
         </TabContent>
       )}

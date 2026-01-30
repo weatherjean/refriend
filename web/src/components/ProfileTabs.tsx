@@ -1,41 +1,41 @@
-type TabType = 'posts' | 'replies' | 'boosts' | 'settings';
+type TabType = 'posts' | 'replies' | 'boosts' | 'boosts_posts' | 'settings';
 
 interface ProfileTabsProps {
   activeTab: TabType;
   showBoosts: boolean;
   showSettings?: boolean;
+  actorType?: 'Person' | 'Group';
   onTabChange: (tab: TabType) => void;
 }
 
-export function ProfileTabs({ activeTab, showBoosts, showSettings, onTabChange }: ProfileTabsProps) {
+export function ProfileTabs({ activeTab, showBoosts, showSettings, actorType, onTabChange }: ProfileTabsProps) {
+  const isGroup = actorType === 'Group';
+
+  const contentTabs: { key: TabType; label: string; show: boolean }[] = isGroup
+    ? [
+        { key: 'boosts_posts', label: 'Boosted posts', show: showBoosts },
+        { key: 'boosts', label: 'Boosted all', show: showBoosts },
+        { key: 'posts', label: 'Posts', show: true },
+        { key: 'replies', label: 'Replies', show: true },
+      ]
+    : [
+        { key: 'posts', label: 'Posts', show: true },
+        { key: 'replies', label: 'Replies', show: true },
+        { key: 'boosts', label: 'Boosts', show: showBoosts },
+      ];
+
   return (
     <ul className="nav nav-tabs mb-3">
-      <li className="nav-item">
-        <button
-          className={`nav-link ${activeTab === 'posts' ? 'active' : ''}`}
-          onClick={() => onTabChange('posts')}
-        >
-          Posts
-        </button>
-      </li>
-      <li className="nav-item">
-        <button
-          className={`nav-link ${activeTab === 'replies' ? 'active' : ''}`}
-          onClick={() => onTabChange('replies')}
-        >
-          Replies
-        </button>
-      </li>
-      {showBoosts && (
-        <li className="nav-item">
+      {contentTabs.filter(t => t.show).map(tab => (
+        <li key={tab.key} className="nav-item">
           <button
-            className={`nav-link ${activeTab === 'boosts' ? 'active' : ''}`}
-            onClick={() => onTabChange('boosts')}
+            className={`nav-link ${activeTab === tab.key ? 'active' : ''}`}
+            onClick={() => onTabChange(tab.key)}
           >
-            Boosts
+            {tab.label}
           </button>
         </li>
-      )}
+      ))}
       {showSettings && (
         <li className="nav-item ms-auto">
           <button

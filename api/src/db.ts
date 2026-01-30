@@ -113,6 +113,7 @@ export interface BoosterInfo {
   handle: string;
   name: string | null;
   avatar_url: string | null;
+  actor_type: string;
 }
 
 export interface PostWithActorAndBooster extends PostWithActor {
@@ -967,6 +968,7 @@ export class DB {
           handle: row.booster_handle as string,
           name: row.booster_name as string | null,
           avatar_url: row.booster_avatar_url as string | null,
+          actor_type: row.booster_actor_type as string,
         },
       };
     }
@@ -1062,7 +1064,8 @@ export class DB {
         )
         SELECT ${this.postWithActorSelect},
                ba.public_id as booster_public_id, ba.handle as booster_handle,
-               ba.name as booster_name, ba.avatar_url as booster_avatar_url
+               ba.name as booster_name, ba.avatar_url as booster_avatar_url,
+               ba.actor_type as booster_actor_type
         FROM deduped d
         JOIN posts p ON p.id = d.id
         JOIN actors a ON p.actor_id = a.id
@@ -1208,16 +1211,17 @@ export class DB {
     });
   }
 
-  async getBoostedPostsWithActor(actorId: number, limit = 20, before?: number): Promise<PostWithActor[]> {
+  async getBoostedPostsWithActor(actorId: number, limit = 20, before?: number, postsOnly = false): Promise<PostWithActor[]> {
     return this.query(async (client) => {
+      const postsOnlyClause = postsOnly ? ' AND p.in_reply_to_id IS NULL' : '';
       const query = before
         ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
            JOIN boosts b ON p.id = b.post_id
-           WHERE b.actor_id = $1 AND p.id < $2
+           WHERE b.actor_id = $1 AND p.id < $2${postsOnlyClause}
            ORDER BY p.id DESC LIMIT $3`
         : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
            JOIN boosts b ON p.id = b.post_id
-           WHERE b.actor_id = $1
+           WHERE b.actor_id = $1${postsOnlyClause}
            ORDER BY p.id DESC LIMIT $2`;
       const params = before ? [actorId, before, limit] : [actorId, limit];
       const result = await client.queryObject(query, params);

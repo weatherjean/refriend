@@ -28,7 +28,7 @@ export function ActorListItem({ actor, onClick, actionButton }: ActorListItemPro
             <i className="bi bi-globe2 flex-shrink-0" style={{ fontSize: '0.8em', color: '#fbbf24' }}></i>
           )}
           {actor.actor_type === 'Group' && (
-            <span className="badge bg-info flex-shrink-0" style={{ fontSize: '0.6em' }}>
+            <span className="badge flex-shrink-0" style={{ fontSize: '0.6em', backgroundColor: '#4ade80', color: '#000' }}>
               <i className="bi bi-people-fill me-1"></i>Group
             </span>
           )}
