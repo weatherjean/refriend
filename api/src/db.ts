@@ -804,9 +804,16 @@ export class DB {
             RETURNING *
           `;
         }
-        // Increment parent's replies_count if this is a reply
+        // Increment replies_count for all ancestors if this is a reply
         if (post.in_reply_to_id) {
-          await client.queryArray`UPDATE posts SET replies_count = replies_count + 1 WHERE id = ${post.in_reply_to_id}`;
+          await client.queryArray`
+            WITH RECURSIVE ancestors AS (
+              SELECT id, in_reply_to_id FROM posts WHERE id = ${post.in_reply_to_id}
+              UNION ALL
+              SELECT p.id, p.in_reply_to_id FROM posts p JOIN ancestors a ON p.id = a.in_reply_to_id
+            )
+            UPDATE posts SET replies_count = replies_count + 1 WHERE id IN (SELECT id FROM ancestors)
+          `;
         }
         await client.queryArray`COMMIT`;
         return result.rows[0];
@@ -1299,18 +1306,36 @@ export class DB {
     await this.query(async (client) => {
       await client.queryArray`BEGIN`;
       try {
-        // Get the post to check if it's a reply
+        // Get the post and count its descendants (cascade delete will remove them too)
         const result = await client.queryObject<{ in_reply_to_id: number | null }>`
           SELECT in_reply_to_id FROM posts WHERE id = ${id}
         `;
         const post = result.rows[0];
 
-        // Delete the post
+        // Count all descendants that will be cascade-deleted
+        const descendantResult = await client.queryObject<{ count: number }>`
+          WITH RECURSIVE descendants AS (
+            SELECT id FROM posts WHERE in_reply_to_id = ${id}
+            UNION ALL
+            SELECT p.id FROM posts p JOIN descendants d ON p.in_reply_to_id = d.id
+          )
+          SELECT COUNT(*)::int AS count FROM descendants
+        `;
+        const descendantCount = descendantResult.rows[0]?.count || 0;
+
+        // Delete the post (cascades to descendants)
         await client.queryArray`DELETE FROM posts WHERE id = ${id}`;
 
-        // Decrement parent's replies_count if this was a reply
+        // Decrement replies_count for all ancestors (this post + its descendants)
         if (post?.in_reply_to_id) {
-          await client.queryArray`UPDATE posts SET replies_count = GREATEST(0, replies_count - 1) WHERE id = ${post.in_reply_to_id}`;
+          await client.queryArray`
+            WITH RECURSIVE ancestors AS (
+              SELECT id, in_reply_to_id FROM posts WHERE id = ${post.in_reply_to_id}
+              UNION ALL
+              SELECT p.id, p.in_reply_to_id FROM posts p JOIN ancestors a ON p.id = a.in_reply_to_id
+            )
+            UPDATE posts SET replies_count = GREATEST(0, replies_count - (1 + ${descendantCount})) WHERE id IN (SELECT id FROM ancestors)
+          `;
         }
         await client.queryArray`COMMIT`;
       } catch (e) {
