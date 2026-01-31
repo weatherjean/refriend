@@ -22,7 +22,19 @@ psql $DATABASE_URL -f api/MIGRATION_REMOVE_COMMUNITIES.sql
 
 **Review:** The migration runs in a transaction and prints the count of actors to be deleted. Review before committing.
 
-### 2. Unify URL Structure (`/users/` -> `/@`)
+### 2. Add Post Types Support
+
+Adds support for Page and Article post types (needed for Lemmy community posts).
+
+```bash
+psql $DATABASE_URL -f api/MIGRATION_POST_TYPES.sql
+```
+
+**What it does:**
+- Adds `type` column (default 'Note') and `title` column to posts table
+- Adds check constraint for valid post types ('Note', 'Page', 'Article')
+
+### 3. Unify URL Structure (`/users/` -> `/@`)
 
 Updates local actor and post URIs/URLs from `/users/username` to `/@username` format.
 

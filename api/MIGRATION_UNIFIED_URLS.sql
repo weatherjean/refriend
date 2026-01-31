@@ -1,6 +1,8 @@
 -- Migration: Unify URL structure from /users/ to /@
 -- Only updates LOCAL actors and their posts. Remote actor URIs are NOT changed.
 
+BEGIN;
+
 -- Update local post URIs from /users/ to /@
 UPDATE posts SET uri = REPLACE(uri, '/users/', '/@')
 WHERE uri LIKE '%/users/%/posts/%'
@@ -21,3 +23,5 @@ WHERE user_id IS NOT NULL AND inbox_url LIKE '%/users/%';
 -- Update local actor URLs to match URIs
 UPDATE actors SET url = uri
 WHERE user_id IS NOT NULL;
+
+COMMIT;

@@ -49,7 +49,7 @@ function LandingPage() {
             <li>New features ship weekly</li>
           </ul>
           <p className="landing-text mb-0">
-            Share your thoughts in the <Link to="/c/feedback" className="landing-link">feedback community</Link>.
+            Share your thoughts by posting with the <Link to="/tags/feedbackriff" className="landing-link">#feedbackriff</Link> tag.
           </p>
         </div>
       </div>
@@ -92,9 +92,9 @@ function LandingPage() {
             <div className="card-body">
               <h5 className="mb-3">What is Riff?</h5>
               <p className="landing-text mb-3">
-                Riff combines the best of microblogging with moderated communities.
-                Post short updates to your followers, or share content to topic-based
-                communities where discussions are kept on-topic by community moderators.
+                Riff is a simple social platform connected to the open web.
+                Post short updates, share images and links, and follow people
+                across the fediverse.
               </p>
               <p className="landing-text mb-0">
                 Everything you post can be seen by users on Mastodon, Threads, and
@@ -139,7 +139,6 @@ function LandingPage() {
               <h5 className="mb-3">Core Features</h5>
               <ul className="landing-list mb-0">
                 <li><strong>Posts:</strong> Share text, images, and links with your followers</li>
-                <li><strong>Communities:</strong> Topic-based spaces with their own moderators and rules</li>
                 <li><strong>Hashtags:</strong> Discover and follow topics with tag pages</li>
                 <li><strong>Likes & Boosts:</strong> Engage with content and share it with your followers</li>
                 <li><strong>Following:</strong> Build your own timeline by following people and communities</li>
@@ -151,19 +150,10 @@ function LandingPage() {
           {/* Moderation Card */}
           <div className="card landing-card">
             <div className="card-body">
-              <h5 className="mb-3">Community Moderation</h5>
-              <p className="landing-text mb-3">
-                Each community has its own moderators who keep discussions healthy and on-topic.
-              </p>
-              <ul className="landing-list mb-3">
-                <li><strong>Community rules:</strong> Each community sets its own guidelines</li>
-                <li><strong>Post approval:</strong> Moderators can review posts before they go live</li>
-                <li><strong>Content removal:</strong> Off-topic or rule-breaking content can be removed</li>
-                <li><strong>Moderation logs:</strong> Transparent logs of all moderation actions</li>
-              </ul>
+              <h5 className="mb-3">Moderation</h5>
               <p className="landing-text mb-0">
-                We recognise that strong moderation for user feeds is equally important.
-                This is a challenge we'll tackle with priority if this platform is received well.
+                We recognise that strong moderation is essential for a healthy social platform.
+                This is a challenge we'll tackle with priority as the platform grows.
               </p>
             </div>
           </div>

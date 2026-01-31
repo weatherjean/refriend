@@ -22,7 +22,11 @@ export async function getCachedProfilePosts(actorId: number, limit: number, befo
 export async function setCachedProfilePosts(actorId: number, limit: number, before: number | undefined, value: unknown): Promise<void> {
   if (!kv) return;
   const key = ["profile", `${actorId}`, `${limit}`, before?.toString() ?? "none"];
-  await kv.set(key, value, { expireIn: CACHE_TTL_MS });
+  try {
+    await kv.set(key, value, { expireIn: CACHE_TTL_MS });
+  } catch {
+    // Silently skip caching if value exceeds Deno KV's 65KB limit
+  }
 }
 
 export async function invalidateProfileCache(actorId: number): Promise<void> {
@@ -47,7 +51,11 @@ export async function getCachedHashtagPosts(tag: string, limit: number, before?:
 export async function setCachedHashtagPosts(tag: string, limit: number, before: number | undefined, value: unknown): Promise<void> {
   if (!kv) return;
   const key = ["hashtag", tag.toLowerCase(), `${limit}`, before?.toString() ?? "none"];
-  await kv.set(key, value, { expireIn: CACHE_TTL_MS });
+  try {
+    await kv.set(key, value, { expireIn: CACHE_TTL_MS });
+  } catch {
+    // Silently skip caching if value exceeds Deno KV's 65KB limit
+  }
 }
 
 // ============ Trending Users Cache ============

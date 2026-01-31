@@ -307,10 +307,6 @@ export async function seed(db: DB, domain: string) {
   for (const user of users) {
     console.log(`  ${user.email} / ${user.password}`);
   }
-  console.log("\nCommunities:");
-  for (const community of communities) {
-    console.log(`  c/${community.name}`);
-  }
 }
 
 // Run if called directly

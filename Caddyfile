@@ -19,6 +19,9 @@
         reverse_proxy api:8000
     }
 
+    # Legacy /users/ redirect to /@
+    redir /users/{path} /@{path} permanent
+
     # ActivityPub content negotiation for /@* paths
     @ap_request {
         path /@*

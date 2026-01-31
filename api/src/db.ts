@@ -1355,6 +1355,18 @@ export class DB {
         `;
         const postCount = parseInt(countResult.rows[0]?.count ?? '0', 10);
 
+        // Decrement boosts_count for posts this actor boosted (before CASCADE removes boost records)
+        await client.queryArray`
+          UPDATE posts SET boosts_count = GREATEST(0, boosts_count - 1)
+          WHERE id IN (SELECT post_id FROM boosts WHERE actor_id = ${actorId})
+        `;
+
+        // Decrement likes_count for posts this actor liked (before CASCADE removes like records)
+        await client.queryArray`
+          UPDATE posts SET likes_count = GREATEST(0, likes_count - 1)
+          WHERE id IN (SELECT post_id FROM likes WHERE actor_id = ${actorId})
+        `;
+
         // Delete all posts by this actor (CASCADE will handle media, likes, etc.)
         await client.queryArray`DELETE FROM posts WHERE actor_id = ${actorId}`;
 

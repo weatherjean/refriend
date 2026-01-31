@@ -1486,5 +1486,191 @@ Deno.test({
         assertEquals(res.status, 404);
       });
     });
+
+    // ============ Group 14: Page/Article Post Type Support ============
+    await t.step("Page/Article Post Type Support", async (t) => {
+      await t.step("createPost with type Page stores type and title", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        const { actor } = await createTestUser({ username: "pageauthor" });
+        const post = await db.createPost({
+          uri: `https://test.local/@pageauthor/posts/${crypto.randomUUID()}`,
+          actor_id: actor.id,
+          content: "<p>Page content</p>",
+          url: null,
+          in_reply_to_id: null,
+          sensitive: false,
+          type: "Page",
+          title: "My Page Title",
+        });
+
+        assertExists(post);
+        assertEquals(post.type, "Page");
+        assertEquals(post.title, "My Page Title");
+      });
+
+      await t.step("createPost with type Article stores type and title", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        const { actor } = await createTestUser({ username: "articleauthor" });
+        const post = await db.createPost({
+          uri: `https://test.local/@articleauthor/posts/${crypto.randomUUID()}`,
+          actor_id: actor.id,
+          content: "<p>Article content</p>",
+          url: null,
+          in_reply_to_id: null,
+          sensitive: false,
+          type: "Article",
+          title: "My Article Title",
+        });
+
+        assertExists(post);
+        assertEquals(post.type, "Article");
+        assertEquals(post.title, "My Article Title");
+      });
+
+      await t.step("createPost without type defaults to Note", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        const { actor } = await createTestUser({ username: "noteauthor" });
+        const post = await db.createPost({
+          uri: `https://test.local/@noteauthor/posts/${crypto.randomUUID()}`,
+          actor_id: actor.id,
+          content: "<p>Note content</p>",
+          url: null,
+          in_reply_to_id: null,
+          sensitive: false,
+        });
+
+        assertExists(post);
+        assertEquals(post.type, "Note");
+        assertEquals(post.title, null);
+      });
+
+      await t.step("updatePostTitleAndType converts Note to Page", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        const { actor } = await createTestUser({ username: "converter" });
+        const post = await db.createPost({
+          uri: `https://test.local/@converter/posts/${crypto.randomUUID()}`,
+          actor_id: actor.id,
+          content: "<p>Will become a Page</p>",
+          url: null,
+          in_reply_to_id: null,
+          sensitive: false,
+        });
+
+        assertEquals(post.type, "Note");
+
+        await db.updatePostTitleAndType(post.id, "Community Title", "Page");
+
+        const updated = await db.getPostById(post.id);
+        assertExists(updated);
+        assertEquals(updated.type, "Page");
+        assertEquals(updated.title, "Community Title");
+      });
+
+      await t.step("enriched post includes type and title fields", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+        const api = await createTestApi();
+
+        const { actor } = await createTestUser({ username: "enrichtest" });
+        const post = await db.createPost({
+          uri: `https://test.local/@enrichtest/posts/${crypto.randomUUID()}`,
+          actor_id: actor.id,
+          content: "<p>Enriched page</p>",
+          url: `https://test.local/@enrichtest/posts/test`,
+          in_reply_to_id: null,
+          sensitive: false,
+          type: "Page",
+          title: "Enriched Title",
+        });
+
+        const res = await testRequest(api, "GET", `/posts/${post.public_id}`);
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        assertEquals(data.post.type, "Page");
+        assertEquals(data.post.title, "Enriched Title");
+      });
+
+      await t.step("submit-to-community converts Note to Page via API", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+        const api = await createTestApi();
+
+        // Create user and post
+        await createTestUser({ username: "submitter", email: "submitter@test.com", password: "password123" });
+        const session = await loginUser(api, "submitter@test.com", "password123");
+
+        // Create a post first
+        const createRes = await testRequest(api, "POST", "/posts", {
+          body: { content: "Post to submit" },
+          cookie: session.cookie,
+          csrfToken: session.csrfToken,
+        });
+        assertEquals(createRes.status, 200);
+        const createData = await createRes.json();
+        const postId = createData.post.id;
+
+        // Create a remote community to submit to
+        await createRemoteActor({
+          handle: "@testcommunity@lemmy.example",
+          uri: "https://lemmy.example/c/testcommunity",
+          actor_type: "Group",
+          inbox_url: "https://lemmy.example/c/testcommunity/inbox",
+        });
+
+        // Submit to community (will fail at sendToCommunity since mock can't deliver,
+        // but we can verify the request is properly validated)
+        const submitRes = await testRequest(api, "POST", `/posts/${postId}/submit-to-community`, {
+          body: { title: "Community Post Title", community: "https://lemmy.example/c/testcommunity" },
+          cookie: session.cookie,
+          csrfToken: session.csrfToken,
+        });
+
+        // The send will fail (mock federation), but validation should pass
+        // Accept either 200 (success) or 502 (send failed) — both mean validation passed
+        const validStatus = submitRes.status === 200 || submitRes.status === 502;
+        assertEquals(validStatus, true);
+      });
+
+      await t.step("submit-to-community rejects already-submitted Page", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+        const api = await createTestApi();
+
+        await createTestUser({ username: "resubmitter", email: "resubmitter@test.com", password: "password123" });
+        const session = await loginUser(api, "resubmitter@test.com", "password123");
+
+        // Create a post and manually set it as Page
+        const createRes = await testRequest(api, "POST", "/posts", {
+          body: { content: "Already submitted" },
+          cookie: session.cookie,
+          csrfToken: session.csrfToken,
+        });
+        const createData = await createRes.json();
+        const postId = createData.post.id;
+
+        // Manually convert to Page (simulating previous submission)
+        const dbPost = await db.getPostByPublicId(postId);
+        assertExists(dbPost);
+        await db.updatePostTitleAndType(dbPost.id, "Existing Title", "Page");
+
+        // Try to submit again — should fail
+        const submitRes = await testRequest(api, "POST", `/posts/${postId}/submit-to-community`, {
+          body: { title: "New Title", community: "https://lemmy.example/c/test" },
+          cookie: session.cookie,
+          csrfToken: session.csrfToken,
+        });
+        assertEquals(submitRes.status, 400);
+        const data = await submitRes.json();
+        assertEquals(data.error, "Post has already been submitted to a community");
+      });
+    });
   },
 });

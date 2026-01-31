@@ -66,7 +66,7 @@ export interface VideoEmbed {
 export interface Post {
   id: string;  // UUID
   uri: string;
-  type?: string;  // 'Note' | 'Page' | 'Article'
+  type?: 'Note' | 'Page' | 'Article';
   title?: string | null;
   content: string;
   url: string | null;

@@ -80,7 +80,7 @@ export interface Post {
   public_id: string;
   uri: string;
   actor_id: number;
-  type: string;
+  type: 'Note' | 'Page' | 'Article';
   title: string | null;
   content: string;
   url: string | null;
@@ -194,7 +194,7 @@ export interface SanitizedActor {
 export interface EnrichedPost {
   id: string;
   uri: string;
-  type: string;
+  type: 'Note' | 'Page' | 'Article';
   title: string | null;
   content: string;
   url: string | null;

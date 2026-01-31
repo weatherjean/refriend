@@ -82,6 +82,10 @@ app.onError((err, c) => {
 
 // Domain configuration - use DOMAIN env var if set, otherwise detect from request
 const CONFIGURED_DOMAIN = Deno.env.get("DOMAIN");
+if (!CONFIGURED_DOMAIN && Deno.env.get("ENV") === "production") {
+  console.error("FATAL: DOMAIN environment variable must be set in production");
+  Deno.exit(1);
+}
 
 app.use("*", async (c, next) => {
   const domain = CONFIGURED_DOMAIN || new URL(c.req.url).host;
