@@ -87,6 +87,8 @@ export interface Post {
   in_reply_to_id: number | null;
   addressed_to: string[];  // ActivityPub to/cc recipients (actor URIs)
   likes_count: number;
+  boosts_count: number;
+  replies_count: number;
   sensitive: boolean;
   link_preview: LinkPreview | null;
   video_embed: VideoEmbed | null;

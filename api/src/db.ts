@@ -83,13 +83,15 @@ export interface Post {
   public_id: string;
   uri: string;
   actor_id: number;
-  type: string;
+  type: 'Note' | 'Page' | 'Article';
   title: string | null;
   content: string;
   url: string | null;
   in_reply_to_id: number | null;
   addressed_to: string[];  // ActivityPub to/cc recipients (actor URIs)
   likes_count: number;
+  boosts_count: number;
+  replies_count: number;
   sensitive: boolean;
   link_preview: LinkPreview | null;
   video_embed: VideoEmbed | null;
@@ -953,13 +955,15 @@ export class DB {
       public_id: row.public_id as string,
       uri: row.uri as string,
       actor_id: row.actor_id as number,
-      type: (row.type as string) || 'Note',
+      type: ((row.type as string) || 'Note') as Post['type'],
       title: (row.title as string | null) ?? null,
       content: row.content as string,
       url: row.url as string | null,
       in_reply_to_id: row.in_reply_to_id as number | null,
       addressed_to: (row.addressed_to as string[]) || [],
       likes_count: row.likes_count as number,
+      boosts_count: (row.boosts_count as number) || 0,
+      replies_count: (row.replies_count as number) || 0,
       sensitive: row.sensitive as boolean,
       link_preview: row.link_preview as LinkPreview | null,
       video_embed: row.video_embed as VideoEmbed | null,

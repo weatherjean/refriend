@@ -152,7 +152,6 @@ export const federation = createFederation<void>({
   kv: new DenoKvStore(kv),
   queue,
   manuallyStartQueue,
-  behindProxy: true,
   // Use default firstKnock (rfc9421) - Fedify will fall back to draft-cavage if needed
   onOutboxError: (error, activity) => {
     const activityId = activity?.id?.href ?? "unknown";

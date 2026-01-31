@@ -97,12 +97,14 @@ Deno.test({
         assertExists(data.posts);
       });
 
-      await t.step("requires authentication", async () => {
+      await t.step("works without authentication (public feed)", async () => {
         await cleanDatabase();
         const api = await createTestApi();
 
         const res = await testRequest(api, "GET", "/posts/hot");
-        assertEquals(res.status, 401);
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        assertExists(data.posts);
       });
     });
 
