@@ -120,16 +120,6 @@ export async function fetchAndStoreNote(
       ? note.content
       : note.content?.toString() ?? "";
 
-    // For Article/Page, prepend title
-    if (titlePrefix) {
-      const escapedTitle = titlePrefix
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      const titleHtml = `<p><strong>${escapedTitle}</strong></p>`;
-      content = content ? `${titleHtml}\n${content}` : titleHtml;
-    }
-
     // Sanitize remote content
     const sanitized = validateAndSanitizeContent(content);
     if (sanitized === null) {
@@ -190,10 +180,15 @@ export async function fetchAndStoreNote(
       }
     }
 
+    // Determine post type
+    const postType = note instanceof Page ? 'Page' : note instanceof Article ? 'Article' : 'Note';
+
     // Create the post
     const post = await db.createPost({
       uri: note.id.href,
       actor_id: authorActor.id,
+      type: postType,
+      title: titlePrefix,
       content,
       url: urlString,
       in_reply_to_id: inReplyToId,

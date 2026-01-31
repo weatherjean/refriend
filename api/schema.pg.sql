@@ -17,14 +17,6 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Add column if it doesn't exist (for existing databases)
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'last_active_at') THEN
-    ALTER TABLE users ADD COLUMN last_active_at TIMESTAMPTZ;
-  END IF;
-END $$;
-
 -- Actors: Both local users and remote ActivityPub actors
 CREATE TABLE IF NOT EXISTS actors (
   id SERIAL PRIMARY KEY,
@@ -41,6 +33,7 @@ CREATE TABLE IF NOT EXISTS actors (
   actor_type TEXT NOT NULL DEFAULT 'Person' CHECK (actor_type IN ('Person', 'Group')),
   follower_count INTEGER NOT NULL DEFAULT 0,
   following_count INTEGER NOT NULL DEFAULT 0,
+  featured_fetched_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -148,17 +141,6 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
 );
-
--- Migration: Add csrf_token column if it doesn't exist
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'sessions' AND column_name = 'csrf_token') THEN
-    ALTER TABLE sessions ADD COLUMN csrf_token TEXT;
-    -- Backfill existing sessions with random tokens
-    UPDATE sessions SET csrf_token = encode(gen_random_bytes(32), 'base64') WHERE csrf_token IS NULL;
-    ALTER TABLE sessions ALTER COLUMN csrf_token SET NOT NULL;
-  END IF;
-END $$;
 
 -- Activities
 CREATE TABLE IF NOT EXISTS activities (

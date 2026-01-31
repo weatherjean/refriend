@@ -117,18 +117,23 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     // Enrich the main post
     const enrichedPost = await service.enrichPost(db, post, currentActor?.id, domain);
 
-    // Attach boost attribution (e.g. Group that shared this post)
-    const boosters = await db.getPostBoosters(post.id, 1);
-    if (boosters.length > 0) {
-      const booster = boosters[0];
-      enrichedPost.boosted_by = {
-        id: booster.public_id,
-        handle: booster.handle,
-        name: booster.name,
-        avatar_url: booster.avatar_url,
-        actor_type: booster.actor_type,
-      };
-    }
+    // Attach boost attribution (e.g. Group that shared this post) to main post and ancestors
+    const allEnriched = [enrichedPost, ...ancestors];
+    const allPosts = [post, ...ancestorPosts];
+    await Promise.all(allPosts.map(async (p, i) => {
+      if (p.boosts_count <= 0) return;
+      const boosters = await db.getPostBoosters(p.id, 1);
+      if (boosters.length > 0) {
+        const booster = boosters[0];
+        allEnriched[i].boosted_by = {
+          id: booster.public_id,
+          handle: booster.handle,
+          name: booster.name,
+          avatar_url: booster.avatar_url,
+          actor_type: booster.actor_type,
+        };
+      }
+    }));
 
     return c.json({ post: enrichedPost, ancestors });
   });

@@ -8,6 +8,7 @@
 import { assertEquals, assertExists, assertNotEquals } from "jsr:@std/assert";
 import { createFederation } from "@fedify/testing";
 import {
+  Add,
   Announce,
   Create,
   Delete,
@@ -16,6 +17,7 @@ import {
   Note,
   Person,
   Group,
+  Remove,
   Tombstone,
   Undo,
   Update,
@@ -1215,6 +1217,273 @@ Deno.test({
             object: new URL("https://test.local/users/nobody"),
           }),
         }));
+      });
+    });
+
+    // ============ Group 11: Pinned Posts DB Methods ============
+    await t.step("Pinned Posts DB Methods", async (t) => {
+      await t.step("clearPinnedPosts removes all pins for an actor", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        const { actor } = await createTestUser({ username: "pinner" });
+        const post1 = await createTestPost(actor, { content: "Pin 1" });
+        const post2 = await createTestPost(actor, { content: "Pin 2" });
+
+        await db.pinPost(actor.id, post1.id);
+        await db.pinPost(actor.id, post2.id);
+
+        const pinnedBefore = await db.getPinnedPosts(actor.id);
+        assertEquals(pinnedBefore.length, 2);
+
+        await db.clearPinnedPosts(actor.id);
+
+        const pinnedAfter = await db.getPinnedPosts(actor.id);
+        assertEquals(pinnedAfter.length, 0);
+      });
+
+      await t.step("updateFeaturedFetchedAt sets timestamp", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        const remoteActor = await createRemoteActor({
+          handle: "@remote@remote.example",
+          uri: "https://remote.example/users/remote",
+        });
+
+        // Initially null
+        const actorBefore = await db.getActorById(remoteActor.id);
+        assertExists(actorBefore);
+        assertEquals(actorBefore.featured_fetched_at, null);
+
+        await db.updateFeaturedFetchedAt(remoteActor.id);
+
+        const actorAfter = await db.getActorById(remoteActor.id);
+        assertExists(actorAfter);
+        assertNotEquals(actorAfter.featured_fetched_at, null);
+      });
+    });
+
+    // ============ Group 12: Add/Remove Handler for Featured (via receiveActivity) ============
+    await t.step("Add/Remove Handler for Featured (via receiveActivity)", async (t) => {
+      await t.step("Add pins an existing post to actor's featured", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        const remoteActor = await createRemoteActor({
+          handle: "@alice@remote.example",
+          uri: "https://remote.example/users/alice",
+        });
+        const noteUri = "https://remote.example/notes/pin-1";
+        await db.createPost({
+          uri: noteUri,
+          actor_id: remoteActor.id,
+          content: "<p>Pin me!</p>",
+          url: null,
+          in_reply_to_id: null,
+          sensitive: false,
+        });
+
+        const testFed = createFederation<null>({ contextData: null });
+        registerInboxHandlers(testFed, () => db, () => "test.local");
+
+        await testFed.receiveActivity(new Add({
+          id: new URL("https://remote.example/activities/add-1"),
+          actor: new Person({
+            id: new URL("https://remote.example/users/alice"),
+            preferredUsername: "alice",
+            inbox: new URL("https://remote.example/users/alice/inbox"),
+          }),
+          object: new URL(noteUri),
+          target: new URL("https://remote.example/users/alice/featured"),
+        }));
+
+        const pinnedPosts = await db.getPinnedPosts(remoteActor.id);
+        assertEquals(pinnedPosts.length, 1);
+        assertEquals(pinnedPosts[0].uri, noteUri);
+      });
+
+      await t.step("Add with non-featured target is ignored", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        const remoteActor = await createRemoteActor({
+          handle: "@bob@remote.example",
+          uri: "https://remote.example/users/bob",
+        });
+        const noteUri = "https://remote.example/notes/pin-2";
+        await db.createPost({
+          uri: noteUri,
+          actor_id: remoteActor.id,
+          content: "<p>Don't pin</p>",
+          url: null,
+          in_reply_to_id: null,
+          sensitive: false,
+        });
+
+        const testFed = createFederation<null>({ contextData: null });
+        registerInboxHandlers(testFed, () => db, () => "test.local");
+
+        await testFed.receiveActivity(new Add({
+          id: new URL("https://remote.example/activities/add-2"),
+          actor: new Person({
+            id: new URL("https://remote.example/users/bob"),
+            preferredUsername: "bob",
+            inbox: new URL("https://remote.example/users/bob/inbox"),
+          }),
+          object: new URL(noteUri),
+          target: new URL("https://remote.example/users/bob/followers"),
+        }));
+
+        const pinnedPosts = await db.getPinnedPosts(remoteActor.id);
+        assertEquals(pinnedPosts.length, 0);
+      });
+
+      await t.step("Remove unpins an existing pinned post", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        const remoteActor = await createRemoteActor({
+          handle: "@carol@remote.example",
+          uri: "https://remote.example/users/carol",
+        });
+        const noteUri = "https://remote.example/notes/unpin-1";
+        const post = await db.createPost({
+          uri: noteUri,
+          actor_id: remoteActor.id,
+          content: "<p>Unpin me</p>",
+          url: null,
+          in_reply_to_id: null,
+          sensitive: false,
+        });
+
+        // Pre-pin the post
+        await db.pinPost(remoteActor.id, post.id);
+        const pinnedBefore = await db.getPinnedPosts(remoteActor.id);
+        assertEquals(pinnedBefore.length, 1);
+
+        const testFed = createFederation<null>({ contextData: null });
+        registerInboxHandlers(testFed, () => db, () => "test.local");
+
+        await testFed.receiveActivity(new Remove({
+          id: new URL("https://remote.example/activities/remove-1"),
+          actor: new Person({
+            id: new URL("https://remote.example/users/carol"),
+            preferredUsername: "carol",
+            inbox: new URL("https://remote.example/users/carol/inbox"),
+          }),
+          object: new URL(noteUri),
+          target: new URL("https://remote.example/users/carol/featured"),
+        }));
+
+        const pinnedAfter = await db.getPinnedPosts(remoteActor.id);
+        assertEquals(pinnedAfter.length, 0);
+      });
+
+      await t.step("Remove with non-featured target is ignored", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        const remoteActor = await createRemoteActor({
+          handle: "@dave@remote.example",
+          uri: "https://remote.example/users/dave",
+        });
+        const noteUri = "https://remote.example/notes/keep-pinned-1";
+        const post = await db.createPost({
+          uri: noteUri,
+          actor_id: remoteActor.id,
+          content: "<p>Stay pinned</p>",
+          url: null,
+          in_reply_to_id: null,
+          sensitive: false,
+        });
+
+        await db.pinPost(remoteActor.id, post.id);
+
+        const testFed = createFederation<null>({ contextData: null });
+        registerInboxHandlers(testFed, () => db, () => "test.local");
+
+        await testFed.receiveActivity(new Remove({
+          id: new URL("https://remote.example/activities/remove-2"),
+          actor: new Person({
+            id: new URL("https://remote.example/users/dave"),
+            preferredUsername: "dave",
+            inbox: new URL("https://remote.example/users/dave/inbox"),
+          }),
+          object: new URL(noteUri),
+          target: new URL("https://remote.example/users/dave/followers"),
+        }));
+
+        // Should still be pinned
+        const pinnedAfter = await db.getPinnedPosts(remoteActor.id);
+        assertEquals(pinnedAfter.length, 1);
+      });
+
+      await t.step("Remove for non-existent post is a no-op", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        await createRemoteActor({
+          handle: "@eve@remote.example",
+          uri: "https://remote.example/users/eve",
+        });
+
+        const testFed = createFederation<null>({ contextData: null });
+        registerInboxHandlers(testFed, () => db, () => "test.local");
+
+        // Should not throw
+        await testFed.receiveActivity(new Remove({
+          id: new URL("https://remote.example/activities/remove-3"),
+          actor: new Person({
+            id: new URL("https://remote.example/users/eve"),
+            preferredUsername: "eve",
+            inbox: new URL("https://remote.example/users/eve/inbox"),
+          }),
+          object: new URL("https://remote.example/notes/nonexistent"),
+          target: new URL("https://remote.example/users/eve/featured"),
+        }));
+      });
+    });
+
+    // ============ Group 13: Pinned Posts API Routes ============
+    await t.step("Pinned Posts API Routes", async (t) => {
+      await t.step("GET /actors/:id/pinned returns pinned posts for local actor", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+        const api = await createTestApi();
+
+        const { actor } = await createTestUser({ username: "localpinner" });
+        const post = await createTestPost(actor, { content: "Pinned post" });
+        await db.pinPost(actor.id, post.id);
+
+        const res = await testRequest(api, "GET", `/actors/${actor.public_id}/pinned`);
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        assertEquals(data.posts.length, 1);
+        assertEquals(data.posts[0].content, "<p>Pinned post</p>");
+      });
+
+      await t.step("GET /actors/:id/pinned returns empty for remote actor without fetched data", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+
+        const remoteActor = await createRemoteActor({
+          handle: "@nopins@remote.example",
+          uri: "https://remote.example/users/nopins",
+        });
+
+        const res = await testRequest(api, "GET", `/actors/${remoteActor.public_id}/pinned`);
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        assertEquals(data.posts.length, 0);
+      });
+
+      await t.step("GET /actors/:id/pinned returns 404 for non-existent actor", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+
+        const res = await testRequest(api, "GET", `/actors/00000000-0000-0000-0000-000000000000/pinned`);
+        assertEquals(res.status, 404);
       });
     });
   },

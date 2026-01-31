@@ -10,6 +10,7 @@
 import {
   Accept,
   Activity,
+  Add,
   Announce,
   Create,
   Delete,
@@ -29,6 +30,7 @@ import {
   ParallelMessageQueue,
   Person,
   Reject,
+  Remove,
   Tombstone,
   Undo,
   Update,
@@ -1407,6 +1409,67 @@ export function registerInboxHandlers(
       const reason = isAuthor ? '' : isSameInstanceAsPost ? ' (origin mod)' : ' (community mod)';
       console.log(`[Delete] Post ${post.id} deleted by ${actorRecord.handle}${reason}`);
       await invalidateProfileCache(actorRecord.id);
+    })
+
+    // ============ Add Handler (Pin to Featured) ============
+    .on(Add, async (ctx, add) => {
+      const _db = getDbFn();
+      const _domain = getDomainFn();
+
+      let actorRecord: Actor | null = null;
+      try {
+        const actor = await add.getActor();
+        if (actor && isActor(actor)) {
+          actorRecord = await persistActor(_db, _domain, actor);
+        }
+      } catch {
+        return;
+      }
+      if (!actorRecord) return;
+
+      // Check if target is the featured collection
+      const targetUri = add.targetId?.href;
+      if (!targetUri || !targetUri.includes('/featured')) return;
+
+      const objectUri = add.objectId?.href;
+      if (!objectUri) return;
+
+      // Fetch and store the post
+      const postId = await fetchAndStoreNote(ctx, _db, _domain, objectUri);
+      if (!postId) return;
+
+      await _db.pinPost(actorRecord.id, postId);
+      console.log(`[Add] ${actorRecord.handle} pinned post ${postId}`);
+    })
+
+    // ============ Remove Handler (Unpin from Featured) ============
+    .on(Remove, async (_ctx, remove) => {
+      const _db = getDbFn();
+      const _domain = getDomainFn();
+
+      let actorRecord: Actor | null = null;
+      try {
+        const actor = await remove.getActor();
+        if (actor && isActor(actor)) {
+          actorRecord = await persistActor(_db, _domain, actor);
+        }
+      } catch {
+        return;
+      }
+      if (!actorRecord) return;
+
+      // Check if target is the featured collection
+      const targetUri = remove.targetId?.href;
+      if (!targetUri || !targetUri.includes('/featured')) return;
+
+      const objectUri = remove.objectId?.href;
+      if (!objectUri) return;
+
+      const post = await _db.getPostByUri(objectUri);
+      if (!post) return;
+
+      await _db.unpinPost(actorRecord.id, post.id);
+      console.log(`[Remove] ${actorRecord.handle} unpinned post ${post.id}`);
     });
 }
 

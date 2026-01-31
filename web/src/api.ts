@@ -83,6 +83,7 @@ export interface Post {
   attachments: Attachment[];
   link_preview: LinkPreview | null;
   video_embed: VideoEmbed | null;
+  addressed_to?: string[] | null;
   in_reply_to: {
     id: string;  // UUID
     uri: string;

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Modal, Button } from 'react-bootstrap';
 import { Post, Actor, posts as postsApi, follows } from '../api';
@@ -22,6 +22,14 @@ interface PostCardProps {
 export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardProps) {
   const navigate = useNavigate();
   const { user, actor } = useAuth();
+  const uniqueAttachments = useMemo(() => {
+    const seen = new Set<string>();
+    return (post.attachments || []).filter(a => {
+      if (seen.has(a.url)) return false;
+      seen.add(a.url);
+      return true;
+    });
+  }, [post.attachments]);
   const [liked, setLiked] = useState(post.liked ?? false);
   const [likesCount, setLikesCount] = useState(post.likes_count ?? 0);
   const [likeLoading, setLikeLoading] = useState(false);
@@ -144,6 +152,7 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
 
   const isOwnPost = !!(actor && post.author && actor.id === post.author.id);
   const canSubmitToCommunity = isOwnPost && postType !== 'Page' && !post.in_reply_to;
+  const alreadySubmitted = isOwnPost && postType === 'Page' && !post.in_reply_to;
 
   if (!post.author) return null;
 
@@ -152,7 +161,7 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
   const postLink = getPostLink(post);
 
   const handleCardClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('a, button')) return;
+    if ((e.target as HTMLElement).closest('a, button, .modal')) return;
     if (linkToPost) {
       navigate(postLink);
     }
@@ -333,10 +342,10 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
               </button>
             )}
 
-            {post.attachments && post.attachments.length > 0 && (
+            {uniqueAttachments.length > 0 && (
               <div className="post-attachments">
                 <ImageSlider
-                  attachments={post.attachments}
+                  attachments={uniqueAttachments}
                   onOpenLightbox={(index) => {
                     setLightboxIndex(index);
                     setLightboxOpen(true);
@@ -346,9 +355,9 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
               </div>
             )}
 
-            {post.attachments && post.attachments.length > 0 && (
+            {uniqueAttachments.length > 0 && (
               <ImageLightbox
-                attachments={post.attachments}
+                attachments={uniqueAttachments}
                 initialIndex={lightboxIndex}
                 isOpen={lightboxOpen}
                 onClose={() => setLightboxOpen(false)}
@@ -481,13 +490,23 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
             </button>
           )}
 
-          {canSubmitToCommunity && (
+          {!linkToPost && canSubmitToCommunity && (
             <button
               className="post-action-btn"
               onClick={openCommunityModal}
               title="Submit to community"
             >
               <i className="bi bi-send"></i>
+            </button>
+          )}
+
+          {!linkToPost && alreadySubmitted && (
+            <button
+              className="post-action-btn"
+              onClick={(e) => { e.stopPropagation(); setShowCommunityModal(true); }}
+              title="Submitted to community"
+            >
+              <i className="bi bi-send-check"></i>
             </button>
           )}
 
@@ -552,74 +571,99 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
       {/* Submit to Community Modal */}
       <Modal show={showCommunityModal} onHide={() => setShowCommunityModal(false)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Submit to Community</Modal.Title>
+          <Modal.Title>{alreadySubmitted ? 'Submitted to Community' : 'Submit to Community'}</Modal.Title>
         </Modal.Header>
-        <Modal.Body>
-          {submitError && (
-            <div className="alert alert-danger py-2">{submitError}</div>
-          )}
-          <div className="mb-3">
-            <label className="form-label fw-semibold">Title</label>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Post title"
-              value={communityTitle}
-              onChange={(e) => setCommunityTitle(e.target.value)}
-              maxLength={200}
-              disabled={submitLoading}
-            />
-            <div className="d-flex justify-content-end mt-1">
-              <small className={`fw-semibold ${communityTitle.length > 200 ? 'text-danger' : 'text-muted'}`}>
-                {200 - communityTitle.length}
-              </small>
-            </div>
-          </div>
-          <div className="mb-3">
-            <label className="form-label fw-semibold">Community</label>
-            {communitiesLoading ? (
-              <div className="text-muted small">Loading communities...</div>
-            ) : communities.length === 0 ? (
-              <div className="text-muted small">No communities found. Follow a community first.</div>
-            ) : (
-              <select
-                className="form-select"
-                value={selectedCommunity?.uri ?? ''}
-                onChange={(e) => {
-                  const c = communities.find(c => c.uri === e.target.value);
-                  setSelectedCommunity(c ?? null);
-                }}
-                disabled={submitLoading}
+        {alreadySubmitted ? (
+          <>
+            <Modal.Body>
+              <div className="mb-3">
+                <label className="form-label fw-semibold">Title</label>
+                <div>{postTitle}</div>
+              </div>
+              <div className="mb-3">
+                <label className="form-label fw-semibold">Community</label>
+                <div className="text-break">{post.addressed_to?.[0]}</div>
+              </div>
+              <div className="text-muted small mt-3">
+                To unsubmit, delete this post and create a new one.
+              </div>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={() => setShowCommunityModal(false)}>
+                Close
+              </Button>
+            </Modal.Footer>
+          </>
+        ) : (
+          <>
+            <Modal.Body>
+              {submitError && (
+                <div className="alert alert-danger py-2">{submitError}</div>
+              )}
+              <div className="mb-3">
+                <label className="form-label fw-semibold">Title</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Post title"
+                  value={communityTitle}
+                  onChange={(e) => setCommunityTitle(e.target.value)}
+                  maxLength={200}
+                  disabled={submitLoading}
+                />
+                <div className="d-flex justify-content-end mt-1">
+                  <small className={`fw-semibold ${communityTitle.length > 200 ? 'text-danger' : 'text-muted'}`}>
+                    {200 - communityTitle.length}
+                  </small>
+                </div>
+              </div>
+              <div className="mb-3">
+                <label className="form-label fw-semibold">Community</label>
+                {communitiesLoading ? (
+                  <div className="text-muted small">Loading communities...</div>
+                ) : communities.length === 0 ? (
+                  <div className="text-muted small">No communities found. Follow a community first.</div>
+                ) : (
+                  <select
+                    className="form-select"
+                    value={selectedCommunity?.uri ?? ''}
+                    onChange={(e) => {
+                      const c = communities.find(c => c.uri === e.target.value);
+                      setSelectedCommunity(c ?? null);
+                    }}
+                    disabled={submitLoading}
+                  >
+                    <option value="">Select a community...</option>
+                    {communities.map(c => (
+                      <option key={c.id} value={c.uri}>
+                        {c.name || c.handle} ({c.handle})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={() => setShowCommunityModal(false)} disabled={submitLoading}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleSubmitToCommunity}
+                disabled={submitLoading || !communityTitle.trim() || !selectedCommunity}
               >
-                <option value="">Select a community...</option>
-                {communities.map(c => (
-                  <option key={c.id} value={c.uri}>
-                    {c.name || c.handle} ({c.handle})
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowCommunityModal(false)} disabled={submitLoading}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleSubmitToCommunity}
-            disabled={submitLoading || !communityTitle.trim() || !selectedCommunity}
-          >
-            {submitLoading ? (
-              <>
-                <span className="spinner-border spinner-border-sm me-2"></span>
-                Submitting...
-              </>
-            ) : (
-              'Submit'
-            )}
-          </Button>
-        </Modal.Footer>
+                {submitLoading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm me-2"></span>
+                    Submitting...
+                  </>
+                ) : (
+                  'Submit'
+                )}
+              </Button>
+            </Modal.Footer>
+          </>
+        )}
       </Modal>
     </div>
   );

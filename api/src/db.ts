@@ -42,6 +42,7 @@ export interface Actor {
   actor_type: "Person" | "Group";
   follower_count: number;
   following_count: number;
+  featured_fetched_at: string | null;
   created_at: string;
 }
 
@@ -306,7 +307,7 @@ export class DB {
 
   // ============ Actors ============
 
-  async createActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "follower_count" | "following_count"> & { follower_count?: number; following_count?: number }): Promise<Actor> {
+  async createActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "follower_count" | "following_count" | "featured_fetched_at"> & { follower_count?: number; following_count?: number }): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type, follower_count)
@@ -473,7 +474,7 @@ export class DB {
     });
   }
 
-  async upsertActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "user_id" | "follower_count" | "following_count">): Promise<Actor> {
+  async upsertActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "user_id" | "follower_count" | "following_count" | "featured_fetched_at">): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type)
@@ -995,6 +996,7 @@ export class DB {
         actor_type: (row.author_actor_type as "Person" | "Group") || "Person",
         follower_count: (row.author_follower_count as number) || 0,
         following_count: (row.author_following_count as number) || 0,
+        featured_fetched_at: null,
         created_at: String(row.author_created_at),
       },
     };
@@ -1019,7 +1021,7 @@ export class DB {
   }
 
   private readonly postWithActorSelect = `
-    p.id, p.public_id, p.uri, p.actor_id, p.content, p.url, p.in_reply_to_id, p.addressed_to, p.likes_count, p.sensitive, p.link_preview, p.video_embed, p.created_at,
+    p.id, p.public_id, p.uri, p.actor_id, p.type, p.title, p.content, p.url, p.in_reply_to_id, p.addressed_to, p.likes_count, p.sensitive, p.link_preview, p.video_embed, p.created_at,
     a.id as author_id, a.public_id as author_public_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
     a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
     a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,
@@ -1793,6 +1795,18 @@ export class DB {
         LIMIT ${limit}
       `;
       return result.rows;
+    });
+  }
+
+  async updateFeaturedFetchedAt(actorId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`UPDATE actors SET featured_fetched_at = NOW() WHERE id = ${actorId}`;
+    });
+  }
+
+  async clearPinnedPosts(actorId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`DELETE FROM pinned_posts WHERE actor_id = ${actorId}`;
     });
   }
 

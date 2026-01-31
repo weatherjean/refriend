@@ -313,6 +313,19 @@ export function ActorPage() {
         </p>
       )}
 
+      {pinnedPosts.length > 0 && (
+        <div className="mb-3">
+          {pinnedPosts.map((post) => (
+            <div key={`pinned-${post.id}`} className="position-relative">
+              <span className="badge bg-warning text-dark position-absolute" style={{ top: 8, right: 8, zIndex: 1 }}>
+                <i className="bi bi-pin-fill me-1"></i>Pinned
+              </span>
+              <PostCard post={post} />
+            </div>
+          ))}
+        </div>
+      )}
+
       <ProfileTabs
         activeTab={activeTab}
         showBoosts={true}
@@ -325,24 +338,16 @@ export function ActorPage() {
       {activeTab === 'posts' && (
         <TabContent
           loading={postsLoading}
-          empty={posts.length === 0 && pinnedPosts.length === 0}
+          empty={posts.length === 0}
           emptyIcon={actor.is_local ? 'file-text' : 'globe'}
           emptyTitle={actor.is_local ? 'No posts yet.' : 'No posts from this user yet.'}
           emptyDescription={actor.is_local ? undefined : 'New posts will appear after you follow them.'}
         >
-          {(posts.length > 0 || pinnedPosts.length > 0) && (
+          {posts.length > 0 && (
             <div className="d-flex justify-content-end mb-3">
               <SortToggle value={postSort} onChange={setPostSort} />
             </div>
           )}
-          {pinnedPosts.map((post) => (
-            <div key={`pinned-${post.id}`} className="position-relative">
-              <span className="badge bg-warning text-dark position-absolute" style={{ top: 8, right: 8, zIndex: 1 }}>
-                <i className="bi bi-pin-fill me-1"></i>Pinned
-              </span>
-              <PostCard post={post} />
-            </div>
-          ))}
           {posts.filter(p => !pinnedPosts.some(pp => pp.id === p.id)).map((post) => (
             <PostCard key={post.id} post={post} />
           ))}

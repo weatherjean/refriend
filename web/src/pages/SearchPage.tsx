@@ -143,7 +143,7 @@ export function SearchPage() {
                 ) : (
                   <i className="bi bi-globe2 me-1"></i>
                 )}
-                Get from lemmy.world
+                Search Lemmy communities
               </button>
               <i
                 className="bi bi-info-circle text-muted"

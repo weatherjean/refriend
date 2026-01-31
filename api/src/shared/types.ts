@@ -40,6 +40,7 @@ export interface Actor {
   actor_type: "Person" | "Group";
   follower_count: number;
   following_count: number;
+  featured_fetched_at: string | null;
   created_at: string;
 }
 

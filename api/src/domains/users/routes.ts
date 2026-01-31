@@ -379,7 +379,7 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
 
   // GET /actors/:id/pinned - Get pinned posts for an actor
   // For local actors: returns from pinned_posts table
-  // For remote actors: returns empty (federation fetch not supported in domain routes)
+  // For remote actors: fetches featured collection via AP (cached 1 hour)
   routes.get("/actors/:id/pinned", async (c) => {
     const publicId = c.req.param("id");
     const db = c.get("db");
@@ -387,7 +387,7 @@ export function createUserRoutes(federation: Federation<void>): Hono<UsersEnv> {
     const domain = c.get("domain");
     const currentActor = c.get("actor");
 
-    const result = await service.getActorPinnedPosts(db, publicId, currentActor?.id, domain);
+    const result = await service.getActorPinnedPosts(db, publicId, currentActor?.id, domain, federation, c.req.raw);
 
     if (!result) {
       return c.json({ error: "Actor not found" }, 404);

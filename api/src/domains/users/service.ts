@@ -5,6 +5,7 @@
  */
 
 import type { DB } from "../../db.ts";
+import type { Federation } from "@fedify/fedify";
 import type { User, Actor } from "../../shared/types.ts";
 import type {
   RegisterInput,
@@ -25,6 +26,7 @@ import {
   setCachedProfilePosts,
 } from "../../cache.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
+import { fetchAndStoreNote } from "../federation-v2/utils/notes.ts";
 
 
 // ============ Password Hashing ============
@@ -686,7 +688,8 @@ export async function getActorPinnedPosts(
   publicId: string,
   currentActorId?: number,
   domain?: string,
-
+  federation?: Federation<void>,
+  request?: Request,
 ): Promise<{ posts: unknown[]; isLocal: boolean } | null> {
   const actor = await db.getActorByPublicId(publicId);
   if (!actor) {
@@ -702,8 +705,87 @@ export async function getActorPinnedPosts(
     };
   }
 
-  // For remote actors, return empty - let federation handler deal with it
-  return { posts: [], isLocal: false };
+  // For remote actors, fetch featured collection if stale or never fetched
+  if (federation && request && domain) {
+    const FEATURED_TTL_MS = 60 * 60 * 1000; // 1 hour
+    const isStale = !actor.featured_fetched_at ||
+      (Date.now() - new Date(actor.featured_fetched_at).getTime()) > FEATURED_TTL_MS;
+
+    if (isStale) {
+      try {
+        await fetchRemoteFeaturedCollection(db, domain, actor, federation, request);
+      } catch (e) {
+        console.error(`[Featured] Failed to fetch featured for ${actor.handle}:`, e);
+      }
+    }
+  }
+
+  const posts = await db.getPinnedPostsWithActor(actor.id);
+  return {
+    posts: await enrichPostsBatch(db, posts, currentActorId, domain),
+    isLocal: false,
+  };
+}
+
+async function fetchRemoteFeaturedCollection(
+  db: DB,
+  domain: string,
+  actor: Actor,
+  federation: Federation<void>,
+  request: Request,
+): Promise<void> {
+  const ctx = federation.createContext(request, undefined);
+  const docLoader = ctx.documentLoader;
+
+  // Fetch the actor's AP profile to get the featured collection URL
+  const { document: actorDoc } = await docLoader(actor.uri);
+  // deno-lint-ignore no-explicit-any
+  const featuredUrl = (actorDoc as any)?.featured;
+  if (!featuredUrl) {
+    console.log(`[Featured] No featured collection for ${actor.handle}`);
+    await db.updateFeaturedFetchedAt(actor.id);
+    return;
+  }
+
+  const featuredUri = typeof featuredUrl === 'string' ? featuredUrl :
+    (featuredUrl?.id || featuredUrl);
+  if (!featuredUri || typeof featuredUri !== 'string') {
+    await db.updateFeaturedFetchedAt(actor.id);
+    return;
+  }
+
+  console.log(`[Featured] Fetching featured collection for ${actor.handle}: ${featuredUri}`);
+
+  // Fetch the featured collection
+  const { document: collectionDoc } = await docLoader(featuredUri);
+  // deno-lint-ignore no-explicit-any
+  const items = (collectionDoc as any)?.orderedItems || (collectionDoc as any)?.items || [];
+
+  // Collect post IDs from fetched items
+  const pinnedPostIds: number[] = [];
+
+  for (const item of items) {
+    const itemUri = typeof item === 'string' ? item : item?.id;
+    if (!itemUri) continue;
+
+    try {
+      const postId = await fetchAndStoreNote(ctx, db, domain, itemUri);
+      if (postId) {
+        pinnedPostIds.push(postId);
+      }
+    } catch (e) {
+      console.error(`[Featured] Failed to fetch item ${itemUri}:`, e);
+    }
+  }
+
+  // Clear existing pinned posts for this actor, then insert fresh ones
+  await db.clearPinnedPosts(actor.id);
+  for (const postId of pinnedPostIds) {
+    await db.pinPost(actor.id, postId);
+  }
+  await db.updateFeaturedFetchedAt(actor.id);
+
+  console.log(`[Featured] Stored ${pinnedPostIds.length} pinned posts for ${actor.handle}`);
 }
 
 export async function getActorBoostedPosts(
