@@ -60,5 +60,63 @@ export function createSearchRoutes(federation: Federation<void>): Hono<SearchEnv
     return c.json(result);
   });
 
+  // GET /search/external - Search Lemmy for communities
+  routes.get("/search/external", rateLimit("search"), async (c) => {
+    const user = c.get("user");
+    if (!user) {
+      return c.json({ error: "Login required" }, 401);
+    }
+
+    const query = c.req.query("q") || "";
+    if (!query.trim()) {
+      return c.json({ communities: [] });
+    }
+    if (query.length > 200) {
+      return c.json({ error: "Query too long" }, 400);
+    }
+
+    const baseUrl = "https://lemmy.world";
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      const res = await fetch(
+        `${baseUrl}/api/v3/search?q=${encodeURIComponent(query)}&type_=Communities&sort=TopAll&listing_type=All&limit=20`,
+        {
+          headers: { "User-Agent": "Riff/1.0" },
+          signal: controller.signal,
+        },
+      );
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        return c.json({ error: `Upstream returned ${res.status}` }, 502);
+      }
+
+      const data = await res.json();
+      // deno-lint-ignore no-explicit-any
+      const communities = (data.communities || []).map((item: any) => ({
+        name: item.community?.name ?? "",
+        title: item.community?.title ?? "",
+        description: item.community?.description || null,
+        actor_id: item.community?.actor_id ?? "",
+        icon: item.community?.icon || null,
+        subscribers: item.counts?.subscribers ?? 0,
+        users_active_month: item.counts?.users_active_month ?? 0,
+      })).sort((a: { subscribers: number }, b: { subscribers: number }) =>
+        b.subscribers - a.subscribers
+      );
+
+      return c.json({ communities });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return c.json({ error: "Upstream timeout" }, 504);
+      }
+      console.error("[ExternalSearch] Error:", err);
+      return c.json({ error: "Failed to query external source" }, 502);
+    }
+  });
+
   return routes;
 }

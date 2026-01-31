@@ -394,10 +394,25 @@ export const follows = {
 };
 
 // Search
+export interface ExternalCommunity {
+  name: string;
+  title: string;
+  description: string | null;
+  actor_id: string;
+  icon: string | null;
+  subscribers: number;
+  users_active_month: number;
+}
+
 export const search = {
   query: (q: string, type?: 'all' | 'users' | 'posts', handleOnly?: boolean) =>
     fetchJson<{ users: Actor[]; posts: Post[]; postsLowConfidence: boolean }>(
       `/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}${handleOnly ? '&handleOnly=true' : ''}`
+    ),
+  external: (q: string, source: 'lemmy' | 'piefed') =>
+    fetchJson<{ communities: ExternalCommunity[] }>(
+      `/search/external?q=${encodeURIComponent(q)}&source=${source}`,
+      { silent: true },
     ),
 };
 

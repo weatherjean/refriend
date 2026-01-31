@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { search, Actor, Post } from '../api';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { search, ExternalCommunity, Actor, Post } from '../api';
 import { getUsername, getProfileLink } from '../utils';
 import { Avatar } from '../components/Avatar';
 import { EmptyState } from '../components/EmptyState';
@@ -19,6 +19,40 @@ export function SearchPage() {
   const [searched, setSearched] = useState(false);
   const [activeTab, setActiveTab] = useState<'users' | 'posts'>('users');
 
+  // External community discovery
+  const [externalResults, setExternalResults] = useState<Record<string, ExternalCommunity[]>>({});
+  const [externalLoading, setExternalLoading] = useState<Record<string, boolean>>({});
+  const [externalError, setExternalError] = useState<Record<string, string | null>>({});
+  const [showLemmyInfo, setShowLemmyInfo] = useState(false);
+  const navigate = useNavigate();
+
+  const searchExternal = async () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    setExternalLoading(prev => ({ ...prev, lemmy: true }));
+    setExternalError(prev => ({ ...prev, lemmy: null }));
+    try {
+      const { communities } = await search.external(trimmed, 'lemmy');
+      setExternalResults(prev => ({ ...prev, lemmy: communities }));
+    } catch {
+      setExternalError(prev => ({ ...prev, lemmy: 'Failed to search' }));
+    } finally {
+      setExternalLoading(prev => ({ ...prev, lemmy: false }));
+    }
+  };
+
+  const getHandleFromActorId = (actorId: string): string => {
+    // actor_id looks like https://lemmy.ml/c/memes → extract community@instance
+    try {
+      const url = new URL(actorId);
+      const parts = url.pathname.split('/').filter(Boolean);
+      const name = parts[parts.length - 1];
+      return `${name}@${url.host}`;
+    } catch {
+      return actorId;
+    }
+  };
+
   const performSearch = async (searchQuery: string) => {
     let trimmed = searchQuery.trim();
     if (!trimmed) return;
@@ -30,6 +64,8 @@ export function SearchPage() {
 
     setSearching(true);
     setSearched(true);
+    setExternalResults({});
+    setExternalError({});
     try {
       const { users: userRes, posts: postRes, postsLowConfidence: lowConf } = await search.query(trimmed);
       setUserResults(userRes || []);
@@ -61,6 +97,8 @@ export function SearchPage() {
     setUserResults([]);
     setPostResults([]);
     setPostsLowConfidence(false);
+    setExternalResults({});
+    setExternalError({});
   };
 
   return (
@@ -92,6 +130,89 @@ export function SearchPage() {
 
       {searched && (
         <>
+          {/* External community discovery */}
+          <div className="mb-3">
+            <div className="d-flex align-items-center gap-2">
+              <button
+                className="btn btn-outline-secondary btn-sm"
+                onClick={() => searchExternal()}
+                disabled={externalLoading['lemmy']}
+              >
+                {externalLoading['lemmy'] ? (
+                  <span className="spinner-border spinner-border-sm me-1" />
+                ) : (
+                  <i className="bi bi-globe2 me-1"></i>
+                )}
+                Get from lemmy.world
+              </button>
+              <i
+                className="bi bi-info-circle text-muted"
+                style={{ cursor: 'pointer' }}
+                onClick={() => setShowLemmyInfo(v => !v)}
+              ></i>
+            </div>
+            {showLemmyInfo && (
+              <p className="text-muted small mt-1 mb-0">
+                lemmy.world federates with most Lemmy and PieFed instances, so this is a pretty exhaustive fediverse community search.
+              </p>
+            )}
+
+            {(() => {
+              const results = externalResults['lemmy'];
+              const error = externalError['lemmy'];
+              if (!results && !error) return null;
+              return (
+                <div className="mt-2">
+                  <h6 className="text-muted small text-uppercase">
+                    Lemmy Communities
+                  </h6>
+                  {error && (
+                    <div className="alert alert-warning small py-2">{error}</div>
+                  )}
+                  {results && results.length === 0 && (
+                    <p className="text-muted small">No communities found.</p>
+                  )}
+                  {results && results.length > 0 && (
+                    <div className="list-group mb-2">
+                      {results.map(community => {
+                        const handle = getHandleFromActorId(community.actor_id);
+                        return (
+                          <button
+                            key={community.actor_id}
+                            className="list-group-item list-group-item-action"
+                            onClick={() => navigate(`/@${handle}`)}
+                          >
+                            <div className="d-flex align-items-center gap-3">
+                              <Avatar src={community.icon} name={community.name} size="md" className="flex-shrink-0" />
+                              <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                                <div className="d-flex align-items-center gap-1">
+                                  <span className="fw-semibold text-truncate">{community.title}</span>
+                                  <span className="badge" style={{ fontSize: '0.65em', backgroundColor: '#4ade80', color: '#000' }}>
+                                    <i className="bi bi-people-fill me-1"></i>Group
+                                  </span>
+                                </div>
+                                <small className="text-muted d-block text-truncate">{handle}</small>
+                                {community.description && (
+                                  <small className="text-muted d-none d-md-block text-truncate mt-1">
+                                    {community.description.slice(0, 200)}
+                                  </small>
+                                )}
+                                <small className="text-muted">
+                                  {community.subscribers.toLocaleString()} subscribers
+                                  {community.users_active_month > 0 && ` · ${community.users_active_month.toLocaleString()} active/mo`}
+                                </small>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
           {userResults.length === 0 && postResults.length === 0 ? (
             <EmptyState icon="search" title={`No results found for "${query}"`} />
           ) : (

@@ -37,7 +37,8 @@ export function ProfileHeader({
 
   const [bioExpanded, setBioExpanded] = useState(false);
   const [bioTruncated, setBioTruncated] = useState(false);
-  const bioRef = useRef<HTMLDivElement>(null);
+  const mobileBioRef = useRef<HTMLDivElement>(null);
+  const desktopBioRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setBioExpanded(false);
@@ -45,9 +46,18 @@ export function ProfileHeader({
   }, [actor.id]);
 
   useEffect(() => {
-    if (bioRef.current) {
-      setBioTruncated(bioRef.current.scrollHeight > bioRef.current.clientHeight);
-    }
+    const checkTruncation = () => {
+      for (const el of [mobileBioRef.current, desktopBioRef.current]) {
+        if (el && el.offsetParent !== null && el.scrollHeight > el.clientHeight) {
+          setBioTruncated(true);
+          return;
+        }
+      }
+      setBioTruncated(false);
+    };
+    // Delay to ensure layout is computed after render
+    const id = requestAnimationFrame(checkTruncation);
+    return () => cancelAnimationFrame(id);
   }, [actor.bio, bioExpanded]);
 
   return (
@@ -81,9 +91,13 @@ export function ProfileHeader({
           {actor.bio && (
             <div>
               <div
-                ref={bioRef}
+                ref={mobileBioRef}
                 className="mt-2"
-                style={!bioExpanded ? { maxHeight: '6em', overflow: 'hidden' } : undefined}
+                style={!bioExpanded ? {
+                  maxHeight: '6em',
+                  overflow: 'hidden',
+                  ...(bioTruncated ? { maskImage: 'linear-gradient(to bottom, black 50%, transparent)', WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent)' } : {}),
+                } : undefined}
                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(actor.bio) }}
               />
               {(bioTruncated || bioExpanded) && (
@@ -121,7 +135,7 @@ export function ProfileHeader({
               <button
                 className={`btn ${buttonClass}`}
                 onClick={onFollow}
-                disabled={followLoading || isPending}
+                disabled={followLoading}
               >
                 {followLoading ? (
                   <span className="spinner-border spinner-border-sm"></span>
@@ -163,9 +177,13 @@ export function ProfileHeader({
             {actor.bio && (
               <div>
                 <div
-                  ref={bioRef}
+                  ref={desktopBioRef}
                   className="mt-2"
-                  style={!bioExpanded ? { maxHeight: '6em', overflow: 'hidden' } : undefined}
+                  style={!bioExpanded ? {
+                    maxHeight: '6em',
+                    overflow: 'hidden',
+                    ...(bioTruncated ? { maskImage: 'linear-gradient(to bottom, black 50%, transparent)', WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent)' } : {}),
+                  } : undefined}
                   dangerouslySetInnerHTML={{ __html: sanitizeHtml(actor.bio) }}
                 />
                 {(bioTruncated || bioExpanded) && (
@@ -204,7 +222,7 @@ export function ProfileHeader({
               <button
                 className={`btn ${buttonClass}`}
                 onClick={onFollow}
-                disabled={followLoading || isPending}
+                disabled={followLoading}
               >
                 {followLoading ? (
                   <span className="spinner-border spinner-border-sm"></span>
