@@ -127,18 +127,6 @@ export interface Like {
   created_at: string;
 }
 
-export interface Activity {
-  id: number;
-  uri: string;
-  type: string;
-  actor_id: number;
-  object_uri: string | null;
-  object_type: string | null;
-  raw_json: string;
-  direction: "inbound" | "outbound";
-  created_at: string;
-}
-
 // ============ Notification Types ============
 
 export type NotificationType = 'like' | 'boost' | 'follow' | 'reply' | 'mention';

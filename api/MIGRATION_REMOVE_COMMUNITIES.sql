@@ -33,7 +33,14 @@ DELETE FROM actors WHERE actor_type = 'Group' AND created_by IS NOT NULL;
 -- 5. NOW safe to drop created_by column
 ALTER TABLE actors DROP COLUMN IF EXISTS created_by;
 
--- 6. Drop community indexes
+-- 6. Drop legacy activities table (no longer used after federation-v2)
+DROP TABLE IF EXISTS activities CASCADE;
+DROP INDEX IF EXISTS idx_activities_actor;
+DROP INDEX IF EXISTS idx_activities_type;
+DROP INDEX IF EXISTS idx_activities_object_uri;
+DROP INDEX IF EXISTS idx_activities_created_at;
+
+-- 7. Drop community indexes
 DROP INDEX IF EXISTS idx_posts_community;
 DROP INDEX IF EXISTS idx_community_admins_community;
 DROP INDEX IF EXISTS idx_community_admins_actor;

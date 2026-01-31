@@ -142,19 +142,6 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
 );
 
--- Activities
-CREATE TABLE IF NOT EXISTS activities (
-  id SERIAL PRIMARY KEY,
-  uri TEXT NOT NULL UNIQUE,
-  type TEXT NOT NULL,
-  actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
-  object_uri TEXT,
-  object_type TEXT,
-  raw_json TEXT NOT NULL,
-  direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 -- Notifications
 CREATE TABLE IF NOT EXISTS notifications (
   id SERIAL PRIMARY KEY,
@@ -271,12 +258,6 @@ CREATE INDEX IF NOT EXISTS idx_likes_actor_id ON likes(actor_id);
 CREATE INDEX IF NOT EXISTS idx_boosts_post_id ON boosts(post_id);
 CREATE INDEX IF NOT EXISTS idx_boosts_actor_id ON boosts(actor_id);
 CREATE INDEX IF NOT EXISTS idx_boosts_actor_created ON boosts(actor_id, created_at DESC);
-
--- Activities
-CREATE INDEX IF NOT EXISTS idx_activities_actor ON activities(actor_id);
-CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type);
-CREATE INDEX IF NOT EXISTS idx_activities_direction ON activities(direction);
-CREATE INDEX IF NOT EXISTS idx_activities_uri ON activities(uri);
 
 -- Hashtags
 CREATE INDEX IF NOT EXISTS idx_post_hashtags_hashtag ON post_hashtags(hashtag_id);

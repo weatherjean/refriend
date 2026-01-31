@@ -143,18 +143,6 @@ export interface Like {
   created_at: string;
 }
 
-export interface Activity {
-  id: number;
-  uri: string;
-  type: string;
-  actor_id: number;
-  object_uri: string | null;
-  object_type: string | null;
-  raw_json: string;
-  direction: "inbound" | "outbound";
-  created_at: string;
-}
-
 export class DB {
   private pool: Pool;
 
@@ -743,18 +731,6 @@ export class DB {
         JOIN likes l ON p.id = l.post_id
         WHERE l.actor_id = ${actorId}
         ORDER BY l.created_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `;
-      return result.rows;
-    });
-  }
-
-  async getOutboxActivitiesPaginated(actorId: number, limit: number, offset: number): Promise<Activity[]> {
-    return this.query(async (client) => {
-      const result = await client.queryObject<Activity>`
-        SELECT * FROM activities
-        WHERE actor_id = ${actorId} AND direction = 'outbound'
-        ORDER BY created_at DESC
         LIMIT ${limit} OFFSET ${offset}
       `;
       return result.rows;
@@ -1924,28 +1900,6 @@ export class DB {
         DELETE FROM sessions WHERE expires_at <= NOW()
       `;
       return result.rowCount ?? 0;
-    });
-  }
-
-  // ============ Activities ============
-
-  async storeActivity(activity: Omit<Activity, "id" | "created_at">): Promise<Activity> {
-    return this.query(async (client) => {
-      const result = await client.queryObject<Activity>`
-        INSERT INTO activities (uri, type, actor_id, object_uri, object_type, raw_json, direction)
-        VALUES (${activity.uri}, ${activity.type}, ${activity.actor_id}, ${activity.object_uri},
-                ${activity.object_type}, ${activity.raw_json}, ${activity.direction})
-        ON CONFLICT(uri) DO UPDATE SET raw_json = EXCLUDED.raw_json
-        RETURNING *
-      `;
-      return result.rows[0];
-    });
-  }
-
-  async getActivityByUri(uri: string): Promise<Activity | null> {
-    return this.query(async (client) => {
-      const result = await client.queryObject<Activity>`SELECT * FROM activities WHERE uri = ${uri}`;
-      return result.rows[0] || null;
     });
   }
 
