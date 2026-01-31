@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { posts as postsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
+import { PageHeader } from '../components/PageHeader';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { LoadMoreButton } from '../components/LoadMoreButton';
@@ -26,10 +27,11 @@ export function HotPage() {
 
   return (
     <div>
-      <h4 className="mb-4">
-        <i className="bi bi-fire text-danger me-2"></i>
-        Hot Posts
-      </h4>
+      <PageHeader
+        title="Hot"
+        icon="fire"
+        subtitle="Trending posts from across the community, ranked by recent activity."
+      />
 
       {postList.length === 0 ? (
         <EmptyState icon="fire" title="No hot posts yet." description="Start interacting with posts!" />

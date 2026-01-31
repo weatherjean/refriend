@@ -478,17 +478,13 @@ export async function getTimelinePosts(
   actorId: number,
   limit: number,
   before?: number,
-  sort: "new" | "hot" = "new",
   domain?: string,
-  _communityDb?: unknown,
-  offset?: number
 ): Promise<PostsListResponse> {
-  const posts = await repository.getTimelinePosts(db, actorId, limit + 1, before, sort, offset);
+  const posts = await repository.getTimelinePosts(db, actorId, limit + 1, before);
   const hasMore = posts.length > limit;
   const resultPosts = hasMore ? posts.slice(0, limit) : posts;
-  // For hot feeds, use offset-based pagination; for new feeds, use cursor-based
   const nextCursor = hasMore && resultPosts.length > 0
-    ? (sort === 'hot' ? (offset ?? 0) + limit : resultPosts[resultPosts.length - 1].id)
+    ? resultPosts[resultPosts.length - 1].id
     : null;
 
   // Build a map of post id -> booster info for posts that were boosted into the timeline

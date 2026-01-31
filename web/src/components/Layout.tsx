@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect, FormEvent } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useFeed } from '../context/FeedContext';
+
 import { useScrollLockEffect } from '../context/ScrollLockContext';
 import { getUsername } from '../utils';
 import { tags, notifications as notificationsApi } from '../api';
@@ -16,7 +16,7 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const { user, actor, logout } = useAuth();
-  const { feedType, setFeedType } = useFeed();
+
   const navigate = useNavigate();
   const location = useLocation();
   const [popularTags, setPopularTags] = useState<{ name: string; count: number }[]>([]);
@@ -110,10 +110,17 @@ export function Layout({ children }: LayoutProps) {
             </div>
           </form>
 
+          <Link to="/guide" className="d-block text-muted small mb-3" style={{ paddingLeft: '0.75rem' }} onClick={() => setMobileMenuOpen(false)}>
+            <i className="bi bi-book me-1"></i> Guide to Riff
+          </Link>
+
           {/* Navigation */}
           <div className="list-group sidebar-nav mb-4">
             <Link to="/" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
               <i className="bi bi-house-fill me-2"></i> Feed
+            </Link>
+            <Link to="/hot" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
+              <i className="bi bi-fire me-2"></i> Hot
             </Link>
             <Link to="/explore" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
               <i className="bi bi-hash me-2"></i> Tags
@@ -135,26 +142,6 @@ export function Layout({ children }: LayoutProps) {
               </>
             )}
           </div>
-
-          {/* Feed Toggle (only for logged-in users) */}
-          {user && (
-            <div className="btn-group w-100 mb-4" role="group">
-              <button
-                type="button"
-                className={`btn btn-sm ${feedType === 'new' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                onClick={() => setFeedType('new')}
-              >
-                <i className="bi bi-clock-fill me-1"></i> New
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${feedType === 'hot' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                onClick={() => setFeedType('hot')}
-              >
-                <i className="bi bi-fire me-1"></i> Hot
-              </button>
-            </div>
-          )}
 
           {/* New Post Button */}
           {user && (

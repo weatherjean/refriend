@@ -1066,51 +1066,48 @@ export class DB {
     });
   }
 
-  async getHotPosts(limit = 10): Promise<PostWithActor[]> {
+  async getHotPosts(limit = 10, offset = 0): Promise<PostWithActor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject(`
         SELECT ${this.postWithActorSelect}
         FROM posts p
         JOIN actors a ON p.actor_id = a.id
         WHERE p.in_reply_to_id IS NULL AND p.hot_score > 0
-        ORDER BY p.hot_score DESC, p.id DESC LIMIT $1
-      `, [limit]);
+          AND p.sensitive = false
+          AND p.created_at < NOW() - INTERVAL '1 hour'
+        ORDER BY p.hot_score DESC, p.id DESC LIMIT $1 OFFSET $2
+      `, [limit, offset]);
       return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
     });
   }
 
-  async getHomeFeedWithActor(actorId: number, limit = 20, before?: number, sort: 'new' | 'hot' = 'new', offset?: number): Promise<PostWithActorAndBooster[]> {
+  async getHomeFeedWithActor(actorId: number, limit = 20, before?: number): Promise<PostWithActorAndBooster[]> {
     return this.query(async (client) => {
-      // For hot sort, we use offset pagination; for new sort, we use cursor pagination
-      const orderBy = sort === 'hot' ? 'hot_score DESC, id DESC' : 'id DESC';
-      const finalOrderBy = sort === 'hot' ? 'p.hot_score DESC, p.id DESC' : 'p.id DESC';
-      const useBefore = sort === 'new' && before;
-      const useOffset = sort === 'hot' && offset;
-      // Oversample each branch then merge - trades edge-case correctness for performance
-      const branchLimit = (offset ?? 0) + limit * 3;
+      const useBefore = before != null;
+      const branchLimit = limit * 3;
 
       const baseQuery = `
         WITH timeline_posts AS (
           -- Posts from followed users - no booster
-          (SELECT p.id, p.hot_score, NULL::integer as booster_actor_id FROM posts p
+          (SELECT p.id, NULL::integer as booster_actor_id FROM posts p
            JOIN follows f ON p.actor_id = f.following_id
            WHERE f.follower_id = $1 AND f.status = 'accepted' AND p.in_reply_to_id IS NULL
              ${useBefore ? 'AND p.id < $2' : ''}
-           ORDER BY ${orderBy} LIMIT ${branchLimit})
+           ORDER BY id DESC LIMIT ${branchLimit})
 
           UNION ALL
 
           -- Posts boosted by followed users - track booster
-          (SELECT p.id, p.hot_score, b.actor_id as booster_actor_id FROM posts p
+          (SELECT p.id, b.actor_id as booster_actor_id FROM posts p
            JOIN boosts b ON p.id = b.post_id
            JOIN follows f ON b.actor_id = f.following_id
            WHERE f.follower_id = $1 AND f.status = 'accepted' AND p.in_reply_to_id IS NULL
              ${useBefore ? 'AND p.id < $2' : ''}
-           ORDER BY ${orderBy} LIMIT ${branchLimit})
+           ORDER BY id DESC LIMIT ${branchLimit})
         ),
         deduped AS (
           -- Prefer direct posts over boosts (NULLS FIRST means non-boosted entries win)
-          SELECT DISTINCT ON (id) id, hot_score, booster_actor_id
+          SELECT DISTINCT ON (id) id, booster_actor_id
           FROM timeline_posts
           ORDER BY id, booster_actor_id NULLS FIRST
         )
@@ -1122,11 +1119,10 @@ export class DB {
         JOIN posts p ON p.id = d.id
         JOIN actors a ON p.actor_id = a.id
         LEFT JOIN actors ba ON d.booster_actor_id = ba.id
-        ORDER BY ${finalOrderBy}
+        ORDER BY p.id DESC
         LIMIT ${useBefore ? '$3' : '$2'}
-        ${useOffset ? `OFFSET $3` : ''}
       `;
-      const params = useBefore ? [actorId, before, limit] : useOffset ? [actorId, limit, offset] : [actorId, limit];
+      const params = useBefore ? [actorId, before, limit] : [actorId, limit];
       const result = await client.queryObject(baseQuery, params);
       return result.rows.map(row => this.parsePostWithActorAndBooster(row as Record<string, unknown>));
     });

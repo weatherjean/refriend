@@ -65,20 +65,23 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     });
   });
 
-  // GET /posts/hot - Get hot posts from user's timeline
+  // GET /posts/hot - Get hot posts from all actors (public, no NSFW, >1h old)
   routes.get("/posts/hot", async (c) => {
-    const actor = c.get("actor");
-    if (!actor) {
-      return c.json({ error: "Authentication required" }, 401);
-    }
-
     const db = c.get("db");
     const domain = c.get("domain");
+    const currentActor = c.get("actor");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
-    const offset = parseIntSafe(c.req.query("offset")) ?? undefined;
+    const offset = parseIntSafe(c.req.query("offset")) ?? 0;
 
-    const result = await service.getTimelinePosts(db, actor.id, limit, undefined, "hot", domain, undefined, offset);
-    return c.json(result);
+    const posts = await db.getHotPosts(limit + 1, offset);
+    const hasMore = posts.length > limit;
+    const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+    const nextCursor = hasMore ? offset + limit : null;
+
+    return c.json({
+      posts: await service.enrichPostsBatch(db, resultPosts, currentActor?.id, domain),
+      next_cursor: nextCursor,
+    });
   });
 
   // GET /timeline - Get authenticated user's timeline
@@ -92,9 +95,8 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const domain = c.get("domain");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
     const before = parseIntSafe(c.req.query("before")) ?? undefined;
-    const sort = c.req.query("sort") === "hot" ? "hot" : "new";
 
-    const result = await service.getTimelinePosts(db, actor.id, limit, before, sort, domain);
+    const result = await service.getTimelinePosts(db, actor.id, limit, before, domain);
     return c.json(result);
   });
 

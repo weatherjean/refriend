@@ -18,6 +18,8 @@ import { AllActivityPage } from './pages/AllActivityPage';
 import { ContentPolicyPage } from './pages/ContentPolicyPage';
 import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsPage } from './pages/TermsPage';
+import { GuidePage } from './pages/GuidePage';
+import { HotPage } from './pages/HotPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { useAuth } from './context/AuthContext';
 import { StackedModals } from './components/StackedModals';
@@ -39,6 +41,8 @@ export const modalRoutes = [
   { path: '/tags/:tag', element: <TagPage /> },
   { path: '/following', element: <FollowingPage /> },
   { path: '/install', element: <InstallPage /> },
+  { path: '/guide', element: <GuidePage /> },
+  { path: '/hot', element: <HotPage /> },
   { path: '/all', element: <AllActivityPage /> },
   { path: '/policy', element: <ContentPolicyPage /> },
   { path: '/privacy', element: <PrivacyPolicyPage /> },

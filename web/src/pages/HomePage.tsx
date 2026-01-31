@@ -7,7 +7,6 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { LoadMoreButton } from '../components/LoadMoreButton';
 import { useAuth } from '../context/AuthContext';
-import { useFeed } from '../context/FeedContext';
 import { usePagination } from '../hooks';
 
 function LandingPage() {
@@ -196,23 +195,15 @@ function LandingPage() {
 
 export function HomePage() {
   const { user } = useAuth();
-  const { feedType } = useFeed();
   const [refreshing, setRefreshing] = useState(false);
-
-  // For logged-in users, use the toggle; for guests, show landing page
-  const isHotFeed = user && feedType === 'hot';
 
   const fetchPosts = useCallback(async (cursor?: number) => {
     if (!user) {
       return { items: [], next_cursor: null };
     }
-    if (isHotFeed) {
-      const { posts, next_cursor } = await postsApi.getHot(cursor ? { offset: cursor, limit: 30 } : { limit: 30 });
-      return { items: posts, next_cursor };
-    }
     const { posts, next_cursor } = await postsApi.getTimeline(cursor ? { before: cursor } : undefined);
     return { items: posts, next_cursor };
-  }, [user, isHotFeed]);
+  }, [user]);
 
   const {
     items: posts,
@@ -221,7 +212,7 @@ export function HomePage() {
     hasMore,
     refresh,
     loadMore,
-  } = usePagination<Post>({ fetchFn: fetchPosts, key: `${user?.id ?? 'guest'}-${feedType}` });
+  } = usePagination<Post>({ fetchFn: fetchPosts, key: `${user?.id ?? 'guest'}` });
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -238,17 +229,12 @@ export function HomePage() {
     return <LoadingSpinner />;
   }
 
-  const title = isHotFeed ? 'Hot' : 'New';
-  const icon = isHotFeed ? 'fire' : 'clock-fill';
-  const emptyDescription = isHotFeed
-    ? 'No hot posts right now.'
-    : 'Follow some users or join communities to see posts here.';
-
   return (
     <div>
       <PageHeader
-        title={title}
-        icon={icon}
+        title="Home"
+        icon="house-fill"
+        subtitle="Latest posts from actors you follow."
         onRefresh={handleRefresh}
         refreshing={refreshing}
       />
@@ -257,7 +243,7 @@ export function HomePage() {
         <EmptyState
           icon="inbox"
           title="No posts yet."
-          description={emptyDescription}
+          description="Follow some users to see posts here."
         />
       ) : (
         <>

@@ -1,1 +1,1 @@
-Can we cound subcomments on the parent post, like can we easily bubble up on add and remove on delete in a transaction or something?
+in feed we should be able to specify if it's people only or people+group

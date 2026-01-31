@@ -52,8 +52,8 @@ export async function getRecentPosts(
   return db.getPublicTimelineWithActor(limit, before);
 }
 
-export async function getHotPosts(db: DB, limit: number): Promise<PostWithActor[]> {
-  return db.getHotPosts(limit);
+export async function getHotPosts(db: DB, limit: number, offset = 0): Promise<PostWithActor[]> {
+  return db.getHotPosts(limit, offset);
 }
 
 export async function getTimelinePosts(
@@ -61,10 +61,8 @@ export async function getTimelinePosts(
   actorId: number,
   limit: number,
   before?: number,
-  sort: "new" | "hot" = "new",
-  offset?: number
 ): Promise<PostWithActorAndBooster[]> {
-  return db.getHomeFeedWithActor(actorId, limit, before, sort, offset);
+  return db.getHomeFeedWithActor(actorId, limit, before);
 }
 
 export async function getPostMedia(db: DB, postId: number): Promise<Array<{
