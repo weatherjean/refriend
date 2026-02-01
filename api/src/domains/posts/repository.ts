@@ -31,29 +31,12 @@ export async function getPostsByActorWithActor(
   return db.getPostsByActorWithActor(actorId, limit, before, sort);
 }
 
-export async function getRepliesByActorWithActor(
-  db: DB,
-  actorId: number,
-  limit: number,
-  before?: number
-): Promise<PostWithActor[]> {
-  return db.getRepliesByActorWithActor(actorId, limit, before);
-}
-
-export async function getReplies(db: DB, postId: number): Promise<PostWithActor[]> {
-  return db.getRepliesWithActor(postId);
-}
-
 export async function getRecentPosts(
   db: DB,
   limit: number,
   before?: number
 ): Promise<PostWithActor[]> {
   return db.getPublicTimelineWithActor(limit, before);
-}
-
-export async function getHotPosts(db: DB, limit: number, offset = 0): Promise<PostWithActor[]> {
-  return db.getHotPosts(limit, offset);
 }
 
 export async function getTimelinePosts(
@@ -94,10 +77,6 @@ export async function getHashtags(db: DB, postId: number): Promise<string[]> {
 
 export async function getBatchHashtags(db: DB, postIds: number[]): Promise<Map<number, string[]>> {
   return db.getHashtagsForPosts(postIds);
-}
-
-export async function getRepliesCount(db: DB, postId: number): Promise<number> {
-  return db.getRepliesCount(postId);
 }
 
 export async function searchPosts(
@@ -178,10 +157,6 @@ export async function createReport(
 
 export async function getPostsByIds(db: DB, ids: number[]): Promise<Map<number, Post>> {
   return db.getPostsByIds(ids);
-}
-
-export async function getRepliesCounts(db: DB, postIds: number[]): Promise<Map<number, number>> {
-  return db.getRepliesCounts(postIds);
 }
 
 // ============ Create/Delete Operations ============

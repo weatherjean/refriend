@@ -91,6 +91,9 @@ export interface Post {
     url: string | null;
     created_at: string;
     author: Actor | null;
+    likes_count: number;
+    boosts_count: number;
+    replies_count: number;
   } | null;
   boosted_by?: {
     id: string;

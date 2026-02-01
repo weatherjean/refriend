@@ -26,6 +26,7 @@ import { saveMedia, deleteMedia } from "../../storage.ts";
 import { safeSendActivity, sendToCommunity } from "../federation-v2/index.ts";
 import { rateLimit } from "../../middleware/rate-limit.ts";
 import { parseIntSafe } from "../../shared/utils.ts";
+import { getHotFeedCache } from "../../hot-feed.ts";
 
 interface PostsEnv {
   Variables: {
@@ -73,10 +74,22 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
     const offset = parseIntSafe(c.req.query("offset")) ?? 0;
 
-    const posts = await db.getHotPosts(limit + 1, offset);
-    const hasMore = posts.length > limit;
-    const resultPosts = hasMore ? posts.slice(0, limit) : posts;
-    const nextCursor = hasMore ? offset + limit : null;
+    // Use in-memory cache if available, fall back to DB query
+    const cached = getHotFeedCache();
+    let resultPosts;
+    let nextCursor: number | null;
+
+    if (cached) {
+      const slice = cached.slice(offset, offset + limit + 1);
+      const hasMore = slice.length > limit;
+      resultPosts = hasMore ? slice.slice(0, limit) : slice;
+      nextCursor = hasMore ? offset + limit : null;
+    } else {
+      const posts = await db.getHotPosts(limit + 1, offset);
+      const hasMore = posts.length > limit;
+      resultPosts = hasMore ? posts.slice(0, limit) : posts;
+      nextCursor = hasMore ? offset + limit : null;
+    }
 
     return c.json({
       posts: await service.enrichPostsBatch(db, resultPosts, currentActor?.id, domain),

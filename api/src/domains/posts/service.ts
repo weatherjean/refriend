@@ -365,12 +365,11 @@ export async function enrichPostsBatch(
   const postIds = posts.map((p) => p.id);
 
   // Batch fetch all related data
-  const [hashtagsMap, mediaMap, likedSet, boostedSet, repliesMap, pinnedSet] = await Promise.all([
+  const [hashtagsMap, mediaMap, likedSet, boostedSet, pinnedSet] = await Promise.all([
     repository.getBatchHashtags(db, postIds),
     repository.getBatchPostMedia(db, postIds),
     currentActorId ? db.getLikedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
     currentActorId ? db.getBoostedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
-    db.getRepliesCounts(postIds),
     currentActorId ? db.getPinnedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
   ]);
 
@@ -414,7 +413,7 @@ export async function enrichPostsBatch(
       liked: likedSet.has(post.id),
       boosted: boostedSet.has(post.id),
       pinned: pinnedSet.has(post.id),
-      replies_count: repliesMap.get(post.id) ?? 0,
+      replies_count: post.replies_count ?? 0,
       in_reply_to: parentPost ? {
         id: parentPost.public_id,
         uri: parentPost.uri,
@@ -422,6 +421,9 @@ export async function enrichPostsBatch(
         url: parentPost.url,
         created_at: formatDate(parentPost.created_at),
         author: parentPost.author ? sanitizeActor(parentPost.author, domain) : null,
+        likes_count: parentPost.likes_count ?? 0,
+        boosts_count: (parentPost as Post & { boosts_count?: number }).boosts_count ?? 0,
+        replies_count: parentPost.replies_count ?? 0,
       } : null,
       sensitive: post.sensitive ?? false,
       attachments: mediaMap.get(post.id) ?? [],
@@ -455,19 +457,6 @@ export async function getRecentPosts(
     posts: enrichedPosts,
     next_cursor: nextCursor,
   };
-}
-
-/**
- * Get hot posts
- */
-export async function getHotPosts(
-  db: DB,
-  limit: number,
-  currentActorId?: number,
-  domain?: string,
-): Promise<EnrichedPost[]> {
-  const posts = await repository.getHotPosts(db, limit);
-  return enrichPostsBatch(db, posts, currentActorId, domain);
 }
 
 /**
@@ -546,22 +535,6 @@ export async function getPost(
   }
 
   return enriched;
-}
-
-/**
- * Get replies to a post
- */
-export async function getReplies(
-  db: DB,
-  publicId: string,
-  currentActorId?: number,
-  domain?: string,
-): Promise<EnrichedPost[]> {
-  const post = await repository.getPostByPublicId(db, publicId);
-  if (!post) return [];
-
-  const replies = await repository.getReplies(db, post.id);
-  return enrichPostsBatch(db, replies, currentActorId, domain);
 }
 
 /**

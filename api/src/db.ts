@@ -909,18 +909,6 @@ export class DB {
     });
   }
 
-  async getRepliesByActor(actorId: number, limit = 50): Promise<Post[]> {
-    return this.query(async (client) => {
-      const result = await client.queryObject<Post>`
-        SELECT * FROM posts
-        WHERE actor_id = ${actorId} AND in_reply_to_id IS NOT NULL
-        ORDER BY created_at DESC
-        LIMIT ${limit}
-      `;
-      return result.rows;
-    });
-  }
-
   async getHomeFeed(actorId: number, limit = 50): Promise<Post[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Post>`
@@ -1008,7 +996,7 @@ export class DB {
   }
 
   private readonly postWithActorSelect = `
-    p.id, p.public_id, p.uri, p.actor_id, p.type, p.title, p.content, p.url, p.in_reply_to_id, p.addressed_to, p.likes_count, p.sensitive, p.link_preview, p.video_embed, p.created_at,
+    p.id, p.public_id, p.uri, p.actor_id, p.type, p.title, p.content, p.url, p.in_reply_to_id, p.addressed_to, p.likes_count, p.boosts_count, p.replies_count, p.sensitive, p.link_preview, p.video_embed, p.created_at,
     a.id as author_id, a.public_id as author_public_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
     a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
     a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,
@@ -1208,23 +1196,6 @@ export class DB {
     });
   }
 
-  async getRepliesCounts(postIds: number[]): Promise<Map<number, number>> {
-    if (postIds.length === 0) return new Map();
-    return this.query(async (client) => {
-      const result = await client.queryObject<{ post_id: number; count: bigint }>`
-        SELECT in_reply_to_id as post_id, COUNT(*) as count
-        FROM posts
-        WHERE in_reply_to_id = ANY(${postIds})
-        GROUP BY in_reply_to_id
-      `;
-      const map = new Map<number, number>();
-      for (const row of result.rows) {
-        map.set(row.post_id, Number(row.count));
-      }
-      return map;
-    });
-  }
-
   async getPinnedPostsWithActor(actorId: number): Promise<PostWithActor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject(`
@@ -1407,9 +1378,17 @@ export class DB {
         // Bulk delete all posts in a single query (FK constraints handled by CASCADE)
         await client.queryArray`DELETE FROM posts WHERE id = ANY(${allPostIds})`;
 
-        // Update parent's replies_count if the root post was a reply
+        // Decrement replies_count for all ancestors (parent, grandparent, etc.)
         if (parentId) {
-          await client.queryArray`UPDATE posts SET replies_count = GREATEST(0, replies_count - 1) WHERE id = ${parentId}`;
+          const deletedCount = allPosts.length;
+          await client.queryArray`
+            WITH RECURSIVE ancestors AS (
+              SELECT id, in_reply_to_id FROM posts WHERE id = ${parentId}
+              UNION ALL
+              SELECT p.id, p.in_reply_to_id FROM posts p JOIN ancestors a ON p.id = a.in_reply_to_id
+            )
+            UPDATE posts SET replies_count = GREATEST(0, replies_count - ${deletedCount}) WHERE id IN (SELECT id FROM ancestors)
+          `;
         }
 
         await client.queryArray`COMMIT`;
@@ -1462,26 +1441,6 @@ export class DB {
         map.set(row.post_id, existing);
       }
       return map;
-    });
-  }
-
-  async getReplies(postId: number, limit = 50): Promise<Post[]> {
-    return this.query(async (client) => {
-      const result = await client.queryObject<Post>`
-        SELECT * FROM posts WHERE in_reply_to_id = ${postId}
-        ORDER BY created_at ASC LIMIT ${limit}
-      `;
-      return result.rows;
-    });
-  }
-
-  async getRepliesCount(postId: number): Promise<number> {
-    return this.query(async (client) => {
-      // Use pre-computed replies_count column for O(1) lookup
-      const result = await client.queryObject<{ replies_count: number }>`
-        SELECT replies_count FROM posts WHERE id = ${postId}
-      `;
-      return result.rows[0]?.replies_count ?? 0;
     });
   }
 
@@ -1971,6 +1930,24 @@ export class DB {
         SELECT * FROM users LIMIT 1
       `;
       return result.rows[0] || null;
+    });
+  }
+
+  // ============ Hot Score Bulk Recalculation ============
+
+  /**
+   * Recalculate hot_score for a batch of posts using the standard formula.
+   * Single SQL statement — no round-trips per post.
+   */
+  async recalculateHotScores(postIds: number[]): Promise<void> {
+    if (postIds.length === 0) return;
+    await this.query(async (client) => {
+      await client.queryArray`
+        UPDATE posts SET hot_score =
+          (likes_count + boosts_count * 2 + replies_count * 3) /
+          POWER(EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600 + 2, 1.5)
+        WHERE id = ANY(${postIds})
+      `;
     });
   }
 

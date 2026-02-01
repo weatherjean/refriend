@@ -15,6 +15,7 @@ import { createApiRoutes } from "./api-routes.ts";
 import { initStorage } from "./storage.ts";
 import { initCache } from "./cache.ts";
 import { logger } from "./logger.ts";
+import { startHotFeedLoop } from "./hot-feed.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
 const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://riff:riff@localhost:5432/riff";
@@ -38,6 +39,9 @@ await initStorage();
 
 // Initialize KV cache
 await initCache();
+
+// Start hot feed background refresh
+startHotFeedLoop(db);
 
 // Create Hono app
 const app = new Hono();
