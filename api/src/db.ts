@@ -158,16 +158,6 @@ export class DB {
     return this.pool;
   }
 
-  async init(schemaPath: string) {
-    const schema = await Deno.readTextFile(schemaPath);
-    const client = await this.pool.connect();
-    try {
-      await client.queryArray(schema);
-    } finally {
-      client.release();
-    }
-  }
-
   async close() {
     await this.pool.end();
   }

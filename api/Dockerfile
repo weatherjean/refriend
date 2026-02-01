@@ -15,9 +15,9 @@ COPY --chown=deno:deno deno.json deno.lock* ./
 # Cache dependencies
 RUN deno install
 
-# Copy source and schema
+# Copy source and migrations
 COPY --chown=deno:deno src/ ./src/
-COPY --chown=deno:deno schema.pg.sql ./
+COPY --chown=deno:deno migrations/ ./migrations/
 
 # Switch to non-root user
 USER deno

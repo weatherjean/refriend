@@ -77,9 +77,9 @@ api/
       tags/                           # Hashtag routes
       push/                           # Web push notifications
     shared/types.ts                   # Shared TypeScript types
-  schema.pg.sql                       # PostgreSQL schema
-  MIGRATION_REMOVE_COMMUNITIES.sql    # Migration: drop community tables
-  MIGRATION_UNIFIED_URLS.sql          # Migration: /users/ -> /@ URL scheme
+    migrate.ts                        # Sequential migration runner
+  migrations/
+    001_initial_schema.sql            # Base PostgreSQL schema
 web/
   src/                                # React frontend (Vite + TypeScript)
   dist/                               # Built static files (served by Caddy in prod)

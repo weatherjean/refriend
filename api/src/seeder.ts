@@ -311,8 +311,9 @@ export async function seed(db: DB, domain: string) {
 
 // Run if called directly
 if (import.meta.main) {
+  const { runMigrations } = await import("./migrate.ts");
+  await runMigrations(DATABASE_URL);
   const db = new DB(DATABASE_URL);
-  await db.init(new URL("../schema.pg.sql", import.meta.url).pathname);
   await seed(db, DOMAIN);
   Deno.exit(0);
 }

@@ -16,6 +16,7 @@ import { initStorage } from "./storage.ts";
 import { initCache } from "./cache.ts";
 import { logger } from "./logger.ts";
 import { startHotFeedLoop } from "./hot-feed.ts";
+import { runMigrations } from "./migrate.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
 const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://riff:riff@localhost:5432/riff";
@@ -30,9 +31,11 @@ globalThis.addEventListener("unhandledrejection", (e) => {
   }
 });
 
+// Run database migrations
+await runMigrations(DATABASE_URL);
+
 // Initialize database
 const db = new DB(DATABASE_URL);
-await db.init(new URL("../schema.pg.sql", import.meta.url).pathname);
 
 // Initialize storage
 await initStorage();

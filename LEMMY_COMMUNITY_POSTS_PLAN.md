@@ -20,7 +20,7 @@ A `Create(Page)` activity sent to a community inbox:
 
 ### 1. Database: Add `title` and `type` columns to `posts` table
 
-**File:** `api/schema.pg.sql` + new migration SQL
+**File:** `api/migrations/001_initial_schema.sql` + new migration SQL file
 
 ```sql
 ALTER TABLE posts ADD COLUMN title TEXT;

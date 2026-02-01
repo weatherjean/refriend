@@ -4,49 +4,13 @@ Changes required when deploying the `dev-simpler` branch to production.
 
 ## Database Migrations
 
-Run these in order against the production database.
+Migrations run automatically on app startup. The migration runner (`api/src/migrate.ts`) applies `.sql` files from `api/migrations/` in order, tracked by a `schema_migrations` table.
 
-### 1. Remove Communities
+- **Existing databases** are auto-detected and migration 001 is marked as already applied.
+- **New databases** get all migrations applied from scratch.
+- To add a new migration, create `api/migrations/NNN_description.sql` and restart the app.
 
-Drops all community-related tables, columns, and local community actors. Remote Group actors (e.g. Lemmy communities) are preserved.
-
-```bash
-psql $DATABASE_URL -f api/MIGRATION_REMOVE_COMMUNITIES.sql
-```
-
-**What it does:**
-- Drops tables: `community_mod_logs`, `community_pinned_posts`, `community_posts`, `community_bans`, `community_admins`
-- Drops columns: `posts.community_id`, `actors.require_approval`, `actors.created_by`
-- Deletes local community actors (`actor_type = 'Group' AND created_by IS NOT NULL`)
-- Drops related indexes
-
-**Review:** The migration runs in a transaction and prints the count of actors to be deleted. Review before committing.
-
-### 2. Add Post Types Support
-
-Adds support for Page and Article post types (needed for Lemmy community posts).
-
-```bash
-psql $DATABASE_URL -f api/MIGRATION_POST_TYPES.sql
-```
-
-**What it does:**
-- Adds `type` column (default 'Note') and `title` column to posts table
-- Adds check constraint for valid post types ('Note', 'Page', 'Article')
-
-### 3. Unify URL Structure (`/users/` -> `/@`)
-
-Updates local actor and post URIs/URLs from `/users/username` to `/@username` format.
-
-```bash
-psql $DATABASE_URL -f api/MIGRATION_UNIFIED_URLS.sql
-```
-
-**What it does:**
-- Updates local post URIs: `/users/wj/posts/...` -> `/@wj/posts/...`
-- Updates local post URLs to match URIs
-- Updates local actor URIs and inbox URLs
-- Only affects local actors (`user_id IS NOT NULL`), remote actors are untouched
+Previous ad-hoc migrations (Remove Communities, Post Types, Unified URLs) have already been applied to production and are no longer needed as separate files.
 
 ## Caddy Configuration
 

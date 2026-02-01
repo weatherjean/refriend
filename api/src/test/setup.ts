@@ -6,6 +6,7 @@
 
 import { DB } from "../db.ts";
 import { createApiRoutes } from "../api-routes.ts";
+import { runMigrations } from "../migrate.ts";
 import type { User, Actor, Post } from "../db.ts";
 
 const TEST_DB_PORT = "5433";
@@ -91,10 +92,8 @@ export async function getTestDB(): Promise<DB> {
   await ensureTestContainer();
 
   if (!_db) {
+    await runMigrations(TEST_DATABASE_URL);
     _db = new DB(TEST_DATABASE_URL);
-    // Initialize schema from file
-    const schemaPath = new URL("../../schema.pg.sql", import.meta.url).pathname;
-    await _db.init(schemaPath);
   }
   return _db;
 }
@@ -131,6 +130,7 @@ export async function cleanDatabase(): Promise<void> {
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
       AND tablename NOT LIKE 'pg_%'
+      AND tablename != 'schema_migrations'
     `;
 
     if (result.rows.length > 0) {

@@ -9,9 +9,9 @@ RUN mkdir -p /data && chown deno:deno /data
 COPY --chown=deno:deno api/deno.json api/deno.lock* ./
 RUN deno install
 
-# Copy API source
+# Copy API source and migrations
 COPY --chown=deno:deno api/src/ ./src/
-COPY --chown=deno:deno api/schema.pg.sql ./
+COPY --chown=deno:deno api/migrations/ ./migrations/
 
 USER deno
 EXPOSE 8000
