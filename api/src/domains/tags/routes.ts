@@ -11,6 +11,7 @@ import * as service from "./service.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
 import { getCachedHashtagPosts, setCachedHashtagPosts } from "../../cache.ts";
 import { parseIntSafe } from "../../shared/utils.ts";
+import { maybeRecalculateHashtagScores } from "../../hot-feed.ts";
 
 interface TagsEnv {
   Variables: {
@@ -63,6 +64,10 @@ export function createTagRoutes(): Hono<TagsEnv> {
       if (cached) {
         return c.json(cached);
       }
+    }
+
+    if (sort === "hot") {
+      await maybeRecalculateHashtagScores(db, tag);
     }
 
     const posts = await db.getPostsByHashtagWithActor(tag, limit + 1, before, sort);

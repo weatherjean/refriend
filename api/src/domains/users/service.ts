@@ -26,6 +26,7 @@ import {
   setCachedProfilePosts,
 } from "../../cache.ts";
 import { enrichPostsBatch } from "../posts/service.ts";
+import { maybeRecalculateActorScores } from "../../hot-feed.ts";
 import { fetchAndStoreNote } from "../federation-v2/utils/notes.ts";
 
 
@@ -515,6 +516,10 @@ export async function getUserPosts(
     }
   }
 
+  if (sort === "hot" && !filter) {
+    await maybeRecalculateActorScores(db, actor.id);
+  }
+
   // Use optimized batch methods with pagination
   const posts = filter === "replies"
     ? await db.getRepliesByActorWithActor(actor.id, limit + 1, before)
@@ -655,6 +660,10 @@ export async function getActorPosts(
     if (cached) {
       return cached as UserPostsResult;
     }
+  }
+
+  if (sort === "hot" && !filter) {
+    await maybeRecalculateActorScores(db, actor.id);
   }
 
   // Use optimized batch methods with pagination

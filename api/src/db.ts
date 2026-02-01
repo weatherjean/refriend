@@ -1951,6 +1951,45 @@ export class DB {
     });
   }
 
+  /**
+   * Recalculate hot_score for top posts by a specific actor.
+   */
+  async recalculateActorHotScores(actorId: number, limit = 200): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        UPDATE posts SET hot_score =
+          (likes_count + boosts_count * 2 + replies_count * 3) /
+          POWER(EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600 + 2, 1.5)
+        WHERE id IN (
+          SELECT id FROM posts
+          WHERE actor_id = ${actorId} AND in_reply_to_id IS NULL
+          ORDER BY hot_score DESC LIMIT ${limit}
+        )
+      `;
+    });
+  }
+
+  /**
+   * Recalculate hot_score for top posts with a specific hashtag.
+   */
+  async recalculateHashtagHotScores(hashtagName: string, limit = 200): Promise<void> {
+    const normalized = hashtagName.toLowerCase().replace(/^#/, "");
+    await this.query(async (client) => {
+      await client.queryArray`
+        UPDATE posts SET hot_score =
+          (likes_count + boosts_count * 2 + replies_count * 3) /
+          POWER(EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600 + 2, 1.5)
+        WHERE id IN (
+          SELECT p.id FROM posts p
+          JOIN post_hashtags ph ON p.id = ph.post_id
+          JOIN hashtags h ON ph.hashtag_id = h.id
+          WHERE h.name = ${normalized}
+          ORDER BY p.hot_score DESC LIMIT ${limit}
+        )
+      `;
+    });
+  }
+
   // ============ Reports ============
 
   async createReport(postId: number, reporterId: number, reason: string, details: string | null): Promise<void> {

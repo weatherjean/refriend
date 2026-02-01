@@ -75,6 +75,49 @@ async function refresh(db: DB): Promise<void> {
 }
 
 /**
+ * Clear stale throttle entries after each refresh cycle.
+ */
+function clearExpiredThrottleEntries(): void {
+  const now = Date.now();
+  for (const [key, timestamp] of recalcThrottle) {
+    if (now - timestamp >= RECALC_COOLDOWN_MS) {
+      recalcThrottle.delete(key);
+    }
+  }
+}
+
+// ============ Throttled on-demand recalculation for tags/profiles ============
+
+const recalcThrottle = new Map<string, number>();
+const RECALC_COOLDOWN_MS = 3 * 60 * 1000; // 3 minutes
+
+/**
+ * Recalculate hot scores for an actor's posts if not done recently.
+ * Call before fetching hot-sorted profile posts.
+ */
+export async function maybeRecalculateActorScores(db: DB, actorId: number): Promise<void> {
+  const key = `actor:${actorId}`;
+  const last = recalcThrottle.get(key) ?? 0;
+  if (Date.now() - last < RECALC_COOLDOWN_MS) return;
+  recalcThrottle.set(key, Date.now());
+  await db.recalculateActorHotScores(actorId);
+}
+
+/**
+ * Recalculate hot scores for a hashtag's posts if not done recently.
+ * Call before fetching hot-sorted tag posts.
+ */
+export async function maybeRecalculateHashtagScores(db: DB, tag: string): Promise<void> {
+  const key = `tag:${tag}`;
+  const last = recalcThrottle.get(key) ?? 0;
+  if (Date.now() - last < RECALC_COOLDOWN_MS) return;
+  recalcThrottle.set(key, Date.now());
+  await db.recalculateHashtagHotScores(tag);
+}
+
+// ============ Background loop ============
+
+/**
  * Start the background hot-feed refresh loop.
  * Call once at startup after DB init.
  */
@@ -88,6 +131,7 @@ export function startHotFeedLoop(db: DB): void {
     refresh(db).catch((err) =>
       console.error("[HotFeed] Refresh failed:", err)
     );
+    clearExpiredThrottleEntries();
   }, REFRESH_INTERVAL_MS);
 
   console.log(`[HotFeed] Background loop started (every ${REFRESH_INTERVAL_MS / 1000}s)`);
