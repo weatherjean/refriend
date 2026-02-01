@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 interface UseSearchOptions<T> {
   initialFetch?: () => Promise<T[]>;
   searchFn: (query: string) => Promise<T[]>;
+  key?: string | number;
 }
 
 interface UseSearchResult<T> {
@@ -17,7 +18,7 @@ interface UseSearchResult<T> {
 }
 
 export function useSearch<T>(options: UseSearchOptions<T>): UseSearchResult<T> {
-  const { initialFetch, searchFn } = options;
+  const { initialFetch, searchFn, key } = options;
   const [query, setQuery] = useState('');
   const [initialItems, setInitialItems] = useState<T[]>([]);
   const [searchResults, setSearchResults] = useState<T[] | null>(null);
@@ -27,6 +28,7 @@ export function useSearch<T>(options: UseSearchOptions<T>): UseSearchResult<T> {
   useEffect(() => {
     if (!initialFetch) return;
 
+    setLoading(true);
     let cancelled = false;
     const load = async () => {
       try {
@@ -43,7 +45,8 @@ export function useSearch<T>(options: UseSearchOptions<T>): UseSearchResult<T> {
     return () => {
       cancelled = true;
     };
-  }, [initialFetch]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFetch, key]);
 
   const search = useCallback(async () => {
     let trimmed = query.trim();

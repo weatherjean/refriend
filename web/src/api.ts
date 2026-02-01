@@ -430,12 +430,22 @@ export const tags = {
     const queryStr = query.toString();
     return fetchJson<PaginatedPosts & { tag: string }>(`/tags/${encodeURIComponent(tag)}${queryStr ? '?' + queryStr : ''}`);
   },
-  getTrending: () =>
-    fetchJson<{ tags: { name: string; count: number }[] }>('/tags/trending'),
-  getPopular: () =>
-    fetchJson<{ tags: { name: string; count: number }[] }>('/tags/popular'),
+  getTrending: (limit?: number) =>
+    fetchJson<{ tags: { name: string; count: number }[] }>(`/tags/trending${limit ? `?limit=${limit}` : ''}`),
+  getPopular: (limit?: number) =>
+    fetchJson<{ tags: { name: string; count: number }[] }>(`/tags/popular${limit ? `?limit=${limit}` : ''}`),
   search: (q: string) =>
     fetchJson<{ tags: { name: string; count: number }[] }>(`/tags/search?q=${encodeURIComponent(q)}`),
+  getBookmarks: () =>
+    fetchJson<{ tags: { name: string; count: number }[] }>('/tags/bookmarks'),
+  getBookmarkFeed: (params?: { limit?: number; before?: number }) =>
+    fetchJson<PaginatedPosts>(`/tags/bookmarks/feed${buildQuery({ limit: params?.limit, before: params?.before })}`),
+  isBookmarked: (tag: string) =>
+    fetchJson<{ bookmarked: boolean }>(`/tags/${encodeURIComponent(tag)}/bookmark`),
+  bookmark: (tag: string) =>
+    fetchJson<{ ok: boolean }>(`/tags/${encodeURIComponent(tag)}/bookmark`, { method: 'POST' }),
+  unbookmark: (tag: string) =>
+    fetchJson<{ ok: boolean }>(`/tags/${encodeURIComponent(tag)}/bookmark`, { method: 'DELETE' }),
 };
 
 // Notifications

@@ -1436,6 +1436,14 @@ export class DB {
 
   // ============ Hashtags ============
 
+  async getHashtagByName(name: string): Promise<Hashtag | null> {
+    const normalized = name.toLowerCase().replace(/^#/, "");
+    return this.query(async (client) => {
+      const result = await client.queryObject<Hashtag>`SELECT * FROM hashtags WHERE name = ${normalized}`;
+      return result.rows[0] || null;
+    });
+  }
+
   async getOrCreateHashtag(name: string): Promise<Hashtag> {
     const normalized = name.toLowerCase().replace(/^#/, "");
     return this.query(async (client) => {
@@ -1539,6 +1547,70 @@ export class DB {
         LIMIT ${limit}
       `;
       return result.rows.map(r => ({ name: r.name, count: Number(r.count) }));
+    });
+  }
+
+  // ============ Hashtag Bookmarks ============
+
+  async addHashtagBookmark(actorId: number, hashtagId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        INSERT INTO hashtag_bookmarks (actor_id, hashtag_id) VALUES (${actorId}, ${hashtagId})
+        ON CONFLICT DO NOTHING
+      `;
+    });
+  }
+
+  async removeHashtagBookmark(actorId: number, hashtagId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`
+        DELETE FROM hashtag_bookmarks WHERE actor_id = ${actorId} AND hashtag_id = ${hashtagId}
+      `;
+    });
+  }
+
+  async getBookmarkedHashtags(actorId: number): Promise<{ name: string; count: number }[]> {
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ name: string; count: bigint }>`
+        SELECT h.name, COUNT(ph.post_id) as count
+        FROM hashtag_bookmarks hb
+        JOIN hashtags h ON hb.hashtag_id = h.id
+        LEFT JOIN post_hashtags ph ON h.id = ph.hashtag_id
+        WHERE hb.actor_id = ${actorId}
+        GROUP BY h.id, hb.created_at
+        ORDER BY hb.created_at DESC
+      `;
+      return result.rows.map(r => ({ name: r.name, count: Number(r.count) }));
+    });
+  }
+
+  async isHashtagBookmarked(actorId: number, hashtagName: string): Promise<boolean> {
+    const normalized = hashtagName.toLowerCase().replace(/^#/, "");
+    return this.query(async (client) => {
+      const result = await client.queryObject<{ exists: boolean }>`
+        SELECT EXISTS(
+          SELECT 1 FROM hashtag_bookmarks hb
+          JOIN hashtags h ON hb.hashtag_id = h.id
+          WHERE hb.actor_id = ${actorId} AND h.name = ${normalized}
+        ) as exists
+      `;
+      return result.rows[0]?.exists ?? false;
+    });
+  }
+
+  async getBookmarkedHashtagFeed(actorId: number, limit = 20, before?: number): Promise<PostWithActor[]> {
+    return this.query(async (client) => {
+      const beforeClause = before ? `AND p.id < $2` : '';
+      const query = `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
+           WHERE p.id IN (
+             SELECT DISTINCT ph.post_id FROM post_hashtags ph
+             JOIN hashtag_bookmarks hb ON ph.hashtag_id = hb.hashtag_id
+             WHERE hb.actor_id = $1
+           ) ${beforeClause}
+           ORDER BY p.id DESC LIMIT ${before ? '$3' : '$2'}`;
+      const params = before ? [actorId, before, limit] : [actorId, limit];
+      const result = await client.queryObject(query, params);
+      return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
     });
   }
 
