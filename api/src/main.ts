@@ -97,6 +97,18 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+// Redirect browser requests on /@* to /a/* (/@* is reserved for ActivityPub)
+app.use("*", async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  if (path.startsWith("/@")) {
+    const accept = c.req.header("Accept") || "";
+    if (!accept.includes("application/activity+json") && !accept.includes("application/ld+json")) {
+      return c.redirect(`/a/${path.slice(2)}`, 302);
+    }
+  }
+  await next();
+});
+
 // Fedify middleware handles ActivityPub routes (including WebFinger and /@username content negotiation)
 app.use(fedifyIntegration(federation, () => undefined));
 

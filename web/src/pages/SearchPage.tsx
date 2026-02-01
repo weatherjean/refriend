@@ -180,7 +180,7 @@ export function SearchPage() {
                           <button
                             key={community.actor_id}
                             className="list-group-item list-group-item-action"
-                            onClick={() => navigate(`/@${handle}`)}
+                            onClick={() => navigate(`/a/${handle}`)}
                           >
                             <div className="d-flex align-items-center gap-3">
                               <Avatar src={community.icon} name={community.name} size="md" className="flex-shrink-0" />

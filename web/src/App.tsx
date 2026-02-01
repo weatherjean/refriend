@@ -36,7 +36,7 @@ export const modalRoutes = [
   { path: '/notifications', element: <NotificationsPage /> },
   { path: '/new', element: <NewPostPage /> },
   { path: '/posts/:id', element: <PostPage /> },
-  { path: '/u/:handle/*', element: <ActorPage /> },
+  { path: '/a/:handle/*', element: <ActorPage /> },
   { path: '/actor/:id', element: <ActorByIdPage /> },
   { path: '/tags/:tag', element: <TagPage /> },
   { path: '/following', element: <FollowingPage /> },

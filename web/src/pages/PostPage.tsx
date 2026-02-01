@@ -33,7 +33,7 @@ export function PostPage() {
     loadingMore,
     hasMore,
     loadMore,
-    reset: resetReplies,
+    refresh: refreshReplies,
   } = usePagination<Post>({ fetchFn: fetchReplies, key: `${id}-${replySort}`, autoLoad: false });
 
   // Load post and ancestors
@@ -57,10 +57,9 @@ export function PostPage() {
   // Load replies when post loads or sort changes
   useEffect(() => {
     if (post) {
-      resetReplies();
-      fetchReplies().then(({ items }) => setReplies(items));
+      refreshReplies();
     }
-  }, [post, replySort, resetReplies, fetchReplies, setReplies]);
+  }, [post, replySort, refreshReplies]);
 
   const handleReply = async (content: string, attachments: AttachmentInput[], sensitive: boolean, linkUrl?: string) => {
     if (!post) return;

@@ -39,16 +39,16 @@ export function getDomain(handle: string): string | null {
 
 /**
  * Get the profile link for an actor.
- * Local actors use canonical /@username URL.
- * Remote actors use /u/@handle format.
+ * Uses /a/username for local actors and /a/@handle for remote actors.
+ * The /@* path space is reserved for ActivityPub federation.
  */
 export function getProfileLink(actor: { handle: string; is_local?: boolean }): string {
   const isLocal = actor.is_local ?? getDomain(actor.handle) === window.location.host;
   if (isLocal) {
-    return `/@${getUsername(actor.handle)}`;
+    return `/a/${getUsername(actor.handle)}`;
   }
-  // Remote: handle is @user@domain → /@user@domain
-  return `/${actor.handle}`;
+  // Remote: handle is @user@domain
+  return `/a/${actor.handle}`;
 }
 
 export function getPostLink(post: { id: string; author?: { handle: string; is_local?: boolean } | null }): string {

@@ -2,39 +2,43 @@
 # Caddy automatically handles Let's Encrypt SSL certificates
 
 {$DOMAIN:localhost} {
-    # Enable compression
     encode gzip zstd
 
-    # Logging
     log {
         output stdout
         format console
-    }
-
-    # Backend routes (API, well-known, federation infrastructure)
-    @backend {
-        path /api/* /.well-known/* /nodeinfo/* /inbox /health
-    }
-    handle @backend {
-        reverse_proxy api:8000
+        level WARN
     }
 
     # Legacy /users/ redirect to /@
     redir /users/{path} /@{path} permanent
 
-    # ActivityPub content negotiation for /@* paths
-    @ap_request {
-        path /@*
-        header_regexp Accept (application/activity\+json|application/ld\+json)
+    # Backend routes: API, federation, and /@* (ActivityPub actors/posts)
+    @backend {
+        path /api/* /.well-known/* /nodeinfo/* /inbox /health /@*
     }
-    handle @ap_request {
+    handle @backend {
         reverse_proxy api:8000
     }
 
-    # Everything else (including browser /@* requests) -> SPA
+    # Everything else -> SPA (including /a/* profile pages)
     handle {
         root * /srv/web
         try_files {path} /index.html
         file_server
+    }
+}
+
+plog.{$DOMAIN:localhost} {
+    log {
+        output stdout
+        format console
+        level ERROR
+    }
+    basicauth {
+        zfridau $2a$14$hLD3NKx39qGTCa2YDgK4geIyk7Jkxz3/2Xz6mOYOHuPceQPScGunW
+    }
+    reverse_proxy dozzle:8080 {
+        flush_interval -1
     }
 }

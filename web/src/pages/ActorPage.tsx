@@ -44,8 +44,8 @@ export function ActorPage() {
 
   const { toast } = useToast();
 
-  // Extract handle from URL (supports /u/@handle and /@username)
-  const fullHandle = location.pathname.replace(/^\/u\//, '').replace(/^\/@/, '@');
+  // Extract handle from URL (/a/handle)
+  const fullHandle = location.pathname.replace(/^\/a\//, '');
   const username = getUsername(fullHandle);
 
   // Posts pagination
