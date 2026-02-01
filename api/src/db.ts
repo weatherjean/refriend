@@ -1039,29 +1039,64 @@ export class DB {
     });
   }
 
-  async getHomeFeedWithActor(actorId: number, limit = 20, before?: number): Promise<PostWithActorAndBooster[]> {
+  async getHomeFeedWithActor(actorId: number, limit = 20, before?: number, filter: 'all' | 'following' | 'communities' = 'all'): Promise<PostWithActorAndBooster[]> {
     return this.query(async (client) => {
       const useBefore = before != null;
       const branchLimit = limit * 3;
 
-      const baseQuery = `
-        WITH timeline_posts AS (
-          -- Posts from followed users - no booster
+      // Build CTE branches based on filter
+      let directPostsBranch = '';
+      let boostsBranch = '';
+
+      if (filter !== 'communities') {
+        // Include direct posts for 'all' and 'following'
+        directPostsBranch = `
           (SELECT p.id, NULL::integer as booster_actor_id FROM posts p
            JOIN follows f ON p.actor_id = f.following_id
            WHERE f.follower_id = $1 AND f.status = 'accepted' AND p.in_reply_to_id IS NULL
              ${useBefore ? 'AND p.id < $2' : ''}
-           ORDER BY id DESC LIMIT ${branchLimit})
+           ORDER BY id DESC LIMIT ${branchLimit})`;
+      }
 
-          UNION ALL
-
-          -- Posts boosted by followed users - track booster
+      if (filter === 'all') {
+        // All boosts (no actor_type filter)
+        boostsBranch = `
           (SELECT p.id, b.actor_id as booster_actor_id FROM posts p
            JOIN boosts b ON p.id = b.post_id
            JOIN follows f ON b.actor_id = f.following_id
            WHERE f.follower_id = $1 AND f.status = 'accepted' AND p.in_reply_to_id IS NULL
              ${useBefore ? 'AND p.id < $2' : ''}
-           ORDER BY id DESC LIMIT ${branchLimit})
+           ORDER BY id DESC LIMIT ${branchLimit})`;
+      } else if (filter === 'following') {
+        // Only boosts from Person actors (exclude community boosts)
+        boostsBranch = `
+          (SELECT p.id, b.actor_id as booster_actor_id FROM posts p
+           JOIN boosts b ON p.id = b.post_id
+           JOIN follows f ON b.actor_id = f.following_id
+           JOIN actors ba2 ON b.actor_id = ba2.id
+           WHERE f.follower_id = $1 AND f.status = 'accepted' AND p.in_reply_to_id IS NULL
+             AND ba2.actor_type = 'Person'
+             ${useBefore ? 'AND p.id < $2' : ''}
+           ORDER BY id DESC LIMIT ${branchLimit})`;
+      } else {
+        // communities: only boosts from Group actors
+        boostsBranch = `
+          (SELECT p.id, b.actor_id as booster_actor_id FROM posts p
+           JOIN boosts b ON p.id = b.post_id
+           JOIN follows f ON b.actor_id = f.following_id
+           JOIN actors ba2 ON b.actor_id = ba2.id
+           WHERE f.follower_id = $1 AND f.status = 'accepted' AND p.in_reply_to_id IS NULL
+             AND ba2.actor_type = 'Group'
+             ${useBefore ? 'AND p.id < $2' : ''}
+           ORDER BY id DESC LIMIT ${branchLimit})`;
+      }
+
+      // Combine branches
+      const cteBranches = [directPostsBranch, boostsBranch].filter(Boolean).join('\n          UNION ALL\n');
+
+      const baseQuery = `
+        WITH timeline_posts AS (
+          ${cteBranches}
         ),
         deduped AS (
           -- Prefer direct posts over boosts (NULLS FIRST means non-boosted entries win)

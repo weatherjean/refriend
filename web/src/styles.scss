@@ -360,7 +360,7 @@ body {
 
     .link-preview-image {
       width: 100%;
-      height: 360px;
+      aspect-ratio: 1.91 / 1;
       overflow: hidden;
       background-color: var(--bs-secondary-bg);
       cursor: zoom-in;

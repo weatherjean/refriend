@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { posts as postsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
 import { PageHeader } from '../components/PageHeader';
+import { FeedFilter, FeedFilterValue } from '../components/FeedFilter';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { LoadMoreButton } from '../components/LoadMoreButton';
@@ -186,14 +187,23 @@ function LandingPage() {
 export function HomePage() {
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const [feedFilter, setFeedFilter] = useState<FeedFilterValue>(() => {
+    const saved = localStorage.getItem('home-feed-filter');
+    return (saved === 'following' || saved === 'communities') ? saved : 'all';
+  });
+
+  const handleFilterChange = useCallback((value: FeedFilterValue) => {
+    setFeedFilter(value);
+    localStorage.setItem('home-feed-filter', value);
+  }, []);
 
   const fetchPosts = useCallback(async (cursor?: number) => {
     if (!user) {
       return { items: [], next_cursor: null };
     }
-    const { posts, next_cursor } = await postsApi.getTimeline(cursor ? { before: cursor } : undefined);
+    const { posts, next_cursor } = await postsApi.getTimeline({ before: cursor, filter: feedFilter });
     return { items: posts, next_cursor };
-  }, [user]);
+  }, [user, feedFilter]);
 
   const {
     items: posts,
@@ -202,7 +212,7 @@ export function HomePage() {
     hasMore,
     refresh,
     loadMore,
-  } = usePagination<Post>({ fetchFn: fetchPosts, key: `${user?.id ?? 'guest'}` });
+  } = usePagination<Post>({ fetchFn: fetchPosts, key: `${user?.id ?? 'guest'}-${feedFilter}` });
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -228,6 +238,7 @@ export function HomePage() {
         onRefresh={handleRefresh}
         refreshing={refreshing}
       />
+      <FeedFilter value={feedFilter} onChange={handleFilterChange} />
 
       {posts.length === 0 ? (
         <EmptyState

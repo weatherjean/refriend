@@ -9,6 +9,7 @@ import {
   closeTestDB,
   createTestUser,
   createTestPost,
+  createRemoteActor,
   testRequest,
   getSessionCookie,
   loginUser,
@@ -78,6 +79,194 @@ Deno.test({
 
         const res = await testRequest(api, "GET", "/timeline");
         assertEquals(res.status, 401);
+      });
+
+      await t.step("filter=all returns direct posts and all boosts", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+        const db = await getTestDB();
+
+        // Create viewer
+        await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
+        const session = await loginUser(api, "viewer@test.com", "password123");
+        const viewer = await db.getActorByUsername("viewer");
+
+        // Create a person who posts
+        const { actor: person } = await createTestUser({ username: "person", email: "person@test.com" });
+        const directPost = await createTestPost(person, { content: "Direct post from person" });
+
+        // Create a community (Group) that boosts a post
+        const community = await createRemoteActor({ handle: "@community@remote.example", actor_type: "Group" });
+        const { actor: author } = await createTestUser({ username: "author", email: "author@test.com" });
+        const communityPost = await createTestPost(author, { content: "Post boosted by community" });
+        await db.addBoost(community.id, communityPost.id);
+
+        // Create a person who boosts a post
+        const { actor: boosterPerson } = await createTestUser({ username: "booster", email: "booster@test.com" });
+        const { actor: author2 } = await createTestUser({ username: "author2", email: "author2@test.com" });
+        const personBoostedPost = await createTestPost(author2, { content: "Post boosted by person" });
+        await db.addBoost(boosterPerson.id, personBoostedPost.id);
+
+        // Viewer follows person, community, and booster
+        await db.addFollow(viewer!.id, person.id, "accepted");
+        await db.addFollow(viewer!.id, community.id, "accepted");
+        await db.addFollow(viewer!.id, boosterPerson.id, "accepted");
+
+        const res = await testRequest(api, "GET", "/timeline?filter=all", { cookie: session.cookie, csrfToken: session.csrfToken });
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        // Should see all 3: direct post, community-boosted post, person-boosted post
+        assertEquals(data.posts.length, 3);
+      });
+
+      await t.step("filter=following returns direct posts and person boosts only", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+        const db = await getTestDB();
+
+        // Create viewer
+        await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
+        const session = await loginUser(api, "viewer@test.com", "password123");
+        const viewer = await db.getActorByUsername("viewer");
+
+        // Create a person who posts directly
+        const { actor: person } = await createTestUser({ username: "person", email: "person@test.com" });
+        await createTestPost(person, { content: "Direct post" });
+
+        // Create a community (Group) that boosts a post
+        const community = await createRemoteActor({ handle: "@community@remote.example", actor_type: "Group" });
+        const { actor: author } = await createTestUser({ username: "author", email: "author@test.com" });
+        const communityPost = await createTestPost(author, { content: "Community boosted" });
+        await db.addBoost(community.id, communityPost.id);
+
+        // Create a person who boosts a post
+        const { actor: boosterPerson } = await createTestUser({ username: "booster", email: "booster@test.com" });
+        const { actor: author2 } = await createTestUser({ username: "author2", email: "author2@test.com" });
+        const personBoostedPost = await createTestPost(author2, { content: "Person boosted" });
+        await db.addBoost(boosterPerson.id, personBoostedPost.id);
+
+        // Viewer follows all three
+        await db.addFollow(viewer!.id, person.id, "accepted");
+        await db.addFollow(viewer!.id, community.id, "accepted");
+        await db.addFollow(viewer!.id, boosterPerson.id, "accepted");
+
+        const res = await testRequest(api, "GET", "/timeline?filter=following", { cookie: session.cookie, csrfToken: session.csrfToken });
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        // Should see 2: direct post + person-boosted post, but NOT community-boosted
+        assertEquals(data.posts.length, 2);
+        const contents = data.posts.map((p: any) => p.content);
+        assertEquals(contents.some((c: string) => c.includes("Direct post")), true);
+        assertEquals(contents.some((c: string) => c.includes("Person boosted")), true);
+        assertEquals(contents.some((c: string) => c.includes("Community boosted")), false);
+      });
+
+      await t.step("filter=communities returns only community boosts", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+        const db = await getTestDB();
+
+        // Create viewer
+        await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
+        const session = await loginUser(api, "viewer@test.com", "password123");
+        const viewer = await db.getActorByUsername("viewer");
+
+        // Create a person who posts directly
+        const { actor: person } = await createTestUser({ username: "person", email: "person@test.com" });
+        await createTestPost(person, { content: "Direct post" });
+
+        // Create a community (Group) that boosts a post
+        const community = await createRemoteActor({ handle: "@community@remote.example", actor_type: "Group" });
+        const { actor: author } = await createTestUser({ username: "author", email: "author@test.com" });
+        const communityPost = await createTestPost(author, { content: "Community boosted" });
+        await db.addBoost(community.id, communityPost.id);
+
+        // Create a person who boosts a post
+        const { actor: boosterPerson } = await createTestUser({ username: "booster", email: "booster@test.com" });
+        const { actor: author2 } = await createTestUser({ username: "author2", email: "author2@test.com" });
+        const personBoostedPost = await createTestPost(author2, { content: "Person boosted" });
+        await db.addBoost(boosterPerson.id, personBoostedPost.id);
+
+        // Viewer follows all three
+        await db.addFollow(viewer!.id, person.id, "accepted");
+        await db.addFollow(viewer!.id, community.id, "accepted");
+        await db.addFollow(viewer!.id, boosterPerson.id, "accepted");
+
+        const res = await testRequest(api, "GET", "/timeline?filter=communities", { cookie: session.cookie, csrfToken: session.csrfToken });
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        // Should see only 1: community-boosted post
+        assertEquals(data.posts.length, 1);
+        assertEquals(data.posts[0].content.includes("Community boosted"), true);
+        // Should have boosted_by with Group actor info
+        assertExists(data.posts[0].boosted_by);
+        assertEquals(data.posts[0].boosted_by.actor_type, "Group");
+      });
+
+      await t.step("filter=communities returns empty when no community boosts", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+        const db = await getTestDB();
+
+        // Create viewer
+        await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
+        const session = await loginUser(api, "viewer@test.com", "password123");
+        const viewer = await db.getActorByUsername("viewer");
+
+        // Only direct posts, no community boosts
+        const { actor: person } = await createTestUser({ username: "person", email: "person@test.com" });
+        await createTestPost(person, { content: "Direct post" });
+        await db.addFollow(viewer!.id, person.id, "accepted");
+
+        const res = await testRequest(api, "GET", "/timeline?filter=communities", { cookie: session.cookie, csrfToken: session.csrfToken });
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        assertEquals(data.posts.length, 0);
+      });
+
+      await t.step("invalid filter value defaults to all", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+        const db = await getTestDB();
+
+        await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
+        const session = await loginUser(api, "viewer@test.com", "password123");
+        const viewer = await db.getActorByUsername("viewer");
+
+        const { actor: person } = await createTestUser({ username: "person", email: "person@test.com" });
+        await createTestPost(person, { content: "A post" });
+        await db.addFollow(viewer!.id, person.id, "accepted");
+
+        const res = await testRequest(api, "GET", "/timeline?filter=garbage", { cookie: session.cookie, csrfToken: session.csrfToken });
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        assertEquals(data.posts.length, 1);
+      });
+
+      await t.step("filter=following includes boosts by followed Person", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+        const db = await getTestDB();
+
+        await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
+        const session = await loginUser(api, "viewer@test.com", "password123");
+        const viewer = await db.getActorByUsername("viewer");
+
+        // A person the viewer follows boosts a post by someone the viewer does NOT follow
+        const { actor: booster } = await createTestUser({ username: "booster", email: "booster@test.com" });
+        const { actor: stranger } = await createTestUser({ username: "stranger", email: "stranger@test.com" });
+        const post = await createTestPost(stranger, { content: "Stranger post boosted by person" });
+        await db.addBoost(booster.id, post.id);
+
+        await db.addFollow(viewer!.id, booster.id, "accepted");
+        // NOT following stranger
+
+        const res = await testRequest(api, "GET", "/timeline?filter=following", { cookie: session.cookie, csrfToken: session.csrfToken });
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        assertEquals(data.posts.length, 1);
+        assertExists(data.posts[0].boosted_by);
+        assertEquals(data.posts[0].boosted_by.actor_type, "Person");
       });
     });
 

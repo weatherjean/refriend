@@ -108,8 +108,10 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const domain = c.get("domain");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
     const before = parseIntSafe(c.req.query("before")) ?? undefined;
+    const filterParam = c.req.query("filter");
+    const filter = (filterParam === 'following' || filterParam === 'communities') ? filterParam : 'all';
 
-    const result = await service.getTimelinePosts(db, actor.id, limit, before, domain);
+    const result = await service.getTimelinePosts(db, actor.id, limit, before, domain, filter);
     return c.json(result);
   });
 

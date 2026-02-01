@@ -468,8 +468,9 @@ export async function getTimelinePosts(
   limit: number,
   before?: number,
   domain?: string,
+  filter: 'all' | 'following' | 'communities' = 'all',
 ): Promise<PostsListResponse> {
-  const posts = await repository.getTimelinePosts(db, actorId, limit + 1, before);
+  const posts = await repository.getTimelinePosts(db, actorId, limit + 1, before, filter);
   const hasMore = posts.length > limit;
   const resultPosts = hasMore ? posts.slice(0, limit) : posts;
   const nextCursor = hasMore && resultPosts.length > 0

@@ -44,8 +44,9 @@ export async function getTimelinePosts(
   actorId: number,
   limit: number,
   before?: number,
+  filter: 'all' | 'following' | 'communities' = 'all',
 ): Promise<PostWithActorAndBooster[]> {
-  return db.getHomeFeedWithActor(actorId, limit, before);
+  return db.getHomeFeedWithActor(actorId, limit, before, filter);
 }
 
 export async function getPostMedia(db: DB, postId: number): Promise<Array<{

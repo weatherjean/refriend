@@ -289,10 +289,11 @@ export const actors = {
 
 // Posts
 export const posts = {
-  getTimeline: (params?: PaginationParams) => {
+  getTimeline: (params?: PaginationParams & { filter?: 'all' | 'following' | 'communities' }) => {
     const query = new URLSearchParams();
     if (params?.limit) query.set('limit', params.limit.toString());
     if (params?.before) query.set('before', params.before.toString());
+    if (params?.filter && params.filter !== 'all') query.set('filter', params.filter);
     const queryStr = query.toString();
     return fetchJson<PaginatedPosts>(`/timeline${queryStr ? '?' + queryStr : ''}`);
   },
