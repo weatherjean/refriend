@@ -72,7 +72,7 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
     const domain = c.get("domain");
     const currentActor = c.get("actor");
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
-    const offset = parseIntSafe(c.req.query("offset")) ?? 0;
+    const offset = Math.max(0, Math.min(parseIntSafe(c.req.query("offset")) ?? 0, 10000));
 
     // Use in-memory cache if available, fall back to DB query
     const cached = getHotFeedCache();

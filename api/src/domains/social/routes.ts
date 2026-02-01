@@ -21,6 +21,7 @@ import { persistActor, safeSendActivity } from "../federation-v2/index.ts";
 import { updatePostScore } from "../../scoring.ts";
 import { createNotification, removeNotification } from "../notifications/routes.ts";
 import * as service from "./service.ts";
+import { parseIntSafe } from "../../shared/utils.ts";
 import { rateLimit } from "../../middleware/rate-limit.ts";
 
 interface SocialEnv {
@@ -47,8 +48,8 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 100);
-    const offset = parseInt(c.req.query("offset") || "0");
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 100);
+    const offset = Math.max(0, Math.min(parseIntSafe(c.req.query("offset")) ?? 0, 10000));
 
     const result = await service.getFollowingByType(db, actor.id, "Person", limit, offset, domain);
     return c.json(result);
@@ -64,8 +65,8 @@ export function createSocialRoutes(federation: Federation<void>): Hono<SocialEnv
       return c.json({ error: "Authentication required" }, 401);
     }
 
-    const limit = Math.min(parseInt(c.req.query("limit") || "20"), 100);
-    const offset = parseInt(c.req.query("offset") || "0");
+    const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 100);
+    const offset = Math.max(0, Math.min(parseIntSafe(c.req.query("offset")) ?? 0, 10000));
 
     const result = await service.getFollowingByType(db, actor.id, "Group", limit, offset, domain);
     return c.json(result);

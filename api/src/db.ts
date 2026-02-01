@@ -1120,18 +1120,31 @@ export class DB {
   async getRepliesWithActor(postId: number, limit = 20, after?: number, sort: 'new' | 'hot' = 'new', opActorId?: number): Promise<PostWithActor[]> {
     return this.query(async (client) => {
       const secondaryOrder = sort === 'hot' ? 'p.hot_score DESC, p.id DESC' : 'p.id DESC';
+      const params: unknown[] = [postId];
+      let nextParam = 2;
+
+      const afterParam = after ? `$${nextParam++}` : null;
+      if (after) params.push(after);
+
       // Sort OP replies first, then by selected sort
-      const orderBy = opActorId
-        ? `(p.actor_id = ${opActorId}) DESC, ${secondaryOrder}`
-        : secondaryOrder;
-      const query = after
+      let orderBy: string;
+      if (opActorId) {
+        orderBy = `(p.actor_id = $${nextParam++}) DESC, ${secondaryOrder}`;
+        params.push(opActorId);
+      } else {
+        orderBy = secondaryOrder;
+      }
+
+      const limitParam = `$${nextParam++}`;
+      params.push(limit);
+
+      const query = afterParam
         ? `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
-           WHERE p.in_reply_to_id = $1 AND p.id > $2
-           ORDER BY ${orderBy} LIMIT $3`
+           WHERE p.in_reply_to_id = $1 AND p.id > ${afterParam}
+           ORDER BY ${orderBy} LIMIT ${limitParam}`
         : `SELECT ${this.postWithActorSelect} FROM posts p JOIN actors a ON p.actor_id = a.id
            WHERE p.in_reply_to_id = $1
-           ORDER BY ${orderBy} LIMIT $2`;
-      const params = after ? [postId, after, limit] : [postId, limit];
+           ORDER BY ${orderBy} LIMIT ${limitParam}`;
       const result = await client.queryObject(query, params);
       return result.rows.map(row => this.parsePostWithActor(row as Record<string, unknown>));
     });
