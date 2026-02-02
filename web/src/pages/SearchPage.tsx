@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { search, ExternalCommunity, Actor, Post } from '../api';
+import { search, tags, ExternalCommunity, Actor, Post } from '../api';
 import { getUsername, getProfileLink } from '../utils';
 import { Avatar } from '../components/Avatar';
 import { EmptyState } from '../components/EmptyState';
@@ -14,10 +14,11 @@ export function SearchPage() {
   const [query, setQuery] = useState(initialQuery);
   const [userResults, setUserResults] = useState<Actor[]>([]);
   const [postResults, setPostResults] = useState<Post[]>([]);
+  const [tagResults, setTagResults] = useState<{ name: string; count: number }[]>([]);
   const [postsLowConfidence, setPostsLowConfidence] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [activeTab, setActiveTab] = useState<'users' | 'posts'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'posts' | 'tags'>('users');
 
   // External community discovery
   const [externalResults, setExternalResults] = useState<Record<string, ExternalCommunity[]>>({});
@@ -67,12 +68,25 @@ export function SearchPage() {
     setExternalResults({});
     setExternalError({});
     try {
-      const { users: userRes, posts: postRes, postsLowConfidence: lowConf } = await search.query(trimmed);
+      const cleanTag = trimmed.replace(/^#/, '');
+      const [searchRes, tagRes] = await Promise.allSettled([
+        search.query(trimmed),
+        tags.search(cleanTag),
+      ]);
+      const userRes = searchRes.status === 'fulfilled' ? searchRes.value.users : [];
+      const postRes = searchRes.status === 'fulfilled' ? searchRes.value.posts : [];
+      const lowConf = searchRes.status === 'fulfilled' ? searchRes.value.postsLowConfidence : false;
+      const tagList = tagRes.status === 'fulfilled' ? (tagRes.value.tags || []).slice(0, 20) : [];
       setUserResults(userRes || []);
       setPostResults(postRes || []);
+      setTagResults(tagList);
       setPostsLowConfidence(lowConf || false);
-      if (postRes?.length > 0 && (!userRes || userRes.length === 0)) {
+      if (userRes?.length > 0) {
+        setActiveTab('users');
+      } else if (postRes?.length > 0) {
         setActiveTab('posts');
+      } else if (tagList.length > 0) {
+        setActiveTab('tags');
       } else {
         setActiveTab('users');
       }
@@ -80,6 +94,7 @@ export function SearchPage() {
       // Error handled by global toast
       setUserResults([]);
       setPostResults([]);
+      setTagResults([]);
     } finally {
       setSearching(false);
     }
@@ -96,6 +111,7 @@ export function SearchPage() {
     setSearched(false);
     setUserResults([]);
     setPostResults([]);
+    setTagResults([]);
     setPostsLowConfidence(false);
     setExternalResults({});
     setExternalError({});
@@ -104,7 +120,7 @@ export function SearchPage() {
   return (
     <div>
       <SearchForm
-        placeholder="Search users, communities, posts..."
+        placeholder="Search users, communities, posts, tags..."
         value={query}
         onChange={setQuery}
         onSubmit={() => performSearch(query)}
@@ -121,6 +137,7 @@ export function SearchPage() {
             <li><strong>Communities:</strong> Search for community names to find and join groups</li>
             <li><strong>Remote accounts:</strong> Use @user@domain.com format to find users on other servers</li>
             <li><strong>Posts:</strong> Enter 3+ characters to search post content</li>
+            <li><strong>Tags:</strong> Search for hashtags by name</li>
           </ul>
           <p className="small mb-0">
             Results are limited to 20 matches per category. Be more specific if you don't find what you're looking for.
@@ -213,7 +230,7 @@ export function SearchPage() {
             })()}
           </div>
 
-          {userResults.length === 0 && postResults.length === 0 ? (
+          {userResults.length === 0 && postResults.length === 0 && tagResults.length === 0 ? (
             <EmptyState icon="search" title={`No results found for "${query}"`} />
           ) : (
             <>
@@ -232,6 +249,14 @@ export function SearchPage() {
                     onClick={() => setActiveTab('posts')}
                   >
                     Posts {postResults.length > 0 && <span className="badge bg-secondary ms-1">{postResults.length}</span>}
+                  </button>
+                </li>
+                <li className="nav-item">
+                  <button
+                    className={`nav-link ${activeTab === 'tags' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('tags')}
+                  >
+                    Tags {tagResults.length > 0 && <span className="badge bg-secondary ms-1">{tagResults.length}</span>}
                   </button>
                 </li>
               </ul>
@@ -300,6 +325,30 @@ export function SearchPage() {
                     )}
                     {postResults.map((post) => (
                       <PostCard key={post.id} post={post} />
+                    ))}
+                  </div>
+                )}
+              </TabContent>
+
+              <TabContent
+                loading={false}
+                empty={activeTab === 'tags' && tagResults.length === 0}
+                emptyIcon="hash"
+                emptyTitle="No tags found"
+              >
+                {activeTab === 'tags' && (
+                  <div className="list-group">
+                    {tagResults.map((tag) => (
+                      <Link
+                        key={tag.name}
+                        to={`/tags/${encodeURIComponent(tag.name)}`}
+                        className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                      >
+                        <span className="fw-semibold">#{tag.name}</span>
+                        <span className="badge text-bg-secondary rounded-pill">
+                          {tag.count} {tag.count === 1 ? 'post' : 'posts'}
+                        </span>
+                      </Link>
                     ))}
                   </div>
                 )}

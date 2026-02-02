@@ -1,16 +1,13 @@
 import { useCallback, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { tags, Post } from '../api';
+import { tags } from '../api';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader } from '../components/PageHeader';
-import { SearchForm } from '../components/SearchForm';
-import { PostList } from '../components/PostList';
-import { useSearch, usePagination } from '../hooks';
 import { useAuth } from '../context/AuthContext';
 
 type TagItem = { name: string; count: number };
-type TabType = 'trending' | 'feed' | 'bookmarked';
+type TabType = 'trending' | 'bookmarked';
 
 type TrendingPeriod = '48h' | 'alltime';
 
@@ -20,75 +17,59 @@ function TrendingTab({ bookmarkedNames, onToggleBookmark, isAuthed }: {
   isAuthed: boolean;
 }) {
   const [period, setPeriod] = useState<TrendingPeriod>('48h');
+  const [displayTags, setDisplayTags] = useState<TagItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const initialFetch = useCallback(async () => {
-    const { tags: result } = period === '48h'
-      ? await tags.getTrending(30)
-      : await tags.getPopular(30);
-    return result;
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const { tags: result } = period === '48h'
+          ? await tags.getTrending(30)
+          : await tags.getPopular(30);
+        if (!cancelled) {
+          setDisplayTags(result);
+        }
+      } catch {
+        if (!cancelled) {
+          setDisplayTags([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
   }, [period]);
-
-  const searchFn = useCallback(async (query: string) => {
-    const cleanQuery = query.replace(/^#/, '');
-    const { tags: results } = await tags.search(cleanQuery);
-    return results;
-  }, []);
-
-  const {
-    query: tagInput,
-    setQuery: setTagInput,
-    displayItems: displayTags,
-    loading,
-    searchLoading,
-    isSearching,
-    search: handleSearch,
-    clear: handleClear,
-  } = useSearch<TagItem>({ initialFetch, searchFn, key: period });
 
   return (
     <>
-      <SearchForm
-        placeholder="Search tags..."
-        value={tagInput}
-        onChange={setTagInput}
-        onSubmit={handleSearch}
-        onClear={handleClear}
-        loading={searchLoading}
-        showClear={isSearching}
-      />
-
-      {!isSearching && (
-        <div className="d-flex justify-content-end mb-3">
-          <div className="btn-group btn-group-sm">
-            <button
-              className={`btn ${period === '48h' ? 'btn-primary' : 'btn-outline-secondary'}`}
-              onClick={() => setPeriod('48h')}
-            >
-              48h
-            </button>
-            <button
-              className={`btn ${period === 'alltime' ? 'btn-primary' : 'btn-outline-secondary'}`}
-              onClick={() => setPeriod('alltime')}
-            >
-              All time
-            </button>
-          </div>
+      <div className="d-flex justify-content-end mb-3">
+        <div className="btn-group btn-group-sm">
+          <button
+            className={`btn ${period === '48h' ? 'btn-primary' : 'btn-outline-secondary'}`}
+            onClick={() => setPeriod('48h')}
+          >
+            48h
+          </button>
+          <button
+            className={`btn ${period === 'alltime' ? 'btn-primary' : 'btn-outline-secondary'}`}
+            onClick={() => setPeriod('alltime')}
+          >
+            All time
+          </button>
         </div>
-      )}
+      </div>
 
-      {isSearching && (
-        <h5 className="mb-3">
-          {`Results for "#${tagInput.trim().replace(/^#/, '')}"`}
-        </h5>
-      )}
-
-      {loading && !isSearching ? (
+      {loading ? (
         <LoadingSpinner size="sm" className="py-4" />
       ) : displayTags.length === 0 ? (
         <EmptyState
           icon="hash"
-          title={isSearching ? `No tags found matching "#${tagInput.trim().replace(/^#/, '')}"` : 'No trending tags yet.'}
-          description={isSearching ? undefined : 'Start posting with hashtags to see trends!'}
+          title="No trending tags yet."
+          description="Start posting with hashtags to see trends!"
         />
       ) : (
         <div className="list-group">
@@ -101,7 +82,7 @@ function TrendingTab({ bookmarkedNames, onToggleBookmark, isAuthed }: {
                 to={`/tags/${encodeURIComponent(tag.name)}`}
                 className="text-decoration-none flex-grow-1"
               >
-                {!isSearching && <span className="text-muted me-2">{index + 1}</span>}
+                <span className="text-muted me-2">{index + 1}</span>
                 <span className="fw-semibold">#{tag.name}</span>
               </Link>
               <div className="d-flex align-items-center gap-2">
@@ -129,36 +110,6 @@ function TrendingTab({ bookmarkedNames, onToggleBookmark, isAuthed }: {
   );
 }
 
-function FeedTab() {
-  const fetchPosts = useCallback(async (cursor?: number) => {
-    const { posts, next_cursor } = await tags.getBookmarkFeed({ before: cursor });
-    return { items: posts, next_cursor };
-  }, []);
-
-  const {
-    items: posts,
-    loading,
-    loadingMore,
-    hasMore,
-    loadMore,
-  } = usePagination<Post>({ fetchFn: fetchPosts });
-
-  if (loading) {
-    return <LoadingSpinner size="sm" className="py-4" />;
-  }
-
-  return (
-    <PostList
-      posts={posts}
-      emptyIcon="bookmark"
-      emptyTitle="No posts from bookmarked tags yet."
-      emptyDescription="Bookmark some tags to see their posts here."
-      hasMore={hasMore}
-      loadingMore={loadingMore}
-      onLoadMore={loadMore}
-    />
-  );
-}
 
 function BookmarkedTab({ bookmarks, loading, onUnbookmark }: {
   bookmarks: TagItem[];
@@ -212,7 +163,7 @@ function BookmarkedTab({ bookmarks, loading, onUnbookmark }: {
 
 export function ExplorePage() {
   const { actor } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabType>(actor ? 'feed' : 'trending');
+  const [activeTab, setActiveTab] = useState<TabType>('trending');
   const [bookmarks, setBookmarks] = useState<TagItem[]>([]);
   const [bookmarksLoading, setBookmarksLoading] = useState(false);
   const [bookmarkedNames, setBookmarkedNames] = useState<Set<string>>(new Set());
@@ -265,7 +216,6 @@ export function ExplorePage() {
   }, []);
 
   const tabItems: { key: TabType; label: string; show: boolean }[] = [
-    { key: 'feed', label: 'Feed', show: !!actor },
     { key: 'trending', label: 'Trending', show: true },
     { key: 'bookmarked', label: 'Bookmarked', show: !!actor },
   ];
@@ -294,7 +244,6 @@ export function ExplorePage() {
           isAuthed={!!actor}
         />
       )}
-      {activeTab === 'feed' && actor && <FeedTab />}
       {activeTab === 'bookmarked' && actor && (
         <BookmarkedTab
           bookmarks={bookmarks}

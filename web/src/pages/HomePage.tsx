@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { posts as postsApi, Post } from '../api';
+import { posts as postsApi, tags as tagsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
 import { PageHeader } from '../components/PageHeader';
 import { FeedFilter, FeedFilterValue } from '../components/FeedFilter';
@@ -189,7 +189,7 @@ export function HomePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [feedFilter, setFeedFilter] = useState<FeedFilterValue>(() => {
     const saved = localStorage.getItem('home-feed-filter');
-    return (saved === 'following' || saved === 'communities') ? saved : 'all';
+    return (saved === 'following' || saved === 'communities' || saved === 'tags') ? saved : 'all';
   });
 
   const handleFilterChange = useCallback((value: FeedFilterValue) => {
@@ -200,6 +200,10 @@ export function HomePage() {
   const fetchPosts = useCallback(async (cursor?: number) => {
     if (!user) {
       return { items: [], next_cursor: null };
+    }
+    if (feedFilter === 'tags') {
+      const { posts, next_cursor } = await tagsApi.getBookmarkFeed({ before: cursor });
+      return { items: posts, next_cursor };
     }
     const { posts, next_cursor } = await postsApi.getTimeline({ before: cursor, filter: feedFilter });
     return { items: posts, next_cursor };
@@ -234,7 +238,7 @@ export function HomePage() {
       <PageHeader
         title="Home"
         icon="house-fill"
-        subtitle="Latest posts from actors you follow."
+        subtitle={feedFilter === 'tags' ? 'Posts from your bookmarked hashtags.' : 'Latest posts from actors you follow.'}
         onRefresh={handleRefresh}
         refreshing={refreshing}
       />
@@ -242,9 +246,9 @@ export function HomePage() {
 
       {posts.length === 0 ? (
         <EmptyState
-          icon="inbox"
-          title="No posts yet."
-          description="Follow some users to see posts here."
+          icon={feedFilter === 'tags' ? 'bookmark' : 'inbox'}
+          title={feedFilter === 'tags' ? 'No posts from bookmarked tags yet.' : 'No posts yet.'}
+          description={feedFilter === 'tags' ? 'Bookmark some tags to see their posts here.' : 'Follow some users to see posts here.'}
         />
       ) : (
         <>

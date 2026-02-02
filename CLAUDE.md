@@ -21,6 +21,7 @@ docker compose down -v         # Reset database
 deno task dev                  # Run with hot reload
 deno task start                # Run production
 deno task seed                 # Seed database
+deno task test                 # Run integration tests (requires running Postgres)
 ```
 
 ### Frontend (React + Vite)

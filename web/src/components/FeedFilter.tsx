@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal, Button } from 'react-bootstrap';
 
-export type FeedFilterValue = 'all' | 'following' | 'communities';
+export type FeedFilterValue = 'all' | 'following' | 'communities' | 'tags';
 
 interface FeedFilterProps {
   value: FeedFilterValue;
@@ -9,9 +9,10 @@ interface FeedFilterProps {
 }
 
 const options: { key: FeedFilterValue; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'following', label: 'Following' },
+  { key: 'all', label: 'Actors' },
+  { key: 'following', label: 'People' },
   { key: 'communities', label: 'Communities' },
+  { key: 'tags', label: 'Tags' },
 ];
 
 export function FeedFilter({ value, onChange }: FeedFilterProps) {
@@ -45,9 +46,10 @@ export function FeedFilter({ value, onChange }: FeedFilterProps) {
           <Modal.Title>Feed Filters</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <p><strong>All</strong> — Everything from people and communities you follow</p>
-          <p><strong>Following</strong> — Posts from people you follow and their boosts (excludes community boosts)</p>
-          <p className="mb-0"><strong>Communities</strong> — Only posts boosted by communities you follow</p>
+          <p><strong>Actors</strong> — Everything from people and communities you follow</p>
+          <p><strong>People</strong> — Posts from people you follow and their boosts (excludes community boosts)</p>
+          <p><strong>Communities</strong> — Only posts boosted by communities you follow</p>
+          <p className="mb-0"><strong>Tags</strong> — Posts from your bookmarked hashtags</p>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowInfo(false)}>
