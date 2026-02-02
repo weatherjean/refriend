@@ -1815,6 +1815,25 @@ export class DB {
     });
   }
 
+  async getBatchPostFirstBooster(postIds: number[]): Promise<Map<number, Actor>> {
+    if (postIds.length === 0) return new Map();
+    return this.query(async (client) => {
+      const result = await client.queryObject<Actor & { post_id: number }>`
+        SELECT DISTINCT ON (b.post_id) a.*, b.post_id
+        FROM actors a
+        JOIN boosts b ON a.id = b.actor_id
+        WHERE b.post_id = ANY(${postIds}::int[])
+        ORDER BY b.post_id, b.created_at DESC
+      `;
+      const map = new Map<number, Actor>();
+      for (const row of result.rows) {
+        const postId = row.post_id;
+        map.set(postId, row);
+      }
+      return map;
+    });
+  }
+
   async getPostBoosters(postId: number, limit = 100): Promise<Actor[]> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`

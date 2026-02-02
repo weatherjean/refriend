@@ -365,12 +365,13 @@ export async function enrichPostsBatch(
   const postIds = posts.map((p) => p.id);
 
   // Batch fetch all related data
-  const [hashtagsMap, mediaMap, likedSet, boostedSet, pinnedSet] = await Promise.all([
+  const [hashtagsMap, mediaMap, likedSet, boostedSet, pinnedSet, boosterMap] = await Promise.all([
     repository.getBatchHashtags(db, postIds),
     repository.getBatchPostMedia(db, postIds),
     currentActorId ? db.getLikedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
     currentActorId ? db.getBoostedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
     currentActorId ? db.getPinnedPostIds(currentActorId, postIds) : Promise.resolve(new Set<number>()),
+    db.getBatchPostFirstBooster(postIds),
   ]);
 
   // Collect parent post IDs for replies
@@ -397,6 +398,7 @@ export async function enrichPostsBatch(
 
   return posts.map((post) => {
     const parentPost = post.in_reply_to_id ? parentPostsMap.get(post.in_reply_to_id) : null;
+    const booster = boosterMap.get(post.id);
 
     return {
       id: post.public_id,
@@ -430,6 +432,7 @@ export async function enrichPostsBatch(
       link_preview: post.link_preview,
       video_embed: post.video_embed,
       addressed_to: post.addressed_to ?? null,
+      ...(booster ? { boosted_by: { id: booster.public_id, handle: booster.handle, name: booster.name, avatar_url: booster.avatar_url, actor_type: booster.actor_type } } : {}),
     };
   });
 }
