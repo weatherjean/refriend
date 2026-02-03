@@ -24,3 +24,7 @@ No `.on(Update, ...)` inbox listener exists. When a remote user edits a post (co
 - `api/src/db.ts`: `getPostsByActorWithActor`, `getPostsByHashtagWithActor`
 - `api/src/domains/communities/repository.ts`: `getCommunityPosts`
 - Corresponding routes and frontend API calls
+
+TODO
+
+do no allow less than 3 letters in handle

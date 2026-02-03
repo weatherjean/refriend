@@ -109,7 +109,8 @@ app.use("*", async (c, next) => {
   const path = new URL(c.req.url).pathname;
   if (path.startsWith("/@")) {
     const accept = c.req.header("Accept") || "";
-    if (!accept.includes("application/activity+json") && !accept.includes("application/ld+json")) {
+    const method = c.req.method;
+    if (method === "GET" && !accept.includes("application/activity+json") && !accept.includes("application/ld+json")) {
       return c.redirect(`/a/${path.slice(2)}`, 302);
     }
   }
