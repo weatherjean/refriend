@@ -119,9 +119,6 @@ export function Layout({ children }: LayoutProps) {
             <Link to="/" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
               <i className="bi bi-house-fill me-2"></i> Home
             </Link>
-            <Link to="/hot" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
-              <i className="bi bi-fire me-2"></i> Hot
-            </Link>
             <Link to="/explore" className="list-group-item list-group-item-action" onClick={() => setMobileMenuOpen(false)}>
               <i className="bi bi-hash me-2"></i> Tags
             </Link>

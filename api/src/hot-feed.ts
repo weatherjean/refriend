@@ -9,7 +9,7 @@
 import type { DB, PostWithActor } from "./db.ts";
 
 const REFRESH_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
-const CACHE_SIZE = 200;
+const CACHE_SIZE = 1000;
 const STALE_AGE_HOURS = 3; // recalculate posts older than this
 const MAX_ITERATIONS = 5; // cap stabilization loops
 

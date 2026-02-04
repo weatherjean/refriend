@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Modal, Button } from 'react-bootstrap';
 import { feeds as feedsApi, FeedBookmark } from '../api';
 import { useAuth } from '../context/AuthContext';
 
-export type FeedFilterValue = 'all' | 'following' | 'communities' | 'tags' | `feed:${string}`;
+export type FeedFilterValue = 'all' | 'hot' | 'tags' | `feed:${string}`;
 
 interface FeedFilterProps {
   value: FeedFilterValue;
@@ -13,9 +12,8 @@ interface FeedFilterProps {
 }
 
 const staticOptions: { key: FeedFilterValue; label: string }[] = [
-  { key: 'all', label: 'Actors' },
-  { key: 'following', label: 'People' },
-  { key: 'communities', label: 'Communities' },
+  { key: 'all', label: 'Following' },
+  { key: 'hot', label: 'Hot' },
   { key: 'tags', label: 'Tags' },
 ];
 
@@ -41,7 +39,6 @@ const scrollbarStyles = `
 
 export function FeedFilter({ value, onChange, onFeedName }: FeedFilterProps) {
   const { user } = useAuth();
-  const [showInfo, setShowInfo] = useState(false);
   const [bookmarkedFeeds, setBookmarkedFeeds] = useState<FeedBookmark[]>([]);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -142,21 +139,14 @@ export function FeedFilter({ value, onChange, onFeedName }: FeedFilterProps) {
                 {feed.name.length > 12 ? feed.name.slice(0, 12) + '...' : feed.name}
               </button>
             ))}
+            <Link
+              to="/feeds"
+              className="btn btn-outline-secondary"
+              title="Explore feeds"
+            >
+              <i className="bi bi-plus-circle"></i>
+            </Link>
           </div>
-          <button
-            className="btn btn-sm btn-link text-muted p-0 flex-shrink-0"
-            onClick={() => setShowInfo(true)}
-            title="What do these filters mean?"
-          >
-            <i className="bi bi-info-circle"></i>
-          </button>
-          <Link
-            to="/feeds"
-            className="btn btn-sm btn-link text-muted p-0 flex-shrink-0"
-            title="Explore feeds"
-          >
-            <i className="bi bi-plus-circle"></i>
-          </Link>
         </div>
         {canScrollRight && (
           <button
@@ -169,25 +159,6 @@ export function FeedFilter({ value, onChange, onFeedName }: FeedFilterProps) {
         )}
       </div>
 
-      <Modal show={showInfo} onHide={() => setShowInfo(false)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>Feed Filters</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <p><strong>Actors</strong> — Everything from people and communities you follow</p>
-          <p><strong>People</strong> — Posts from people you follow and their boosts (excludes community boosts)</p>
-          <p><strong>Communities</strong> — Only posts boosted by communities you follow</p>
-          <p><strong>Tags</strong> — Posts from your bookmarked hashtags</p>
-          {bookmarkedFeeds.length > 0 && (
-            <p className="mb-0"><strong>Custom feeds</strong> — Curated feeds you've bookmarked. <Link to="/feeds">Explore more feeds</Link></p>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowInfo(false)}>
-            Close
-          </Button>
-        </Modal.Footer>
-      </Modal>
     </>
   );
 }

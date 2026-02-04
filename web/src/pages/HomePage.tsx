@@ -189,7 +189,7 @@ export function HomePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [feedFilter, setFeedFilter] = useState<FeedFilterValue>(() => {
     const saved = localStorage.getItem('home-feed-filter');
-    if (saved === 'following' || saved === 'communities' || saved === 'tags') return saved;
+    if (saved === 'hot' || saved === 'tags') return saved;
     if (saved?.startsWith('feed:')) return saved as FeedFilterValue;
     return 'all';
   });
@@ -208,6 +208,10 @@ export function HomePage() {
     if (!user) {
       return { items: [], next_cursor: null };
     }
+    if (feedFilter === 'hot') {
+      const { posts, next_cursor } = await postsApi.getHot(cursor ? { offset: cursor, limit: 20 } : { limit: 20 });
+      return { items: posts, next_cursor };
+    }
     if (feedFilter === 'tags') {
       const { posts, next_cursor } = await tagsApi.getBookmarkFeed({ before: cursor });
       return { items: posts, next_cursor };
@@ -225,7 +229,7 @@ export function HomePage() {
         return { items: posts, next_cursor };
       }
     }
-    const { posts, next_cursor } = await postsApi.getTimeline({ before: cursor, filter: feedFilter as 'all' | 'following' | 'communities' });
+    const { posts, next_cursor } = await postsApi.getTimeline({ before: cursor });
     return { items: posts, next_cursor };
   }, [user, feedFilter]);
 
@@ -256,17 +260,11 @@ export function HomePage() {
       };
     }
     switch (feedFilter) {
-      case 'following': return {
-        title: 'People', icon: 'people' as const,
-        subtitle: 'Posts from people you follow.',
-        emptyIcon: 'people', emptyTitle: 'No posts yet.',
-        emptyDesc: 'Follow some people to see their posts here.',
-      };
-      case 'communities': return {
-        title: 'Communities', icon: 'people' as const,
-        subtitle: 'Posts from communities you follow.',
-        emptyIcon: 'people', emptyTitle: 'No community posts yet.',
-        emptyDesc: 'Follow some communities to see posts here.',
+      case 'hot': return {
+        title: 'Hot', icon: 'fire' as const,
+        subtitle: 'Trending posts from across the community.',
+        emptyIcon: 'fire', emptyTitle: 'No hot posts yet.',
+        emptyDesc: 'Start interacting with posts!',
       };
       case 'tags': return {
         title: 'Tags', icon: 'hash' as const,
@@ -276,7 +274,7 @@ export function HomePage() {
       };
       default: return {
         title: 'Home', icon: 'house-fill' as const,
-        subtitle: 'Latest posts from actors you follow.',
+        subtitle: 'Latest posts from people and communities you follow.',
         emptyIcon: 'inbox', emptyTitle: 'No posts yet.',
         emptyDesc: 'Follow some users to see posts here.',
       };
