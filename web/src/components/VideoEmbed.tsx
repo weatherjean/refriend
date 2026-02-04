@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { VideoEmbed as VideoEmbedType } from '../api';
-import { useModalActive } from '../context/ModalActiveContext';
 
 interface VideoEmbedProps {
   video: VideoEmbedType;
@@ -21,14 +20,6 @@ const PLATFORM_ICONS: Record<VideoEmbedType['platform'], string> = {
 
 export function VideoEmbed({ video, onPlayClick }: VideoEmbedProps) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const { isActive } = useModalActive();
-
-  // Reset playing state when modal becomes inactive (goes to background)
-  useEffect(() => {
-    if (!isActive && isPlaying) {
-      setIsPlaying(false);
-    }
-  }, [isActive, isPlaying]);
 
   const platformName = PLATFORM_NAMES[video.platform];
   const platformIcon = PLATFORM_ICONS[video.platform];

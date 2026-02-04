@@ -20,7 +20,7 @@ export function AllActivityPage() {
     loadMore,
   } = usePagination<Post>({ fetchFn: fetchPosts, key: 'all-activity' });
 
-  if (loading) {
+  if (loading && allPosts.length === 0) {
     return <LoadingSpinner />;
   }
 

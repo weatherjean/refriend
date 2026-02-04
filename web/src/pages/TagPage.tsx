@@ -56,7 +56,7 @@ export function TagPage() {
     loadMore,
   } = usePagination<Post>({ fetchFn: fetchPosts, key: `${tag}-${sort}` });
 
-  if (loading) {
+  if (loading && posts.length === 0) {
     return <LoadingSpinner />;
   }
 

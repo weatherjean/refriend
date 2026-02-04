@@ -21,7 +21,7 @@ export function HotPage() {
     loadMore,
   } = usePagination<Post>({ fetchFn: fetchPosts, key: 'hot-page' });
 
-  if (loading) {
+  if (loading && postList.length === 0) {
     return <LoadingSpinner />;
   }
 

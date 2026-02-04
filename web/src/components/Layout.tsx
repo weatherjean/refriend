@@ -233,7 +233,7 @@ export function Layout({ children }: LayoutProps) {
         </div>
 
         {/* Main Content */}
-        <div className="col-lg-8 py-4 px-3 main-content">
+        <div className="col-lg-8 main-content">
           {children}
         </div>
       </div>
@@ -241,9 +241,17 @@ export function Layout({ children }: LayoutProps) {
       {/* Mobile Bottom Bar */}
       <nav className="mobile-bottom-bar d-lg-none">
         <div className="mobile-bottom-bar-icons">
-          <Link to="/" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
+          <a href="#" className="mobile-nav-item" onClick={(e) => {
+            e.preventDefault();
+            setMobileMenuOpen(false);
+            if (location.pathname === '/') {
+              document.querySelector('.page-slot')?.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+              navigate('/');
+            }
+          }}>
             <img src="/icon.svg" alt="Home" height="24" />
-          </Link>
+          </a>
           <Link to="/search" className="mobile-nav-item" onClick={() => setMobileMenuOpen(false)}>
             <i className="bi bi-search"></i>
           </Link>

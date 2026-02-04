@@ -1,3 +1,5 @@
+import { useState, useEffect, useRef } from 'react';
+import { Routes, Route, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
@@ -25,11 +27,12 @@ import { CreateFeedPage } from './pages/CreateFeedPage';
 import { FeedPage } from './pages/FeedPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { useAuth } from './context/AuthContext';
-import { StackedModals } from './components/StackedModals';
-import { useModalStack } from './context/ModalStackContext';
 
-// Route configuration for modal pages
-export const modalRoutes = [
+if ('scrollRestoration' in window.history) {
+  window.history.scrollRestoration = 'manual';
+}
+
+const routeConfig = [
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   { path: '/forgot-password', element: <ForgotPasswordPage /> },
@@ -39,12 +42,13 @@ export const modalRoutes = [
   { path: '/notifications', element: <NotificationsPage /> },
   { path: '/new', element: <NewPostPage /> },
   { path: '/posts/:id', element: <PostPage /> },
+  { path: '/a/:handle/posts/:id', element: <PostPage /> },
   { path: '/a/:handle/*', element: <ActorPage /> },
   { path: '/actor/:id', element: <ActorByIdPage /> },
   { path: '/tags/:tag', element: <TagPage /> },
-  { path: '/feeds', element: <FeedsExplorePage /> },
   { path: '/feeds/new', element: <CreateFeedPage /> },
   { path: '/feeds/:slug', element: <FeedPage /> },
+  { path: '/feeds', element: <FeedsExplorePage /> },
   { path: '/following', element: <FollowingPage /> },
   { path: '/install', element: <InstallPage /> },
   { path: '/guide', element: <GuidePage /> },
@@ -56,9 +60,113 @@ export const modalRoutes = [
   { path: '*', element: <NotFoundPage /> },
 ];
 
+interface StackEntry {
+  path: string;
+  key: string;
+}
+
+let entryCounter = 0;
+function nextKey() {
+  return `page-${++entryCounter}`;
+}
+
+function PageStack() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navType = useNavigationType();
+  const currentPath = location.pathname + location.search;
+
+  // Initialize stack with current path if landing on a non-home URL
+  const [stack, setStack] = useState<StackEntry[]>(() => {
+    if (currentPath === '/') return [];
+    return [{ path: currentPath, key: nextKey() }];
+  });
+  const prevPath = useRef(currentPath);
+
+  useEffect(() => {
+    if (prevPath.current === currentPath) return;
+    prevPath.current = currentPath;
+
+    if (currentPath === '/') {
+      setStack([]);
+      return;
+    }
+
+    if (navType === 'POP') {
+      // Find the entry matching the current path (handles multi-level back)
+      setStack(prev => {
+        const idx = prev.findIndex(e => e.path === currentPath);
+        if (idx >= 0) return prev.slice(0, idx + 1);
+        // Path not in stack (e.g. direct URL navigation) — replace with single entry
+        return [{ path: currentPath, key: nextKey() }];
+      });
+    } else {
+      const key = nextKey();
+      setStack(prev => {
+        const top = prev[prev.length - 1];
+        if (top?.path === currentPath) return prev;
+        return [...prev, { path: currentPath, key }];
+      });
+    }
+  }, [currentPath, navType]);
+
+  const goBack = () => {
+    if (stack.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
+  };
+
+  const goHome = () => {
+    navigate('/');
+  };
+
+  const isHome = currentPath === '/';
+
+  return (
+    <>
+      {/* Home — always mounted, each page-slot scrolls independently */}
+      <div className={`page-slot ${isHome ? '' : 'page-slot-hidden'}`}>
+        <HomePage />
+      </div>
+
+      {/* Stacked pages */}
+      {stack.map((entry, index) => {
+        const isTop = index === stack.length - 1 && !isHome;
+        let pathname = entry.path.split('?')[0];
+        const search = entry.path.includes('?') ? `?${entry.path.split('?')[1]}` : '';
+        const postMatch = pathname.match(/^\/a\/[^/]+\/posts\/(.+)$/);
+        if (postMatch) {
+          pathname = `/posts/${postMatch[1]}`;
+        }
+        const loc = { pathname, search, hash: '', state: null, key: entry.key };
+
+        return (
+          <div key={entry.key} className={`page-slot ${isTop ? '' : 'page-slot-hidden'}`}>
+            <div className="page-nav">
+              <button className="page-nav-btn" onClick={goBack} aria-label="Back" title="Back">
+                <i className="bi bi-arrow-left"></i>
+              </button>
+              <button className="page-nav-btn" onClick={goHome} aria-label="Home" title="Home">
+                <i className="bi bi-house-fill"></i>
+              </button>
+              <img src="/icon.svg" alt="riff" height="24" className="ms-auto" style={{ opacity: 0.6 }} />
+            </div>
+            <Routes location={loc}>
+              {routeConfig.map(route => (
+                <Route key={route.path} path={route.path} element={route.element} />
+              ))}
+            </Routes>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 function App() {
   const { loading } = useAuth();
-  const { stack } = useModalStack();
 
   if (loading) {
     return (
@@ -70,11 +178,7 @@ function App() {
 
   return (
     <Layout>
-      {/* Home feed - ALWAYS rendered */}
-      <HomePage />
-
-      {/* Stacked modals - each visited page stays mounted */}
-      {stack.length > 0 && <StackedModals />}
+      <PageStack />
     </Layout>
   );
 }

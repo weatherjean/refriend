@@ -38,8 +38,6 @@ export function usePagination<T>({
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    setItems([]);
-    setNextCursor(null);
     try {
       const { items: newItems, next_cursor } = await fetchFnRef.current();
       setItems(newItems);

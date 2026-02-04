@@ -149,7 +149,7 @@ function PostsTab({ slug, canModerate }: { slug: string; canModerate: boolean })
     loadMore,
   } = usePagination<Post>({ fetchFn: fetchPosts, key: slug });
 
-  if (loading) return <LoadingSpinner />;
+  if (loading && posts.length === 0) return <LoadingSpinner />;
 
   if (posts.length === 0) {
     return (

@@ -104,7 +104,7 @@ export function FeedFilter({ value, onChange, onFeedName }: FeedFilterProps) {
   return (
     <>
       <style>{scrollbarStyles}</style>
-      <div className="d-flex align-items-center gap-0 mb-3">
+      <div className="d-flex align-items-center gap-0 mb-3" style={{ marginTop: 10 }}>
         {canScrollLeft && (
           <button
             className="btn btn-sm btn-link text-muted p-0 flex-shrink-0"

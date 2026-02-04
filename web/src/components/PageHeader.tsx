@@ -7,11 +7,12 @@ interface PageHeaderProps {
   onRefresh?: () => void;
   refreshing?: boolean;
   actions?: ReactNode;
+  sticky?: boolean;
 }
 
-export function PageHeader({ title, icon, subtitle, onRefresh, refreshing, actions }: PageHeaderProps) {
+export function PageHeader({ title, icon, subtitle, onRefresh, refreshing, actions, sticky }: PageHeaderProps) {
   return (
-    <div className="mb-4">
+    <div className={sticky ? 'page-header-sticky' : 'mt-3 mb-4'}>
       <div className="d-flex justify-content-between align-items-center">
         <h4 className="mb-0">
           {icon && <i className={`bi bi-${icon} me-2`} style={{ position: 'relative', top: '-0.15em' }}></i>}

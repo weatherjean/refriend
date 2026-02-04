@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { posts as postsApi, tags as tagsApi, feeds as feedsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
@@ -233,6 +233,8 @@ export function HomePage() {
     return { items: posts, next_cursor };
   }, [user, feedFilter]);
 
+  // HomePage is always mounted (hidden via visibility:hidden when navigating away),
+  // so React state is preserved naturally — no cache needed.
   const {
     items: posts,
     loading,
@@ -240,12 +242,21 @@ export function HomePage() {
     hasMore,
     refresh,
     loadMore,
-  } = usePagination<Post>({ fetchFn: fetchPosts, key: `${user?.id ?? 'guest'}-${feedFilter}` });
+  } = usePagination<Post>({
+    fetchFn: fetchPosts,
+    key: `${user?.id ?? 'guest'}-${feedFilter}`,
+  });
+
+  const slotRef = useRef<HTMLElement | null>(null);
+  if (!slotRef.current) {
+    slotRef.current = document.querySelector('.page-slot');
+  }
 
   const handleRefresh = async () => {
     setRefreshing(true);
     await refresh();
     setRefreshing(false);
+    slotRef.current?.scrollTo({ top: 0, behavior: 'instant' });
   };
 
   const headerInfo = useMemo(() => {
@@ -286,7 +297,7 @@ export function HomePage() {
     return <LandingPage />;
   }
 
-  if (loading) {
+  if (loading && posts.length === 0) {
     return <LoadingSpinner />;
   }
 
@@ -295,11 +306,12 @@ export function HomePage() {
       <PageHeader
         title={headerInfo.title}
         icon={headerInfo.icon}
-        subtitle={headerInfo.subtitle}
         onRefresh={handleRefresh}
         refreshing={refreshing}
+        sticky
       />
       <FeedFilter value={feedFilter} onChange={handleFilterChange} onFeedName={handleFeedName} />
+      {headerInfo.subtitle && <p className="text-muted small mb-3">{headerInfo.subtitle}</p>}
 
       {posts.length === 0 ? (
         feedFilter === 'all' ? (

@@ -41,7 +41,6 @@ export function PostPage() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      setPost(null); // Clear post to trigger reply reload
       try {
         const postData = await postsApi.get(id!);
         setPost(postData.post);
@@ -68,7 +67,7 @@ export function PostPage() {
     setReplies(prev => [...prev, newReply]);
   };
 
-  if (loading) {
+  if (loading && !post) {
     return <LoadingSpinner />;
   }
 
