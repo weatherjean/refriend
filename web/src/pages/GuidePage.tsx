@@ -18,22 +18,32 @@ export function GuidePage() {
           <div className="card-body">
             <h5 className="mb-3">Your Home Feed</h5>
             <p className="legal-text mb-3">
-              Your home feed shows posts from actors you follow, newest first.
+              Your home feed shows posts from people and communities you follow, newest first.
               This includes both local Riff users and remote fediverse accounts.
+              Use the tabs at the top to switch between views:
+            </p>
+            <ul className="legal-list mb-3">
+              <li><strong>Following</strong> — everything from people and communities you follow</li>
+              <li><strong>Hot</strong> — trending posts from across the community, not just people you follow</li>
+              <li><strong>Tags</strong> — posts from your bookmarked hashtags</li>
+            </ul>
+            <p className="legal-text mb-3">
+              You can also bookmark custom feeds and they'll appear as extra tabs.
+              Hit the <strong>+</strong> button to explore available feeds.
             </p>
             <p className="legal-text mb-0">
-              If your feed feels empty, follow more people. Check the <strong>Hot</strong> page
-              for popular posts, or use <strong>Search</strong> to find actors and communities.
+              If your feed feels empty, follow more people. Check the <strong>Hot</strong> tab
+              for popular posts, or use <strong>Search</strong> to find people and communities.
             </p>
           </div>
         </div>
 
-        {/* Hot Page */}
+        {/* Hot Tab */}
         <div className="card mb-3">
           <div className="card-body">
-            <h5 className="mb-3">The Hot Page</h5>
+            <h5 className="mb-3">The Hot Tab</h5>
             <p className="legal-text mb-0">
-              The Hot page shows popular posts from <em>all</em> actors on Riff, not just people you follow.
+              The Hot tab shows popular posts from <em>all</em> accounts on Riff, not just people you follow.
               Posts are ranked by recent likes, boosts, and replies. Posts need to be at least one hour old
               to show up here, and sensitive content is filtered out.
             </p>
@@ -133,7 +143,7 @@ export function GuidePage() {
             <ul className="legal-list mb-0">
               <li>Use <strong>hashtags</strong> in your posts so others can find them</li>
               <li>Follow Lemmy communities to get a steady flow of topic-based content</li>
-              <li>Check <strong>Hot</strong> to find new people to follow</li>
+              <li>Check the <strong>Hot</strong> tab on your home feed to find new people to follow</li>
               <li><strong>Boost</strong> posts you like to share them with your followers</li>
               <li>There's no native app yet, but you can <Link to="/install">install Riff as a PWA</Link> for a similar experience</li>
             </ul>

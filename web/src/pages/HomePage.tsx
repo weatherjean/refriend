@@ -302,11 +302,37 @@ export function HomePage() {
       <FeedFilter value={feedFilter} onChange={handleFilterChange} onFeedName={handleFeedName} />
 
       {posts.length === 0 ? (
-        <EmptyState
-          icon={headerInfo.emptyIcon}
-          title={headerInfo.emptyTitle}
-          description={headerInfo.emptyDesc}
-        />
+        feedFilter === 'all' ? (
+          <div className="text-center text-muted py-5">
+            <i className="bi bi-house fs-1 mb-3 d-block"></i>
+            <p className="mb-1 fw-semibold">Your home feed is empty</p>
+            <p className="small mb-3" style={{ maxWidth: 380, margin: '0 auto' }}>
+              This is where you'll see posts from people and communities you follow.
+              Follow some accounts to fill your feed, check out curated feeds,
+              or jump straight into what's trending.
+            </p>
+            <div className="d-flex gap-2 justify-content-center flex-wrap">
+              <Link to="/search" className="btn btn-primary btn-sm">
+                <i className="bi bi-search me-1"></i>
+                Search for people
+              </Link>
+              <Link to="/feeds" className="btn btn-outline-secondary btn-sm">
+                <i className="bi bi-collection me-1"></i>
+                Explore feeds
+              </Link>
+              <button className="btn btn-outline-secondary btn-sm" onClick={() => handleFilterChange('hot')}>
+                <i className="bi bi-fire me-1"></i>
+                See what's hot
+              </button>
+            </div>
+          </div>
+        ) : (
+          <EmptyState
+            icon={headerInfo.emptyIcon}
+            title={headerInfo.emptyTitle}
+            description={headerInfo.emptyDesc}
+          />
+        )
       ) : (
         <>
           {posts.map((post) => (
