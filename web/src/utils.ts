@@ -51,6 +51,12 @@ export function getProfileLink(actor: { handle: string; is_local?: boolean }): s
   return `/a/${actor.handle}`;
 }
 
+export function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
+  return String(n);
+}
+
 export function getPostLink(post: { id: string; author?: { handle: string; is_local?: boolean } | null }): string {
   if (post.author) {
     return `${getProfileLink(post.author)}/posts/${post.id}`;

@@ -272,7 +272,7 @@ export const users = {
 // Actors (works for both local and remote)
 export const actors = {
   get: (actorId: string) =>
-    fetchJson<{ actor: Actor; is_following: boolean; follow_status: 'pending' | 'accepted' | null; is_own_profile: boolean }>(`/actors/${actorId}`),
+    fetchJson<{ actor: Actor; is_following: boolean; follow_status: 'pending' | 'accepted' | null; is_own_profile: boolean; stats: { followers: number; following: number } }>(`/actors/${actorId}`),
   getPosts: (actorId: string, params?: PaginationParams) =>
     fetchJson<PaginatedPosts>(`/actors/${actorId}/posts${buildQuery({ limit: params?.limit, before: params?.before, sort: params?.sort })}`),
   getReplies: (actorId: string, params?: PaginationParams) => {

@@ -43,6 +43,7 @@ export interface Actor {
   follower_count: number;
   following_count: number;
   featured_fetched_at: string | null;
+  counts_fetched_at: string | null;
   created_at: string;
 }
 
@@ -287,7 +288,7 @@ export class DB {
 
   // ============ Actors ============
 
-  async createActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "follower_count" | "following_count" | "featured_fetched_at"> & { follower_count?: number; following_count?: number }): Promise<Actor> {
+  async createActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "follower_count" | "following_count" | "featured_fetched_at" | "counts_fetched_at"> & { follower_count?: number; following_count?: number }): Promise<Actor> {
     return this.query(async (client) => {
       const result = await client.queryObject<Actor>`
         INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type, follower_count)
@@ -454,24 +455,53 @@ export class DB {
     });
   }
 
-  async upsertActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "user_id" | "follower_count" | "following_count" | "featured_fetched_at">): Promise<Actor> {
+  async upsertActor(actor: Omit<Actor, "id" | "public_id" | "created_at" | "user_id" | "follower_count" | "following_count" | "featured_fetched_at" | "counts_fetched_at"> & { follower_count?: number; following_count?: number; counts_fetched_at?: boolean }): Promise<Actor> {
     return this.query(async (client) => {
-      const result = await client.queryObject<Actor>`
-        INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type)
-        VALUES (${actor.uri}, ${actor.handle}, ${actor.name}, ${actor.bio}, ${actor.avatar_url},
-                ${actor.inbox_url}, ${actor.shared_inbox_url}, ${actor.url}, NULL, ${actor.actor_type})
-        ON CONFLICT(uri) DO UPDATE SET
-          handle = EXCLUDED.handle,
-          name = EXCLUDED.name,
-          bio = EXCLUDED.bio,
-          avatar_url = EXCLUDED.avatar_url,
-          inbox_url = EXCLUDED.inbox_url,
-          shared_inbox_url = EXCLUDED.shared_inbox_url,
-          url = EXCLUDED.url,
-          actor_type = EXCLUDED.actor_type
-        RETURNING *
-      `;
-      return result.rows[0];
+      const followerCount = actor.follower_count ?? 0;
+      const followingCount = actor.following_count ?? 0;
+      const updateCountsFetchedAt = actor.counts_fetched_at ?? false;
+      // Try upsert on uri first, fall back to handle if uri changed (e.g. /users/x -> /@x)
+      try {
+        const result = await client.queryObject<Actor>`
+          INSERT INTO actors (uri, handle, name, bio, avatar_url, inbox_url, shared_inbox_url, url, user_id, actor_type, follower_count, following_count, counts_fetched_at)
+          VALUES (${actor.uri}, ${actor.handle}, ${actor.name}, ${actor.bio}, ${actor.avatar_url},
+                  ${actor.inbox_url}, ${actor.shared_inbox_url}, ${actor.url}, NULL, ${actor.actor_type},
+                  ${followerCount}, ${followingCount}, ${updateCountsFetchedAt ? new Date().toISOString() : null})
+          ON CONFLICT(uri) DO UPDATE SET
+            handle = EXCLUDED.handle,
+            name = EXCLUDED.name,
+            bio = EXCLUDED.bio,
+            avatar_url = EXCLUDED.avatar_url,
+            inbox_url = EXCLUDED.inbox_url,
+            shared_inbox_url = EXCLUDED.shared_inbox_url,
+            url = EXCLUDED.url,
+            actor_type = EXCLUDED.actor_type,
+            follower_count = CASE WHEN ${updateCountsFetchedAt} THEN EXCLUDED.follower_count ELSE actors.follower_count END,
+            following_count = CASE WHEN ${updateCountsFetchedAt} THEN EXCLUDED.following_count ELSE actors.following_count END,
+            counts_fetched_at = CASE WHEN ${updateCountsFetchedAt} THEN EXCLUDED.counts_fetched_at ELSE actors.counts_fetched_at END
+          RETURNING *
+        `;
+        return result.rows[0];
+      } catch {
+        // Handle conflict: actor exists with same handle but different uri
+        const result = await client.queryObject<Actor>`
+          UPDATE actors SET
+            uri = ${actor.uri},
+            name = ${actor.name},
+            bio = ${actor.bio},
+            avatar_url = ${actor.avatar_url},
+            inbox_url = ${actor.inbox_url},
+            shared_inbox_url = ${actor.shared_inbox_url},
+            url = ${actor.url},
+            actor_type = ${actor.actor_type},
+            follower_count = CASE WHEN ${updateCountsFetchedAt} THEN ${followerCount} ELSE follower_count END,
+            following_count = CASE WHEN ${updateCountsFetchedAt} THEN ${followingCount} ELSE following_count END,
+            counts_fetched_at = CASE WHEN ${updateCountsFetchedAt} THEN NOW() ELSE counts_fetched_at END
+          WHERE handle = ${actor.handle}
+          RETURNING *
+        `;
+        return result.rows[0];
+      }
     });
   }
 
@@ -962,6 +992,7 @@ export class DB {
         follower_count: (row.author_follower_count as number) || 0,
         following_count: (row.author_following_count as number) || 0,
         featured_fetched_at: null,
+        counts_fetched_at: null,
         created_at: String(row.author_created_at),
       },
     };

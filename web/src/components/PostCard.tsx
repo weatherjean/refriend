@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Post, Actor, posts as postsApi } from '../api';
-import { formatTimeAgo, getUsername, getProfileLink, getPostLink, sanitizeHtml } from '../utils';
+import { formatTimeAgo, getUsername, getProfileLink, getPostLink, sanitizeHtml, formatCount } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import { TagBadge } from './TagBadge';
 import { Avatar } from './Avatar';
@@ -209,12 +209,12 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete, feedSlug, on
             {post.boosted_by.actor_type === 'Group' ? (
               <span>
                 shared into <strong>{post.boosted_by.name || post.boosted_by.handle}</strong>
-                {boostsCount > 1 && <span className="text-muted"> and {boostsCount - 1} {boostsCount - 1 === 1 ? 'other' : 'others'}</span>}
+                {boostsCount > 1 && <span className="text-muted"> and {formatCount(boostsCount - 1)} {boostsCount - 1 === 1 ? 'other' : 'others'}</span>}
               </span>
             ) : (
               <span>
                 boosted by <strong>{post.boosted_by.name || post.boosted_by.handle}</strong>
-                {boostsCount > 1 && <span className="text-muted"> and {boostsCount - 1} {boostsCount - 1 === 1 ? 'other' : 'others'}</span>}
+                {boostsCount > 1 && <span className="text-muted"> and {formatCount(boostsCount - 1)} {boostsCount - 1 === 1 ? 'other' : 'others'}</span>}
               </span>
             )}
           </Link>
@@ -399,7 +399,7 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete, feedSlug, on
             ) : (
               <>
                 <i className={`bi ${liked ? 'bi-heart-fill' : 'bi-heart'}`}></i>
-                <span>{likesCount}</span>
+                <span>{formatCount(likesCount)}</span>
               </>
             )}
           </button>
@@ -412,7 +412,7 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete, feedSlug, on
               title="View replies"
             >
               <i className="bi bi-chat"></i>
-              <span>{post.replies_count ?? 0}</span>
+              <span>{formatCount(post.replies_count ?? 0)}</span>
             </Link>
           )}
 
@@ -428,7 +428,7 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete, feedSlug, on
               ) : (
                 <>
                   <i className="bi bi-arrow-repeat"></i>
-                  <span>{boostsCount}</span>
+                  <span>{formatCount(boostsCount)}</span>
                 </>
               )}
             </button>
@@ -463,13 +463,13 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete, feedSlug, on
                   {likesCount > 0 && (
                     <button className="post-menu-item" onClick={openLikersModal}>
                       <i className="bi bi-heart"></i>
-                      <span>View likes ({likesCount})</span>
+                      <span>View likes ({formatCount(likesCount)})</span>
                     </button>
                   )}
                   {boostsCount > 0 && (
                     <button className="post-menu-item" onClick={openBoostersModal}>
                       <i className="bi bi-arrow-repeat"></i>
-                      <span>View boosts ({boostsCount})</span>
+                      <span>View boosts ({formatCount(boostsCount)})</span>
                     </button>
                   )}
                 </div>

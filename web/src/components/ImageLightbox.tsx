@@ -152,8 +152,11 @@ export function ImageLightbox({ attachments, initialIndex, isOpen, onClose }: Im
     >
       <button
         className="btn btn-link text-white position-absolute end-0 fs-3"
-        style={{ top: 'max(0.75rem, env(safe-area-inset-top))', right: '0.75rem', zIndex: 1 }}
+        style={{ top: 'max(0.75rem, env(safe-area-inset-top))', right: '0.75rem', zIndex: 2 }}
         onClick={(e) => { e.stopPropagation(); handleClose(); }}
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
       >
         <i className="bi bi-x-lg"></i>
       </button>
@@ -161,13 +164,21 @@ export function ImageLightbox({ attachments, initialIndex, isOpen, onClose }: Im
         <>
           <button
             className="btn btn-link text-white position-absolute start-0 top-50 translate-middle-y ms-3 fs-2"
+            style={{ zIndex: 2 }}
             onClick={handlePrev}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
           >
             <i className="bi bi-chevron-left"></i>
           </button>
           <button
             className="btn btn-link text-white position-absolute end-0 top-50 translate-middle-y me-3 fs-2"
+            style={{ zIndex: 2 }}
             onClick={handleNext}
+            onTouchStart={(e) => e.stopPropagation()}
+            onTouchMove={(e) => e.stopPropagation()}
+            onTouchEnd={(e) => e.stopPropagation()}
           >
             <i className="bi bi-chevron-right"></i>
           </button>

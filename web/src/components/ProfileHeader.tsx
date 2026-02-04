@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Actor } from '../api';
 import { Avatar } from './Avatar';
-import { sanitizeHtml } from '../utils';
+import { sanitizeHtml, formatCount } from '../utils';
 
 interface ProfileHeaderProps {
   actor: Actor;
@@ -111,24 +111,39 @@ export function ProfileHeader({
             </div>
           )}
 
-          {actor.is_local && (
+          {actor.is_local ? (
             <div className="mt-3 d-flex justify-content-center gap-4">
               <button
                 className="btn btn-link text-decoration-none p-0"
                 onClick={onShowFollowing}
               >
-                <strong>{stats.following}</strong>{' '}
+                <strong>{formatCount(stats.following)}</strong>{' '}
                 <span className="text-muted">Following</span>
               </button>
               <button
                 className="btn btn-link text-decoration-none p-0"
                 onClick={onShowFollowers}
               >
-                <strong>{stats.followers}</strong>{' '}
+                <strong>{formatCount(stats.followers)}</strong>{' '}
                 <span className="text-muted">Followers</span>
               </button>
             </div>
-          )}
+          ) : (stats.followers > 0 || stats.following > 0) ? (
+            <div className="mt-3 d-flex justify-content-center gap-4 text-muted">
+              {stats.following > 0 && (
+                <span>
+                  <strong>~ {formatCount(stats.following)}</strong>{' '}
+                  Following
+                </span>
+              )}
+              {stats.followers > 0 && (
+                <span>
+                  <strong>~ {formatCount(stats.followers)}</strong>{' '}
+                  Followers
+                </span>
+              )}
+            </div>
+          ) : null}
 
           {loggedIn && !isOwnProfile && (
             <div className="mt-3">
@@ -197,24 +212,39 @@ export function ProfileHeader({
               </div>
             )}
 
-            {actor.is_local && (
+            {actor.is_local ? (
               <div className="mt-2">
                 <button
                   className="btn btn-link text-decoration-none p-0 me-3"
                   onClick={onShowFollowing}
                 >
-                  <strong>{stats.following}</strong>{' '}
+                  <strong>{formatCount(stats.following)}</strong>{' '}
                   <span className="text-muted">Following</span>
                 </button>
                 <button
                   className="btn btn-link text-decoration-none p-0"
                   onClick={onShowFollowers}
                 >
-                  <strong>{stats.followers}</strong>{' '}
+                  <strong>{formatCount(stats.followers)}</strong>{' '}
                   <span className="text-muted">Followers</span>
                 </button>
               </div>
-            )}
+            ) : (stats.followers > 0 || stats.following > 0) ? (
+              <div className="mt-2 text-muted">
+                {stats.following > 0 && (
+                  <span className="me-3">
+                    <strong>~ {formatCount(stats.following)}</strong>{' '}
+                    Following
+                  </span>
+                )}
+                {stats.followers > 0 && (
+                  <span>
+                    <strong>~ {formatCount(stats.followers)}</strong>{' '}
+                    Followers
+                  </span>
+                )}
+              </div>
+            ) : null}
           </div>
 
           {loggedIn && !isOwnProfile && (

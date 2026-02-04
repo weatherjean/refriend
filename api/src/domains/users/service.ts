@@ -617,7 +617,7 @@ export async function getActorById(
   publicId: string,
   currentActorId?: number,
   domain?: string
-): Promise<{ actor: SanitizedActor; is_following: boolean; follow_status: 'pending' | 'accepted' | null; is_own_profile: boolean } | null> {
+): Promise<{ actor: SanitizedActor; is_following: boolean; follow_status: 'pending' | 'accepted' | null; is_own_profile: boolean; stats: { followers: number; following: number } } | null> {
   const actor = await db.getActorByPublicId(publicId);
   if (!actor) {
     return null;
@@ -631,6 +631,10 @@ export async function getActorById(
     is_following: followStatus === 'accepted',
     follow_status: followStatus,
     is_own_profile: isOwnProfile,
+    stats: {
+      followers: actor.follower_count,
+      following: actor.following_count,
+    },
   };
 }
 

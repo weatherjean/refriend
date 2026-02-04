@@ -41,6 +41,7 @@ export interface Actor {
   follower_count: number;
   following_count: number;
   featured_fetched_at: string | null;
+  counts_fetched_at: string | null;
   created_at: string;
 }
 

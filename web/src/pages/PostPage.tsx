@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { posts as postsApi, Post, AttachmentInput } from '../api';
+import { formatCount } from '../utils';
 import { PostCard } from '../components/PostCard';
 import { PostThread } from '../components/PostThread';
 import { PostComposer } from '../components/PostComposer';
@@ -118,7 +119,7 @@ export function PostPage() {
           <div className="d-flex justify-content-between align-items-center mb-3">
             <h5 className="mb-0">
               <i className="bi bi-chat-dots-fill me-2"></i>
-              Replies ({post.replies_count})
+              Replies ({formatCount(post.replies_count ?? 0)})
             </h5>
             <SortToggle value={replySort} onChange={setReplySort} />
           </div>

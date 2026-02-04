@@ -167,22 +167,30 @@ export function ActorPage() {
         // Prefer exact case-sensitive handle match (handles are case-sensitive)
         const normalizedHandle = fullHandle.startsWith('@') ? fullHandle : `@${fullHandle}`;
         const remoteActor = searchResults.find(a => a.handle === normalizedHandle) || searchResults[0];
-        setActor(remoteActor);
-        setStats({ followers: 0, following: 0 });
         setFollowers([]);
         setFollowing([]);
         setIsLocalUser(false);
-        if (remoteActor.actor_type === 'Group') {
-          setActiveTab('boosts_posts');
+
+        const actorData = await actors.get(remoteActor.id).catch(() => null);
+
+        // Use the full actor data if available (has stats), otherwise fall back to search result
+        if (actorData) {
+          setActor(actorData.actor ?? remoteActor);
+          setStats(actorData.stats ?? { followers: 0, following: 0 });
+          setIsFollowing(actorData.is_following);
+          setFollowStatus(actorData.follow_status ?? null);
+          setIsOwnProfile(actorData.is_own_profile);
+        } else {
+          setActor(remoteActor);
+          setStats({ followers: 0, following: 0 });
+          setIsFollowing(false);
+          setFollowStatus(null);
+          setIsOwnProfile(false);
         }
 
-        const [actorData] = await Promise.all([
-          actors.get(remoteActor.id).catch(() => ({ is_following: false, follow_status: null, is_own_profile: false })),
-        ]);
-
-        setIsFollowing(actorData.is_following);
-        setFollowStatus(actorData.follow_status ?? null);
-        setIsOwnProfile(actorData.is_own_profile);
+        if ((actorData?.actor ?? remoteActor).actor_type === 'Group') {
+          setActiveTab('boosts_posts');
+        }
 
         actors.getPinned(remoteActor.id).then(data => setPinnedPosts(data.posts)).catch(() => {});
       } else {
@@ -199,12 +207,14 @@ export function ActorPage() {
     loadProfile();
   }, [loadProfile]);
 
-  // Load posts when profile loads or sort changes
+  // Load posts when profile loads or sort changes — use actor ID to avoid
+  // re-triggering when actor object reference changes without ID changing
+  const actorId = actor?.id;
   useEffect(() => {
-    if (actor && !loading) {
+    if (actorId && !loading) {
       refreshPosts();
     }
-  }, [actor, loading, postSort]);
+  }, [actorId, loading, postSort]);
 
   // Load replies when switching to replies tab
   useEffect(() => {
