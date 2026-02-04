@@ -70,6 +70,51 @@ function nextKey() {
   return `page-${++entryCounter}`;
 }
 
+function StackedPage({ goBack, goHome, loc, isTop }: {
+  goBack: () => void;
+  goHome: () => void;
+  loc: { pathname: string; search: string; hash: string; state: null; key: string };
+  isTop: boolean;
+}) {
+  const slotRef = useRef<HTMLDivElement>(null);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return;
+    const onScroll = () => setScrolled(slot.scrollTop > 180);
+    slot.addEventListener('scroll', onScroll, { passive: true });
+    return () => slot.removeEventListener('scroll', onScroll);
+  }, []);
+
+  return (
+    <div ref={slotRef} className={`page-slot ${isTop ? '' : 'page-slot-hidden'}`}>
+      <div className={`page-nav page-nav-glass${scrolled ? ' visible' : ''}`}>
+        <button className="page-nav-btn" onClick={goBack} aria-label="Back" title="Back">
+          <i className="bi bi-arrow-left"></i>
+        </button>
+        <button className="page-nav-btn" onClick={goHome} aria-label="Home" title="Home">
+          <i className="bi bi-house-fill"></i>
+        </button>
+        <img src="/icon.svg" alt="riff" height="24" className="ms-auto" style={{ opacity: 0.6 }} />
+      </div>
+      <div className="page-nav-static mt-3 mb-3">
+        <button className="page-nav-btn" onClick={goBack} aria-label="Back" title="Back">
+          <i className="bi bi-arrow-left"></i>
+        </button>
+        <button className="page-nav-btn" onClick={goHome} aria-label="Home" title="Home">
+          <i className="bi bi-house-fill"></i>
+        </button>
+      </div>
+      <Routes location={loc}>
+        {routeConfig.map(route => (
+          <Route key={route.path} path={route.path} element={route.element} />
+        ))}
+      </Routes>
+    </div>
+  );
+}
+
 function PageStack() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -143,22 +188,7 @@ function PageStack() {
         const loc = { pathname, search, hash: '', state: null, key: entry.key };
 
         return (
-          <div key={entry.key} className={`page-slot ${isTop ? '' : 'page-slot-hidden'}`}>
-            <div className="page-nav">
-              <button className="page-nav-btn" onClick={goBack} aria-label="Back" title="Back">
-                <i className="bi bi-arrow-left"></i>
-              </button>
-              <button className="page-nav-btn" onClick={goHome} aria-label="Home" title="Home">
-                <i className="bi bi-house-fill"></i>
-              </button>
-              <img src="/icon.svg" alt="riff" height="24" className="ms-auto" style={{ opacity: 0.6 }} />
-            </div>
-            <Routes location={loc}>
-              {routeConfig.map(route => (
-                <Route key={route.path} path={route.path} element={route.element} />
-              ))}
-            </Routes>
-          </div>
+          <StackedPage key={entry.key} goBack={goBack} goHome={goHome} loc={loc} isTop={isTop} />
         );
       })}
     </>

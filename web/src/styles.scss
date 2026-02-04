@@ -738,7 +738,7 @@ body {
   }
 
   // Glass headers go full width on mobile
-  .page-header-sticky,
+  .home-glass-bar,
   .page-nav {
     margin-left: -0.75rem;
     margin-right: -0.75rem;
@@ -929,6 +929,11 @@ body {
   visibility: hidden;
   pointer-events: none;
   z-index: -1;
+
+  .home-glass-bar,
+  .page-nav {
+    display: none;
+  }
 }
 
 // Frosted glass mixin for sticky headers
@@ -943,19 +948,62 @@ body {
   border-radius: 0.375rem;
 }
 
-// Page navigation bar (back + home buttons)
+// Page navigation — static (always visible) and glass (scroll-reveal)
+.page-nav-static {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .page-nav {
   @include glass-header;
+  border-radius: 0 0 0.375rem 0.375rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0;
+
+  &.page-nav-glass {
+    position: sticky;
+    display: flex;
+    opacity: 0;
+    pointer-events: none;
+    margin-bottom: -54px; // Collapse space so it doesn't push content
+
+    &.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
 }
 
-// Page header — sticky glass below nav
-.page-header-sticky {
+// Home page scroll-reveal glass bar
+.home-glass-bar {
   @include glass-header;
-  padding-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  opacity: 0;
+  pointer-events: none;
+  margin-bottom: -54px;
+
+  border-radius: 0 0 0.375rem 0.375rem;
+
+  &.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  span {
+    font-family: $font-family-monospace;
+    font-weight: 600;
+    font-size: 1rem;
+    letter-spacing: -0.02em;
+
+    i.bi {
+      font-family: "bootstrap-icons" !important;
+    }
+  }
 }
 
 .page-nav-btn {

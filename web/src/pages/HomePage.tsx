@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { posts as postsApi, tags as tagsApi, feeds as feedsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
@@ -252,6 +252,17 @@ export function HomePage() {
     slotRef.current = document.querySelector('.page-slot');
   }
 
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const slot = slotRef.current ?? document.querySelector<HTMLElement>('.page-slot');
+    if (!slot) return;
+    slotRef.current = slot;
+    const onScroll = () => setScrolled(slot.scrollTop > 180);
+    slot.addEventListener('scroll', onScroll, { passive: true });
+    return () => slot.removeEventListener('scroll', onScroll);
+  }, []);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await refresh();
@@ -303,12 +314,25 @@ export function HomePage() {
 
   return (
     <div>
+      <div className={`home-glass-bar${scrolled ? ' visible' : ''}`}>
+        <span>
+          <i className={`bi bi-${headerInfo.icon} me-2`}></i>
+          {headerInfo.title}
+        </span>
+        <button
+          className="btn btn-outline-secondary btn-sm"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          title="Refresh"
+        >
+          <i className={`bi bi-arrow-clockwise ${refreshing ? 'spin' : ''}`}></i>
+        </button>
+      </div>
       <PageHeader
         title={headerInfo.title}
         icon={headerInfo.icon}
         onRefresh={handleRefresh}
         refreshing={refreshing}
-        sticky
       />
       <FeedFilter value={feedFilter} onChange={handleFilterChange} onFeedName={handleFeedName} />
       {headerInfo.subtitle && <p className="text-muted small mb-3">{headerInfo.subtitle}</p>}
