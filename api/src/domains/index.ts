@@ -43,6 +43,15 @@ export type {
   PostsListResponse,
 } from "./posts/index.ts";
 
+// Feeds Domain
+export {
+  createFeedRoutes,
+} from "./feeds/index.ts";
+export type {
+  Feed,
+  FeedBookmark,
+} from "./feeds/index.ts";
+
 // Federation Domain
 export {
   federation,

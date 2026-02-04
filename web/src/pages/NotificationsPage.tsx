@@ -50,13 +50,15 @@ export function NotificationsPage() {
     }
   };
 
-  const getNotificationText = (type: Notification['type']) => {
-    switch (type) {
+  const getNotificationText = (n: Notification) => {
+    switch (n.type) {
       case 'like': return 'liked your post';
       case 'boost': return 'boosted your post';
       case 'follow': return 'followed you';
       case 'reply': return 'replied to your post';
       case 'mention': return 'mentioned you';
+      case 'feed_mod': return <>added you as a moderator of <strong>{n.feed?.name || 'a feed'}</strong></>;
+      case 'feed_unmod': return <>removed you as a moderator of <strong>{n.feed?.name || 'a feed'}</strong></>;
       default: return 'interacted with you';
     }
   };
@@ -68,11 +70,14 @@ export function NotificationsPage() {
       case 'follow': return { icon: 'person-plus-fill', color: 'text-primary' };
       case 'reply': return { icon: 'chat-fill', color: 'text-info' };
       case 'mention': return { icon: 'at', color: 'text-warning' };
+      case 'feed_mod': return { icon: 'shield-fill-check', color: 'text-success' };
+      case 'feed_unmod': return { icon: 'shield-fill-x', color: 'text-secondary' };
       default: return { icon: 'bell-fill', color: 'text-muted' };
     }
   };
 
   const getNotificationLink = (n: Notification) => {
+    if (n.feed) return `/feeds/${n.feed.slug}`;
     if (n.post) return getPostLink({ id: n.post.id, author: n.post.author });
     return getProfileLink(n.actor);
   };
@@ -147,7 +152,7 @@ export function NotificationsPage() {
                   {/* Text content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <strong>{n.actor.name || n.actor.handle}</strong>
-                    {' '}{getNotificationText(n.type)}
+                    {' '}{getNotificationText(n)}
                   </div>
 
                   {/* Timestamp */}

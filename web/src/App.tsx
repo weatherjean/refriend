@@ -20,6 +20,9 @@ import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
 import { TermsPage } from './pages/TermsPage';
 import { GuidePage } from './pages/GuidePage';
 import { HotPage } from './pages/HotPage';
+import { FeedsExplorePage } from './pages/FeedsExplorePage';
+import { CreateFeedPage } from './pages/CreateFeedPage';
+import { FeedPage } from './pages/FeedPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { useAuth } from './context/AuthContext';
 import { StackedModals } from './components/StackedModals';
@@ -39,6 +42,9 @@ export const modalRoutes = [
   { path: '/a/:handle/*', element: <ActorPage /> },
   { path: '/actor/:id', element: <ActorByIdPage /> },
   { path: '/tags/:tag', element: <TagPage /> },
+  { path: '/feeds', element: <FeedsExplorePage /> },
+  { path: '/feeds/new', element: <CreateFeedPage /> },
+  { path: '/feeds/:slug', element: <FeedPage /> },
   { path: '/following', element: <FollowingPage /> },
   { path: '/install', element: <InstallPage /> },
   { path: '/guide', element: <GuidePage /> },

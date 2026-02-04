@@ -20,6 +20,7 @@ import { createSocialRoutes } from "./domains/social/routes.ts";
 import { createPostRoutes } from "./domains/posts/routes.ts";
 import { createTagRoutes } from "./domains/tags/routes.ts";
 import { createSearchRoutes } from "./domains/search/index.ts";
+import { createFeedRoutes } from "./domains/feeds/routes.ts";
 
 // Storage for video caching
 import { getCachedMedia, cacheRemoteMedia } from "./storage.ts";
@@ -110,6 +111,9 @@ export function createApiRoutes(
 
   // Tags: /tags/*
   api.route("/", createTagRoutes());
+
+  // Feeds: /feeds/*
+  api.route("/", createFeedRoutes());
 
   // Media proxy for remote videos/images that block CORS
   // Only proxies media that failed direct loading due to CORS

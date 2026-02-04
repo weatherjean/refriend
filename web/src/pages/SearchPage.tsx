@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { search, tags, ExternalCommunity, Actor, Post } from '../api';
+import { search, tags, feeds as feedsApi, Actor, Post, Feed, ExternalCommunity } from '../api';
 import { getUsername, getProfileLink } from '../utils';
 import { Avatar } from '../components/Avatar';
-import { EmptyState } from '../components/EmptyState';
 import { PostCard } from '../components/PostCard';
 import { SearchForm } from '../components/SearchForm';
 import { TabContent } from '../components/TabContent';
@@ -15,44 +14,15 @@ export function SearchPage() {
   const [userResults, setUserResults] = useState<Actor[]>([]);
   const [postResults, setPostResults] = useState<Post[]>([]);
   const [tagResults, setTagResults] = useState<{ name: string; count: number }[]>([]);
+  const [feedResults, setFeedResults] = useState<Feed[]>([]);
   const [postsLowConfidence, setPostsLowConfidence] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [activeTab, setActiveTab] = useState<'users' | 'posts' | 'tags'>('users');
-
-  // External community discovery
-  const [externalResults, setExternalResults] = useState<Record<string, ExternalCommunity[]>>({});
-  const [externalLoading, setExternalLoading] = useState<Record<string, boolean>>({});
-  const [externalError, setExternalError] = useState<Record<string, string | null>>({});
-  const [showLemmyInfo, setShowLemmyInfo] = useState(false);
+  const [activeTab, setActiveTab] = useState<'users' | 'posts' | 'tags' | 'feeds' | 'fediverse'>('users');
+  const [externalResults, setExternalResults] = useState<ExternalCommunity[]>([]);
+  const [externalLoading, setExternalLoading] = useState(false);
+  const [externalError, setExternalError] = useState<string | null>(null);
   const navigate = useNavigate();
-
-  const searchExternal = async () => {
-    const trimmed = query.trim();
-    if (!trimmed) return;
-    setExternalLoading(prev => ({ ...prev, lemmy: true }));
-    setExternalError(prev => ({ ...prev, lemmy: null }));
-    try {
-      const { communities } = await search.external(trimmed, 'lemmy');
-      setExternalResults(prev => ({ ...prev, lemmy: communities }));
-    } catch {
-      setExternalError(prev => ({ ...prev, lemmy: 'Failed to search' }));
-    } finally {
-      setExternalLoading(prev => ({ ...prev, lemmy: false }));
-    }
-  };
-
-  const getHandleFromActorId = (actorId: string): string => {
-    // actor_id looks like https://lemmy.ml/c/memes → extract community@instance
-    try {
-      const url = new URL(actorId);
-      const parts = url.pathname.split('/').filter(Boolean);
-      const name = parts[parts.length - 1];
-      return `${name}@${url.host}`;
-    } catch {
-      return actorId;
-    }
-  };
 
   const performSearch = async (searchQuery: string) => {
     let trimmed = searchQuery.trim();
@@ -65,21 +35,22 @@ export function SearchPage() {
 
     setSearching(true);
     setSearched(true);
-    setExternalResults({});
-    setExternalError({});
     try {
       const cleanTag = trimmed.replace(/^#/, '');
-      const [searchRes, tagRes] = await Promise.allSettled([
+      const [searchRes, tagRes, feedRes] = await Promise.allSettled([
         search.query(trimmed),
         tags.search(cleanTag),
+        feedsApi.search(trimmed),
       ]);
       const userRes = searchRes.status === 'fulfilled' ? searchRes.value.users : [];
       const postRes = searchRes.status === 'fulfilled' ? searchRes.value.posts : [];
       const lowConf = searchRes.status === 'fulfilled' ? searchRes.value.postsLowConfidence : false;
       const tagList = tagRes.status === 'fulfilled' ? (tagRes.value.tags || []).slice(0, 20) : [];
+      const feedList = feedRes.status === 'fulfilled' ? feedRes.value.feeds : [];
       setUserResults(userRes || []);
       setPostResults(postRes || []);
       setTagResults(tagList);
+      setFeedResults(feedList);
       setPostsLowConfidence(lowConf || false);
       if (userRes?.length > 0) {
         setActiveTab('users');
@@ -87,6 +58,8 @@ export function SearchPage() {
         setActiveTab('posts');
       } else if (tagList.length > 0) {
         setActiveTab('tags');
+      } else if (feedList.length > 0) {
+        setActiveTab('feeds');
       } else {
         setActiveTab('users');
       }
@@ -95,6 +68,7 @@ export function SearchPage() {
       setUserResults([]);
       setPostResults([]);
       setTagResults([]);
+      setFeedResults([]);
     } finally {
       setSearching(false);
     }
@@ -106,15 +80,32 @@ export function SearchPage() {
     }
   }, [initialQuery]);
 
+  const handleExternalSearch = async () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    setExternalLoading(true);
+    setExternalError(null);
+    try {
+      const res = await search.external(trimmed);
+      setExternalResults(res.communities || []);
+    } catch {
+      setExternalError('Failed to search Lemmy communities');
+      setExternalResults([]);
+    } finally {
+      setExternalLoading(false);
+    }
+  };
+
   const handleClear = () => {
     setQuery('');
     setSearched(false);
     setUserResults([]);
     setPostResults([]);
     setTagResults([]);
+    setFeedResults([]);
+    setExternalResults([]);
+    setExternalError(null);
     setPostsLowConfidence(false);
-    setExternalResults({});
-    setExternalError({});
   };
 
   return (
@@ -147,93 +138,7 @@ export function SearchPage() {
 
       {searched && (
         <>
-          {/* External community discovery */}
-          <div className="mb-3">
-            <div className="d-flex align-items-center gap-2">
-              <button
-                className="btn btn-outline-secondary btn-sm"
-                onClick={() => searchExternal()}
-                disabled={externalLoading['lemmy']}
-              >
-                {externalLoading['lemmy'] ? (
-                  <span className="spinner-border spinner-border-sm me-1" />
-                ) : (
-                  <i className="bi bi-globe2 me-1"></i>
-                )}
-                Search Lemmy communities
-              </button>
-              <i
-                className="bi bi-info-circle text-muted"
-                style={{ cursor: 'pointer' }}
-                onClick={() => setShowLemmyInfo(v => !v)}
-              ></i>
-            </div>
-            {showLemmyInfo && (
-              <p className="text-muted small mt-1 mb-0">
-                lemmy.world federates with most Lemmy and PieFed instances, so this is a pretty exhaustive fediverse community search.
-              </p>
-            )}
-
-            {(() => {
-              const results = externalResults['lemmy'];
-              const error = externalError['lemmy'];
-              if (!results && !error) return null;
-              return (
-                <div className="mt-2">
-                  <h6 className="text-muted small text-uppercase">
-                    Lemmy Communities
-                  </h6>
-                  {error && (
-                    <div className="alert alert-warning small py-2">{error}</div>
-                  )}
-                  {results && results.length === 0 && (
-                    <p className="text-muted small">No communities found.</p>
-                  )}
-                  {results && results.length > 0 && (
-                    <div className="list-group mb-2">
-                      {results.map(community => {
-                        const handle = getHandleFromActorId(community.actor_id);
-                        return (
-                          <button
-                            key={community.actor_id}
-                            className="list-group-item list-group-item-action"
-                            onClick={() => navigate(`/a/${handle}`)}
-                          >
-                            <div className="d-flex align-items-center gap-3">
-                              <Avatar src={community.icon} name={community.name} size="md" className="flex-shrink-0" />
-                              <div className="flex-grow-1" style={{ minWidth: 0 }}>
-                                <div className="d-flex align-items-center gap-1">
-                                  <span className="fw-semibold text-truncate">{community.title}</span>
-                                  <span className="badge" style={{ fontSize: '0.65em', backgroundColor: '#4ade80', color: '#000' }}>
-                                    <i className="bi bi-people-fill me-1"></i>Group
-                                  </span>
-                                </div>
-                                <small className="text-muted d-block text-truncate">{handle}</small>
-                                {community.description && (
-                                  <small className="text-muted d-none d-md-block text-truncate mt-1">
-                                    {community.description.slice(0, 200)}
-                                  </small>
-                                )}
-                                <small className="text-muted">
-                                  {community.subscribers.toLocaleString()} subscribers
-                                  {community.users_active_month > 0 && ` · ${community.users_active_month.toLocaleString()} active/mo`}
-                                </small>
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-          </div>
-
-          {userResults.length === 0 && postResults.length === 0 && tagResults.length === 0 ? (
-            <EmptyState icon="search" title={`No results found for "${query}"`} />
-          ) : (
-            <>
+          <>
               <ul className="nav nav-tabs mb-3">
                 <li className="nav-item">
                   <button
@@ -257,6 +162,22 @@ export function SearchPage() {
                     onClick={() => setActiveTab('tags')}
                   >
                     Tags {tagResults.length > 0 && <span className="badge bg-secondary ms-1">{tagResults.length}</span>}
+                  </button>
+                </li>
+                <li className="nav-item">
+                  <button
+                    className={`nav-link ${activeTab === 'feeds' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('feeds')}
+                  >
+                    Feeds {feedResults.length > 0 && <span className="badge bg-secondary ms-1">{feedResults.length}</span>}
+                  </button>
+                </li>
+                <li className="nav-item">
+                  <button
+                    className={`nav-link ${activeTab === 'fediverse' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('fediverse')}
+                  >
+                    <i className="bi bi-globe2 me-1"></i>Fediverse {externalResults.length > 0 && <span className="badge bg-secondary ms-1">{externalResults.length}</span>}
                   </button>
                 </li>
               </ul>
@@ -353,8 +274,95 @@ export function SearchPage() {
                   </div>
                 )}
               </TabContent>
-            </>
-          )}
+
+              <TabContent
+                loading={false}
+                empty={activeTab === 'feeds' && feedResults.length === 0}
+                emptyIcon="collection"
+                emptyTitle="No feeds found"
+              >
+                {activeTab === 'feeds' && (
+                  <div className="list-group">
+                    {feedResults.map((feed) => (
+                      <Link
+                        key={feed.slug}
+                        to={`/feeds/${feed.slug}`}
+                        className="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div className="fw-semibold">{feed.name}</div>
+                          <small className="text-muted">/feeds/{feed.slug}</small>
+                          {feed.description && (
+                            <div className="text-muted small mt-1 text-truncate">{feed.description}</div>
+                          )}
+                        </div>
+                        {feed.bookmark_count !== undefined && (
+                          <span className="badge text-bg-secondary ms-2 flex-shrink-0">
+                            {feed.bookmark_count} <i className="bi bi-bookmark"></i>
+                          </span>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </TabContent>
+
+              {activeTab === 'fediverse' && (
+                <div>
+                  {externalResults.length === 0 && !externalLoading && !externalError && (
+                    <div className="text-center py-4">
+                      <button
+                        className="btn btn-outline-primary mb-3"
+                        onClick={handleExternalSearch}
+                        disabled={!query.trim()}
+                      >
+                        <i className="bi bi-search me-2"></i>Search Lemmy communities
+                      </button>
+                      <p className="text-muted small mb-0">
+                        Searches lemmy.world for communities across the Lemmyverse.
+                      </p>
+                    </div>
+                  )}
+                  {externalLoading && (
+                    <div className="text-center py-4">
+                      <div className="spinner-border spinner-border-sm text-primary" role="status">
+                        <span className="visually-hidden">Searching...</span>
+                      </div>
+                      <p className="text-muted small mt-2 mb-0">Searching Lemmy communities...</p>
+                    </div>
+                  )}
+                  {externalError && (
+                    <div className="alert alert-danger small py-2">{externalError}</div>
+                  )}
+                  {externalResults.length > 0 && (
+                    <div className="list-group">
+                      {externalResults.map((community) => {
+                        const handle = `${community.name}@${new URL(community.actor_id).hostname}`;
+                        return (
+                          <button
+                            key={community.actor_id}
+                            className="list-group-item list-group-item-action"
+                            onClick={() => navigate(`/a/${handle}`)}
+                          >
+                            <div className="d-flex align-items-center gap-3">
+                              <Avatar src={community.icon} name={community.name} size="md" className="flex-shrink-0" />
+                              <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                                <div className="fw-semibold text-truncate">{community.title || community.name}</div>
+                                <small className="text-muted d-block text-truncate">!{handle}</small>
+                                <div className="d-flex gap-3 mt-1">
+                                  <small className="text-muted">{community.subscribers.toLocaleString()} subscribers</small>
+                                  <small className="text-muted">{community.users_active_month.toLocaleString()} active/mo</small>
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+          </>
         </>
       )}
     </div>

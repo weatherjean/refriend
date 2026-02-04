@@ -333,11 +333,6 @@ export const posts = {
       method: 'POST',
       body: JSON.stringify(params),
     }),
-  submitToCommunity: (id: string, params: { title: string; community: string }) =>
-    fetchJson<{ post: Post }>(`/posts/${id}/submit-to-community`, {
-      method: 'POST',
-      body: JSON.stringify(params),
-    }),
   delete: (id: string) =>
     fetchJson<{ ok: boolean }>(`/posts/${id}`, { method: 'DELETE' }),
   like: (id: string) =>
@@ -414,10 +409,9 @@ export const search = {
     fetchJson<{ users: Actor[]; posts: Post[]; postsLowConfidence: boolean }>(
       `/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}${handleOnly ? '&handleOnly=true' : ''}`
     ),
-  external: (q: string, source: 'lemmy' | 'piefed') =>
+  external: (q: string) =>
     fetchJson<{ communities: ExternalCommunity[] }>(
-      `/search/external?q=${encodeURIComponent(q)}&source=${source}`,
-      { silent: true },
+      `/search/external?q=${encodeURIComponent(q)}`
     ),
 };
 
@@ -449,10 +443,113 @@ export const tags = {
     fetchJson<{ ok: boolean }>(`/tags/${encodeURIComponent(tag)}/bookmark`, { method: 'DELETE' }),
 };
 
+// Feeds
+export interface Feed {
+  id: number;
+  public_id: string;
+  name: string;
+  description: string | null;
+  slug: string;
+  avatar_url: string | null;
+  owner_id: number;
+  created_at: string;
+  bookmark_count?: number;
+}
+
+export interface FeedBookmark {
+  feed_id: number;
+  slug: string;
+  name: string;
+  avatar_url: string | null;
+  is_owner: boolean;
+  is_moderator: boolean;
+}
+
+export interface FeedSuggestion {
+  id: number;
+  feed_id: number;
+  post_id: number;
+  suggested_by_actor_id: number;
+  status: string;
+  created_at: string;
+  post_public_id: string;
+  post_content: string;
+  suggester_handle: string;
+  suggester_name: string | null;
+  suggester_avatar_url: string | null;
+}
+
+export interface FeedModerator {
+  actor_id: number;
+  public_id: string;
+  handle: string;
+  name: string | null;
+  avatar_url: string | null;
+  created_at: string;
+}
+
+export const feeds = {
+  create: (params: { name: string; description?: string; slug: string; avatar_url?: string }) =>
+    fetchJson<{ feed: Feed }>('/feeds', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+  search: (q: string) =>
+    fetchJson<{ feeds: Feed[] }>(`/feeds/search?q=${encodeURIComponent(q)}`),
+  discover: () =>
+    fetchJson<{ trending: Feed[]; popular: Feed[] }>('/feeds/discover'),
+  getBookmarks: () =>
+    fetchJson<{ feeds: FeedBookmark[] }>('/feeds/bookmarks'),
+  getModerated: () =>
+    fetchJson<{ feeds: Feed[] }>('/feeds/moderated'),
+  get: (slug: string) =>
+    fetchJson<{ feed: Feed; bookmarked: boolean; is_owner: boolean; is_moderator: boolean }>(`/feeds/${slug}`),
+  update: (slug: string, params: { name?: string; description?: string | null; avatar_url?: string | null }) =>
+    fetchJson<{ feed: Feed }>(`/feeds/${slug}`, {
+      method: 'PUT',
+      body: JSON.stringify(params),
+    }),
+  delete: (slug: string) =>
+    fetchJson<{ ok: boolean }>(`/feeds/${slug}`, { method: 'DELETE' }),
+  getPosts: (slug: string, params?: { before?: number; limit?: number }) =>
+    fetchJson<PaginatedPosts>(`/feeds/${slug}/posts${buildQuery({ before: params?.before, limit: params?.limit })}`),
+  addPost: (slug: string, postId: string) =>
+    fetchJson<{ ok: boolean }>(`/feeds/${slug}/posts`, {
+      method: 'POST',
+      body: JSON.stringify({ post_id: postId }),
+    }),
+  removePost: (slug: string, postId: string) =>
+    fetchJson<{ ok: boolean }>(`/feeds/${slug}/posts/${postId}`, { method: 'DELETE' }),
+  suggest: (slug: string, postId: string) =>
+    fetchJson<{ ok: boolean }>(`/feeds/${slug}/suggest`, {
+      method: 'POST',
+      body: JSON.stringify({ post_id: postId }),
+    }),
+  getSuggestions: (slug: string, params?: { before?: number; limit?: number }) =>
+    fetchJson<{ suggestions: { id: number; post: Post }[]; next_cursor: number | null }>(`/feeds/${slug}/suggestions${buildQuery({ before: params?.before, limit: params?.limit })}`),
+  approveSuggestion: (slug: string, id: number) =>
+    fetchJson<{ ok: boolean }>(`/feeds/${slug}/suggestions/${id}/approve`, { method: 'POST' }),
+  rejectSuggestion: (slug: string, id: number) =>
+    fetchJson<{ ok: boolean }>(`/feeds/${slug}/suggestions/${id}/reject`, { method: 'POST' }),
+  bookmark: (slug: string) =>
+    fetchJson<{ ok: boolean }>(`/feeds/${slug}/bookmark`, { method: 'POST' }),
+  unbookmark: (slug: string) =>
+    fetchJson<{ ok: boolean }>(`/feeds/${slug}/bookmark`, { method: 'DELETE' }),
+  getModerators: (slug: string) =>
+    fetchJson<{ moderators: FeedModerator[]; owner: { public_id: string; handle: string; name: string | null; avatar_url: string | null } | null }>(`/feeds/${slug}/moderators`),
+  addModerator: (slug: string, actorId: string) =>
+    fetchJson<{ ok: boolean }>(`/feeds/${slug}/moderators`, {
+      method: 'POST',
+      body: JSON.stringify({ actor_id: actorId }),
+    }),
+  removeModerator: (slug: string, actorId: string) =>
+    fetchJson<{ ok: boolean }>(`/feeds/${slug}/moderators/${actorId}`, { method: 'DELETE' }),
+};
+
 // Notifications
 export interface Notification {
   id: number;
-  type: 'like' | 'boost' | 'follow' | 'reply' | 'mention';
+  type: 'like' | 'boost' | 'follow' | 'reply' | 'mention' | 'feed_mod' | 'feed_unmod';
   read: boolean;
   created_at: string;
   actor: {
@@ -468,6 +565,10 @@ export interface Notification {
       handle: string;
       is_local: boolean;
     };
+  } | null;
+  feed: {
+    slug: string;
+    name: string;
   } | null;
 }
 

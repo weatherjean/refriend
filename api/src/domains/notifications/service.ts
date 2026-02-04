@@ -27,6 +27,10 @@ export interface NotificationDTO {
       is_local: boolean;
     };
   } | null;
+  feed: {
+    slug: string;
+    name: string;
+  } | null;
 }
 
 /**
@@ -58,6 +62,10 @@ function toDTO(n: NotificationWithActor): NotificationDTO {
         handle: n.post.author_handle,
         is_local: n.post.author_is_local,
       },
+    } : null,
+    feed: n.feed ? {
+      slug: n.feed.slug,
+      name: n.feed.name,
     } : null,
   };
 }
@@ -124,9 +132,10 @@ export async function createNotification(
   type: NotificationType,
   actorId: number,
   targetActorId: number,
-  postId: number | null = null
+  postId: number | null = null,
+  feedId: number | null = null
 ): Promise<void> {
-  return repository.createNotification(db, type, actorId, targetActorId, postId);
+  return repository.createNotification(db, type, actorId, targetActorId, postId, feedId);
 }
 
 /**

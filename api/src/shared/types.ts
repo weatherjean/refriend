@@ -131,7 +131,7 @@ export interface Like {
 
 // ============ Notification Types ============
 
-export type NotificationType = 'like' | 'boost' | 'follow' | 'reply' | 'mention';
+export type NotificationType = 'like' | 'boost' | 'follow' | 'reply' | 'mention' | 'feed_mod' | 'feed_unmod';
 
 export interface Notification {
   id: number;
@@ -139,6 +139,7 @@ export interface Notification {
   actor_id: number;
   target_actor_id: number;
   post_id: number | null;
+  feed_id: number | null;
   read: boolean;
   created_at: Date;
 }
@@ -157,6 +158,11 @@ export interface NotificationWithActor extends Notification {
     content: string;
     author_handle: string;
     author_is_local: boolean;
+  };
+  feed?: {
+    id: number;
+    slug: string;
+    name: string;
   };
 }
 

@@ -28,3 +28,5 @@ No `.on(Update, ...)` inbox listener exists. When a remote user edits a post (co
 TODO
 
 do no allow less than 3 letters in handle
+update guide for feeds
+

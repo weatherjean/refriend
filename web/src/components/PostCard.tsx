@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Modal, Button } from 'react-bootstrap';
-import { Post, Actor, posts as postsApi, follows } from '../api';
+import { Post, Actor, posts as postsApi } from '../api';
 import { formatTimeAgo, getUsername, getProfileLink, getPostLink, sanitizeHtml } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import { TagBadge } from './TagBadge';
@@ -12,14 +11,23 @@ import { PostMenu } from './PostMenu';
 import { VideoEmbed } from './VideoEmbed';
 import { ActorListModal } from './ActorListModal';
 
+interface SuggestionActions {
+  onApprove: () => void;
+  onReject: () => void;
+  loading: boolean;
+}
+
 interface PostCardProps {
   post: Post;
   linkToPost?: boolean;
   isOP?: boolean;
   onDelete?: () => void;
+  feedSlug?: string;
+  onRemoveFromFeed?: () => void;
+  suggestionActions?: SuggestionActions;
 }
 
-export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardProps) {
+export function PostCard({ post, linkToPost = true, isOP, onDelete, feedSlug, onRemoveFromFeed, suggestionActions }: PostCardProps) {
   const navigate = useNavigate();
   const { user, actor } = useAuth();
   const uniqueAttachments = useMemo(() => {
@@ -51,15 +59,6 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
   const [boosters, setBoosters] = useState<Actor[]>([]);
   const [likersLoading, setLikersLoading] = useState(false);
   const [boostersLoading, setBoostersLoading] = useState(false);
-  const [showCommunityModal, setShowCommunityModal] = useState(false);
-  const [communityTitle, setCommunityTitle] = useState('');
-  const [communities, setCommunities] = useState<Actor[]>([]);
-  const [selectedCommunity, setSelectedCommunity] = useState<Actor | null>(null);
-  const [communitiesLoading, setCommunitiesLoading] = useState(false);
-  const [submitLoading, setSubmitLoading] = useState(false);
-  const [submitError, setSubmitError] = useState('');
-  const [postType, setPostType] = useState(post.type || 'Note');
-  const [postTitle, setPostTitle] = useState(post.title || null);
   const contentRef = useRef<HTMLDivElement>(null);
   const infoMenuRef = useRef<HTMLDivElement>(null);
 
@@ -112,47 +111,7 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
     }
   };
 
-  const openCommunityModal = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowCommunityModal(true);
-    setCommunityTitle('');
-    setSelectedCommunity(null);
-    setSubmitError('');
-    if (communities.length === 0) {
-      setCommunitiesLoading(true);
-      try {
-        const { actors } = await follows.getFollowingCommunities(100, 0);
-        setCommunities(actors);
-      } catch {
-        setCommunities([]);
-      } finally {
-        setCommunitiesLoading(false);
-      }
-    }
-  };
-
-  const handleSubmitToCommunity = async () => {
-    if (!selectedCommunity || !communityTitle.trim()) return;
-    setSubmitLoading(true);
-    setSubmitError('');
-    try {
-      await postsApi.submitToCommunity(post.id, {
-        title: communityTitle.trim(),
-        community: selectedCommunity.uri,
-      });
-      setPostType('Page');
-      setPostTitle(communityTitle.trim());
-      setShowCommunityModal(false);
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Failed to submit to community');
-    } finally {
-      setSubmitLoading(false);
-    }
-  };
-
   const isOwnPost = !!(actor && post.author && actor.id === post.author.id);
-  const canSubmitToCommunity = isOwnPost && postType !== 'Page' && !post.in_reply_to;
-  const alreadySubmitted = isOwnPost && postType === 'Page' && !post.in_reply_to;
 
   if (!post.author) return null;
 
@@ -321,8 +280,8 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
           </div>
         ) : (
           <>
-            {postTitle && (
-              <h5 className="mb-2 fw-bold">{postTitle}</h5>
+            {post.title && (
+              <h5 className="mb-2 fw-bold">{post.title}</h5>
             )}
             <div
               ref={contentRef}
@@ -490,26 +449,6 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
             </button>
           )}
 
-          {!linkToPost && canSubmitToCommunity && (
-            <button
-              className="post-action-btn"
-              onClick={openCommunityModal}
-              title="Submit to community"
-            >
-              <i className="bi bi-send"></i>
-            </button>
-          )}
-
-          {!linkToPost && alreadySubmitted && (
-            <button
-              className="post-action-btn"
-              onClick={(e) => { e.stopPropagation(); setShowCommunityModal(true); }}
-              title="Submitted to community"
-            >
-              <i className="bi bi-send-check"></i>
-            </button>
-          )}
-
           {(likesCount > 0 || boostsCount > 0) && (
             <div className="post-menu" ref={infoMenuRef}>
               <button
@@ -545,9 +484,30 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
               onDelete={onDelete}
               originalUrl={post.url}
               remoteUrl={post.author?.is_local === false ? post.uri : null}
+              feedSlug={feedSlug}
+              onRemoveFromFeed={onRemoveFromFeed}
             />
           )}
         </div>
+
+        {suggestionActions && (
+          <div className="d-flex gap-2 mt-2 pt-2" style={{ borderTop: '1px solid var(--bs-border-color)' }} onClick={(e) => e.stopPropagation()}>
+            <button
+              className="btn btn-sm btn-success flex-grow-1"
+              onClick={suggestionActions.onApprove}
+              disabled={suggestionActions.loading}
+            >
+              <i className="bi bi-check-lg me-1"></i> Approve
+            </button>
+            <button
+              className="btn btn-sm btn-outline-danger flex-grow-1"
+              onClick={suggestionActions.onReject}
+              disabled={suggestionActions.loading}
+            >
+              <i className="bi bi-x-lg me-1"></i> Reject
+            </button>
+          </div>
+        )}
       </div>
 
       <ActorListModal
@@ -568,103 +528,6 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete }: PostCardPr
         emptyMessage="No boosts yet"
       />
 
-      {/* Submit to Community Modal */}
-      <Modal show={showCommunityModal} onHide={() => setShowCommunityModal(false)} centered>
-        <Modal.Header closeButton>
-          <Modal.Title>{alreadySubmitted ? 'Submitted to Community' : 'Submit to Community'}</Modal.Title>
-        </Modal.Header>
-        {alreadySubmitted ? (
-          <>
-            <Modal.Body>
-              <div className="mb-3">
-                <label className="form-label fw-semibold">Title</label>
-                <div>{postTitle}</div>
-              </div>
-              <div className="mb-3">
-                <label className="form-label fw-semibold">Community</label>
-                <div className="text-break">{post.addressed_to?.[0]}</div>
-              </div>
-              <div className="text-muted small mt-3">
-                To unsubmit, delete this post and create a new one.
-              </div>
-            </Modal.Body>
-            <Modal.Footer>
-              <Button variant="secondary" onClick={() => setShowCommunityModal(false)}>
-                Close
-              </Button>
-            </Modal.Footer>
-          </>
-        ) : (
-          <>
-            <Modal.Body>
-              {submitError && (
-                <div className="alert alert-danger py-2">{submitError}</div>
-              )}
-              <div className="mb-3">
-                <label className="form-label fw-semibold">Title</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Post title"
-                  value={communityTitle}
-                  onChange={(e) => setCommunityTitle(e.target.value)}
-                  maxLength={200}
-                  disabled={submitLoading}
-                />
-                <div className="d-flex justify-content-end mt-1">
-                  <small className={`fw-semibold ${communityTitle.length > 200 ? 'text-danger' : 'text-muted'}`}>
-                    {200 - communityTitle.length}
-                  </small>
-                </div>
-              </div>
-              <div className="mb-3">
-                <label className="form-label fw-semibold">Community</label>
-                {communitiesLoading ? (
-                  <div className="text-muted small">Loading communities...</div>
-                ) : communities.length === 0 ? (
-                  <div className="text-muted small">No communities found. Follow a community first.</div>
-                ) : (
-                  <select
-                    className="form-select"
-                    value={selectedCommunity?.uri ?? ''}
-                    onChange={(e) => {
-                      const c = communities.find(c => c.uri === e.target.value);
-                      setSelectedCommunity(c ?? null);
-                    }}
-                    disabled={submitLoading}
-                  >
-                    <option value="">Select a community...</option>
-                    {communities.map(c => (
-                      <option key={c.id} value={c.uri}>
-                        {c.name || c.handle} ({c.handle})
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            </Modal.Body>
-            <Modal.Footer>
-              <Button variant="secondary" onClick={() => setShowCommunityModal(false)} disabled={submitLoading}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleSubmitToCommunity}
-                disabled={submitLoading || !communityTitle.trim() || !selectedCommunity}
-              >
-                {submitLoading ? (
-                  <>
-                    <span className="spinner-border spinner-border-sm me-2"></span>
-                    Submitting...
-                  </>
-                ) : (
-                  'Submit'
-                )}
-              </Button>
-            </Modal.Footer>
-          </>
-        )}
-      </Modal>
     </div>
   );
 }

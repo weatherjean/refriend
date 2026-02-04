@@ -16,15 +16,16 @@ export async function createNotification(
   type: NotificationType,
   actorId: number,
   targetActorId: number,
-  postId: number | null = null
+  postId: number | null = null,
+  feedId: number | null = null
 ): Promise<void> {
   // Don't notify yourself
   if (actorId === targetActorId) return;
 
   await db.query(async (client) => {
     await client.queryArray`
-      INSERT INTO notifications (type, actor_id, target_actor_id, post_id)
-      VALUES (${type}, ${actorId}, ${targetActorId}, ${postId})
+      INSERT INTO notifications (type, actor_id, target_actor_id, post_id, feed_id)
+      VALUES (${type}, ${actorId}, ${targetActorId}, ${postId}, ${feedId})
     `;
   });
 }
@@ -78,28 +79,32 @@ export async function getNotifications(
     // Use cursor-based pagination for O(1) offset regardless of position
     const query = before
       ? `SELECT
-          n.id, n.type, n.actor_id, n.target_actor_id, n.post_id, n.read, n.created_at,
+          n.id, n.type, n.actor_id, n.target_actor_id, n.post_id, n.feed_id, n.read, n.created_at,
           a.public_id as actor_public_id, a.handle as actor_handle,
           a.name as actor_name, a.avatar_url as actor_avatar_url,
           p.public_id as post_public_id, p.content as post_content,
-          pa.handle as post_author_handle, pa.user_id as post_author_user_id
+          pa.handle as post_author_handle, pa.user_id as post_author_user_id,
+          f.slug as feed_slug, f.name as feed_name
         FROM notifications n
         JOIN actors a ON a.id = n.actor_id
         LEFT JOIN posts p ON p.id = n.post_id
         LEFT JOIN actors pa ON pa.id = p.actor_id
+        LEFT JOIN feeds f ON f.id = n.feed_id
         WHERE n.target_actor_id = $1 AND n.id < $2
         ORDER BY n.id DESC
         LIMIT $3`
       : `SELECT
-          n.id, n.type, n.actor_id, n.target_actor_id, n.post_id, n.read, n.created_at,
+          n.id, n.type, n.actor_id, n.target_actor_id, n.post_id, n.feed_id, n.read, n.created_at,
           a.public_id as actor_public_id, a.handle as actor_handle,
           a.name as actor_name, a.avatar_url as actor_avatar_url,
           p.public_id as post_public_id, p.content as post_content,
-          pa.handle as post_author_handle, pa.user_id as post_author_user_id
+          pa.handle as post_author_handle, pa.user_id as post_author_user_id,
+          f.slug as feed_slug, f.name as feed_name
         FROM notifications n
         JOIN actors a ON a.id = n.actor_id
         LEFT JOIN posts p ON p.id = n.post_id
         LEFT JOIN actors pa ON pa.id = p.actor_id
+        LEFT JOIN feeds f ON f.id = n.feed_id
         WHERE n.target_actor_id = $1
         ORDER BY n.id DESC
         LIMIT $2`;
@@ -111,6 +116,7 @@ export async function getNotifications(
       actor_id: number;
       target_actor_id: number;
       post_id: number | null;
+      feed_id: number | null;
       read: boolean;
       created_at: Date;
       actor_public_id: string;
@@ -121,6 +127,8 @@ export async function getNotifications(
       post_content: string | null;
       post_author_handle: string | null;
       post_author_user_id: number | null;
+      feed_slug: string | null;
+      feed_name: string | null;
     }>(query, params);
 
     return result.rows.map((row) => ({
@@ -129,6 +137,7 @@ export async function getNotifications(
       actor_id: row.actor_id,
       target_actor_id: row.target_actor_id,
       post_id: row.post_id,
+      feed_id: row.feed_id,
       read: row.read,
       created_at: row.created_at,
       actor: {
@@ -144,6 +153,11 @@ export async function getNotifications(
         content: row.post_content!,
         author_handle: row.post_author_handle!,
         author_is_local: row.post_author_user_id != null,
+      } : undefined,
+      feed: row.feed_id ? {
+        id: row.feed_id,
+        slug: row.feed_slug!,
+        name: row.feed_name!,
       } : undefined,
     }));
   });

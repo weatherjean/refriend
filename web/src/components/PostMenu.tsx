@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { posts as postsApi } from '../api';
+import { useNavigate, Link } from 'react-router-dom';
+import { Modal, Button } from 'react-bootstrap';
+import { posts as postsApi, feeds as feedsApi, FeedBookmark } from '../api';
 import { ReportPostModal } from './ReportPostModal';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -10,14 +11,21 @@ interface PostMenuProps {
   onDelete?: () => void;
   originalUrl?: string | null;
   remoteUrl?: string | null;
+  feedSlug?: string;
+  onRemoveFromFeed?: () => void;
 }
 
-export function PostMenu({ postId, isOwnPost = false, onDelete, originalUrl, remoteUrl }: PostMenuProps) {
+export function PostMenu({ postId, isOwnPost = false, onDelete, originalUrl, remoteUrl, feedSlug, onRemoveFromFeed }: PostMenuProps) {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showFeedModal, setShowFeedModal] = useState(false);
+  const [bookmarkedFeeds, setBookmarkedFeeds] = useState<FeedBookmark[]>([]);
+  const [feedsLoading, setFeedsLoading] = useState(false);
+  const [feedActionLoading, setFeedActionLoading] = useState<string | null>(null);
+  const [feedActionDone, setFeedActionDone] = useState<Set<string>>(new Set());
   const menuRef = useRef<HTMLDivElement>(null);
 
   const canDelete = isOwnPost;
@@ -70,6 +78,52 @@ export function PostMenu({ postId, isOwnPost = false, onDelete, originalUrl, rem
     }
   };
 
+  const handleRemoveFromFeed = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsOpen(false);
+    if (!feedSlug) return;
+    try {
+      await feedsApi.removePost(feedSlug, postId);
+      onRemoveFromFeed?.();
+    } catch {
+      // Error handled by global toast
+    }
+  };
+
+  const handleSuggestToFeed = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsOpen(false);
+    setShowFeedModal(true);
+    setFeedActionDone(new Set());
+    if (bookmarkedFeeds.length === 0) {
+      setFeedsLoading(true);
+      try {
+        const { feeds } = await feedsApi.getBookmarks();
+        setBookmarkedFeeds(feeds);
+      } catch {
+        setBookmarkedFeeds([]);
+      } finally {
+        setFeedsLoading(false);
+      }
+    }
+  };
+
+  const handleFeedAction = async (feed: FeedBookmark) => {
+    setFeedActionLoading(feed.slug);
+    try {
+      if (feed.is_owner || feed.is_moderator) {
+        await feedsApi.addPost(feed.slug, postId);
+      } else {
+        await feedsApi.suggest(feed.slug, postId);
+      }
+      setFeedActionDone(prev => new Set(prev).add(feed.slug));
+    } catch {
+      // Error handled by global toast
+    } finally {
+      setFeedActionLoading(null);
+    }
+  };
+
   return (
     <div className="post-menu" ref={menuRef}>
       <button
@@ -105,6 +159,22 @@ export function PostMenu({ postId, isOwnPost = false, onDelete, originalUrl, rem
               <i className="bi bi-globe2"></i>
               <span>View on remote instance</span>
             </a>
+          )}
+          <button
+            className="post-menu-item"
+            onClick={handleSuggestToFeed}
+          >
+            <i className="bi bi-journal-plus"></i>
+            <span>Add to feed</span>
+          </button>
+          {feedSlug && (
+            <button
+              className="post-menu-item post-menu-item-danger"
+              onClick={handleRemoveFromFeed}
+            >
+              <i className="bi bi-journal-minus"></i>
+              <span>Remove from feed</span>
+            </button>
           )}
           {!isOwnPost && (
             <button
@@ -143,6 +213,56 @@ export function PostMenu({ postId, isOwnPost = false, onDelete, originalUrl, rem
           onClose={() => setShowReportModal(false)}
         />
       )}
+
+      <Modal show={showFeedModal} onHide={() => setShowFeedModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Add to Feed</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {feedsLoading ? (
+            <div className="text-center py-3">
+              <div className="spinner-border spinner-border-sm"></div>
+            </div>
+          ) : bookmarkedFeeds.length === 0 ? (
+            <p className="text-muted mb-0">
+              No bookmarked feeds. <Link to="/feeds" onClick={() => setShowFeedModal(false)}>Explore feeds</Link> to bookmark some.
+            </p>
+          ) : (
+            <div className="list-group">
+              {bookmarkedFeeds.map((feed) => (
+                <div key={feed.slug} className="list-group-item d-flex justify-content-between align-items-center">
+                  <span className="text-truncate me-2">{feed.name}</span>
+                  {feedActionDone.has(feed.slug) ? (
+                    <span className="badge text-bg-success">
+                      <i className="bi bi-check"></i> Done
+                    </span>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant={feed.is_owner || feed.is_moderator ? 'primary' : 'outline-primary'}
+                      onClick={() => handleFeedAction(feed)}
+                      disabled={feedActionLoading === feed.slug}
+                    >
+                      {feedActionLoading === feed.slug ? (
+                        <span className="spinner-border spinner-border-sm"></span>
+                      ) : feed.is_owner || feed.is_moderator ? (
+                        'Add'
+                      ) : (
+                        'Suggest'
+                      )}
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowFeedModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

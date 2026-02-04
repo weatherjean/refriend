@@ -20,7 +20,7 @@ export {
 } from "./utils/actor.ts";
 
 // Send utilities
-export { safeSendActivity, sendToCommunity, type SendToCommunityResult } from "./utils/send.ts";
+export { safeSendActivity } from "./utils/send.ts";
 
 // Content utilities
 export {

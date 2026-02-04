@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { posts as postsApi, tags as tagsApi, Post } from '../api';
+import { posts as postsApi, tags as tagsApi, feeds as feedsApi, Post } from '../api';
 import { PostCard } from '../components/PostCard';
 import { PageHeader } from '../components/PageHeader';
 import { FeedFilter, FeedFilterValue } from '../components/FeedFilter';
@@ -58,7 +58,7 @@ function LandingPage() {
       {/* Europe Card */}
       <div className="card landing-card">
         <div className="card-body">
-          <h5 className="mb-3">🇪🇺 Built in Europe</h5>
+          <h5 className="mb-3">Built in Europe</h5>
           <p className="landing-text mb-0">
             Riff is built and hosted in Europe. We believe access to social media is a right, not a privilege.
           </p>
@@ -189,12 +189,19 @@ export function HomePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [feedFilter, setFeedFilter] = useState<FeedFilterValue>(() => {
     const saved = localStorage.getItem('home-feed-filter');
-    return (saved === 'following' || saved === 'communities' || saved === 'tags') ? saved : 'all';
+    if (saved === 'following' || saved === 'communities' || saved === 'tags') return saved;
+    if (saved?.startsWith('feed:')) return saved as FeedFilterValue;
+    return 'all';
   });
+  const [activeFeedName, setActiveFeedName] = useState<string | null>(null);
 
   const handleFilterChange = useCallback((value: FeedFilterValue) => {
     setFeedFilter(value);
     localStorage.setItem('home-feed-filter', value);
+  }, []);
+
+  const handleFeedName = useCallback((name: string | null) => {
+    setActiveFeedName(name);
   }, []);
 
   const fetchPosts = useCallback(async (cursor?: number) => {
@@ -205,7 +212,20 @@ export function HomePage() {
       const { posts, next_cursor } = await tagsApi.getBookmarkFeed({ before: cursor });
       return { items: posts, next_cursor };
     }
-    const { posts, next_cursor } = await postsApi.getTimeline({ before: cursor, filter: feedFilter });
+    if (feedFilter.startsWith('feed:')) {
+      const slug = feedFilter.slice(5);
+      try {
+        const { posts, next_cursor } = await feedsApi.getPosts(slug, { before: cursor });
+        return { items: posts, next_cursor };
+      } catch {
+        // Feed may no longer exist, fall back to all
+        setFeedFilter('all');
+        localStorage.setItem('home-feed-filter', 'all');
+        const { posts, next_cursor } = await postsApi.getTimeline({ before: cursor });
+        return { items: posts, next_cursor };
+      }
+    }
+    const { posts, next_cursor } = await postsApi.getTimeline({ before: cursor, filter: feedFilter as 'all' | 'following' | 'communities' });
     return { items: posts, next_cursor };
   }, [user, feedFilter]);
 
@@ -224,6 +244,45 @@ export function HomePage() {
     setRefreshing(false);
   };
 
+  const headerInfo = useMemo(() => {
+    if (feedFilter.startsWith('feed:')) {
+      return {
+        title: activeFeedName ?? 'Feed',
+        icon: 'collection' as const,
+        subtitle: 'A curated feed.',
+        emptyIcon: 'collection',
+        emptyTitle: 'No posts in this feed yet.',
+        emptyDesc: 'Posts will appear here once moderators add them.',
+      };
+    }
+    switch (feedFilter) {
+      case 'following': return {
+        title: 'People', icon: 'people' as const,
+        subtitle: 'Posts from people you follow.',
+        emptyIcon: 'people', emptyTitle: 'No posts yet.',
+        emptyDesc: 'Follow some people to see their posts here.',
+      };
+      case 'communities': return {
+        title: 'Communities', icon: 'people' as const,
+        subtitle: 'Posts from communities you follow.',
+        emptyIcon: 'people', emptyTitle: 'No community posts yet.',
+        emptyDesc: 'Follow some communities to see posts here.',
+      };
+      case 'tags': return {
+        title: 'Tags', icon: 'hash' as const,
+        subtitle: 'Posts from your bookmarked hashtags.',
+        emptyIcon: 'bookmark', emptyTitle: 'No posts from bookmarked tags yet.',
+        emptyDesc: 'Bookmark some tags to see their posts here.',
+      };
+      default: return {
+        title: 'Home', icon: 'house-fill' as const,
+        subtitle: 'Latest posts from actors you follow.',
+        emptyIcon: 'inbox', emptyTitle: 'No posts yet.',
+        emptyDesc: 'Follow some users to see posts here.',
+      };
+    }
+  }, [feedFilter, activeFeedName]);
+
   // Show landing page for non-logged-in users
   if (!user) {
     return <LandingPage />;
@@ -236,19 +295,19 @@ export function HomePage() {
   return (
     <div>
       <PageHeader
-        title="Home"
-        icon="house-fill"
-        subtitle={feedFilter === 'tags' ? 'Posts from your bookmarked hashtags.' : 'Latest posts from actors you follow.'}
+        title={headerInfo.title}
+        icon={headerInfo.icon}
+        subtitle={headerInfo.subtitle}
         onRefresh={handleRefresh}
         refreshing={refreshing}
       />
-      <FeedFilter value={feedFilter} onChange={handleFilterChange} />
+      <FeedFilter value={feedFilter} onChange={handleFilterChange} onFeedName={handleFeedName} />
 
       {posts.length === 0 ? (
         <EmptyState
-          icon={feedFilter === 'tags' ? 'bookmark' : 'inbox'}
-          title={feedFilter === 'tags' ? 'No posts from bookmarked tags yet.' : 'No posts yet.'}
-          description={feedFilter === 'tags' ? 'Bookmark some tags to see their posts here.' : 'Follow some users to see posts here.'}
+          icon={headerInfo.emptyIcon}
+          title={headerInfo.emptyTitle}
+          description={headerInfo.emptyDesc}
         />
       ) : (
         <>
