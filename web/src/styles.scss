@@ -814,22 +814,10 @@ body {
 
   // Main content takes full width on mobile — padding moves to page slots
   .main-content .page-slot {
-    padding-top: calc(60px + env(safe-area-inset-top, 0px)); // Space for fixed glass bar + notch
+    padding-top: env(safe-area-inset-top, 0px); // Notch space only — sticky headers handle rest
     padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); // Space for bottom bar + safe area
     padding-left: 0.75rem;
     padding-right: 0.75rem;
-  }
-
-  // Always show floating glass bar on mobile (position: absolute keeps it fixed)
-  .page-nav-glass {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-  }
-
-  // Hide in-scroll nav elements replaced by the fixed floating bar
-  .home-glass-bar,
-  .page-nav-static {
-    display: none !important;
   }
 
   // Glass headers go full width on mobile
@@ -1123,6 +1111,44 @@ body {
 
   &:hover {
     background: rgba(255, 255, 255, 0.18);
+  }
+}
+
+// Floating back-to-top button
+.back-to-top-btn {
+  position: absolute;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 10;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(15, 15, 15, 0.7);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  color: var(--bs-body-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  font-size: 1.1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+  &.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  @media (max-width: 991.98px) {
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
   }
 }
 
