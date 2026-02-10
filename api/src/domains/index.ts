@@ -52,6 +52,14 @@ export type {
   FeedBookmark,
 } from "./feeds/index.ts";
 
+// Stats Domain
+export {
+  createStatsRoutes,
+} from "./stats/index.ts";
+export type {
+  ServerStats,
+} from "./stats/index.ts";
+
 // Federation Domain
 export {
   federation,

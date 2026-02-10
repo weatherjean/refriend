@@ -211,6 +211,11 @@ export function Layout({ children }: LayoutProps) {
             <Link to="/install" onClick={() => setMobileMenuOpen(false)}>
               Install App
             </Link>
+            <div>
+              <Link to="/stats" onClick={() => setMobileMenuOpen(false)}>
+                Server Stats
+              </Link>
+            </div>
             {user && (
               <div>
                 <Link to="/all" onClick={() => setMobileMenuOpen(false)}>

@@ -22,6 +22,7 @@ import { createPostRoutes } from "./domains/posts/routes.ts";
 import { createTagRoutes } from "./domains/tags/routes.ts";
 import { createSearchRoutes } from "./domains/search/index.ts";
 import { createFeedRoutes } from "./domains/feeds/routes.ts";
+import { createStatsRoutes } from "./domains/stats/routes.ts";
 
 // Storage for video caching
 import { getCachedMedia, cacheRemoteMedia } from "./storage.ts";
@@ -63,6 +64,17 @@ export function createApiRoutes(
   // General rate limiting for all API requests
   api.use("/*", generalRateLimit());
 
+  // Track last-active updates (throttle to once per 5min per user, capped size)
+  const lastActiveUpdates = new Map<number, number>();
+  const LAST_ACTIVE_THROTTLE = 5 * 60 * 1000;
+  const LAST_ACTIVE_MAX_ENTRIES = 10_000;
+  setInterval(() => {
+    const cutoff = Date.now() - LAST_ACTIVE_THROTTLE;
+    for (const [id, ts] of lastActiveUpdates) {
+      if (ts < cutoff) lastActiveUpdates.delete(id);
+    }
+  }, LAST_ACTIVE_THROTTLE);
+
   // Inject db, domain, and session user
   api.use("/*", async (c, next) => {
     c.set("db", db);
@@ -77,6 +89,16 @@ export function createApiRoutes(
         const actor = user ? await db.getActorByUserId(user.id) : null;
         c.set("user", user);
         c.set("actor", actor);
+
+        // Throttled last_active_at update
+        if (user) {
+          const now = Date.now();
+          const last = lastActiveUpdates.get(user.id) ?? 0;
+          if (now - last > LAST_ACTIVE_THROTTLE && lastActiveUpdates.size < LAST_ACTIVE_MAX_ENTRIES) {
+            lastActiveUpdates.set(user.id, now);
+            db.updateUserLastActive(user.id).catch(() => {});
+          }
+        }
       } else {
         c.set("user", null);
         c.set("actor", null);
@@ -115,6 +137,9 @@ export function createApiRoutes(
 
   // Feeds: /feeds/*
   api.route("/", createFeedRoutes());
+
+  // Stats: /stats (public, no auth)
+  api.route("/", createStatsRoutes());
 
   // Media proxy for remote videos/images that block CORS
   // Only proxies media that failed direct loading due to CORS

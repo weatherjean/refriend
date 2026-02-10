@@ -26,6 +26,7 @@ import { FeedsExplorePage } from './pages/FeedsExplorePage';
 import { CreateFeedPage } from './pages/CreateFeedPage';
 import { FeedPage } from './pages/FeedPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { StatsPage } from './pages/StatsPage';
 import { useAuth } from './context/AuthContext';
 
 if ('scrollRestoration' in window.history) {
@@ -57,6 +58,7 @@ const routeConfig = [
   { path: '/policy', element: <ContentPolicyPage /> },
   { path: '/privacy', element: <PrivacyPolicyPage /> },
   { path: '/terms', element: <TermsPage /> },
+  { path: '/stats', element: <StatsPage /> },
   { path: '*', element: <NotFoundPage /> },
 ];
 
