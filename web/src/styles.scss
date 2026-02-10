@@ -814,10 +814,22 @@ body {
 
   // Main content takes full width on mobile — padding moves to page slots
   .main-content .page-slot {
-    padding-top: env(safe-area-inset-top, 0px); // Notch space only — sticky headers handle rest
+    padding-top: calc(60px + env(safe-area-inset-top, 0px)); // Space for fixed glass bar + notch
     padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); // Space for bottom bar + safe area
     padding-left: 0.75rem;
     padding-right: 0.75rem;
+  }
+
+  // Always show floating glass bar on mobile (position: absolute keeps it fixed)
+  .page-nav-glass {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  // Hide in-scroll nav elements replaced by the fixed floating bar
+  .home-glass-bar,
+  .page-nav-static {
+    display: none !important;
   }
 
   // Glass headers go full width on mobile

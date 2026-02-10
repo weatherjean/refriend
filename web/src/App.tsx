@@ -197,18 +197,30 @@ function PageStack() {
         );
       })}
 
-      {/* Single glass nav bar — absolutely positioned over all page slots */}
-      {!isHome && (
-        <div className={`page-nav-glass${navScrolled ? ' visible' : ''}`}>
-          <button className="page-nav-btn" onClick={goBack} aria-label="Back" title="Back">
-            <i className="bi bi-arrow-left"></i>
-          </button>
-          <button className="page-nav-btn" onClick={goHome} aria-label="Home" title="Home">
-            <i className="bi bi-house-fill"></i>
-          </button>
-          <img src="/icon.svg" alt="riff" height="24" className="ms-auto" style={{ opacity: 0.6 }} />
-        </div>
-      )}
+      {/* Floating glass nav bar — absolutely positioned over all page slots */}
+      <div className={`page-nav-glass${!isHome && navScrolled ? ' visible' : ''}`}>
+        {!isHome && (
+          <>
+            <button className="page-nav-btn" onClick={goBack} aria-label="Back" title="Back">
+              <i className="bi bi-arrow-left"></i>
+            </button>
+            <button className="page-nav-btn" onClick={goHome} aria-label="Home" title="Home">
+              <i className="bi bi-house-fill"></i>
+            </button>
+          </>
+        )}
+        <img
+          src="/icon.svg"
+          alt="riff"
+          height="24"
+          className={!isHome ? 'ms-auto' : ''}
+          style={{ opacity: 0.6, cursor: 'pointer' }}
+          onClick={() => {
+            const slot = document.querySelector('.page-slot:not(.page-slot-hidden)');
+            slot?.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
+      </div>
     </>
   );
 }
