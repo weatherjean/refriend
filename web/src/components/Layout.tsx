@@ -234,6 +234,29 @@ export function Layout({ children }: LayoutProps) {
           </div>
 
           <div className="text-center mb-5 pb-5">
+            <button
+              className="btn btn-link btn-sm text-muted mb-2 p-0"
+              style={{ opacity: 0.5, fontSize: '0.75rem' }}
+              title="Clear cache and reload"
+              onClick={async () => {
+                if ('caches' in window) {
+                  const names = await caches.keys();
+                  await Promise.all(names.map(name => caches.delete(name)));
+                }
+                // Fetch current page with cache:'reload' to bust HTTP cache, then reload
+                await fetch(window.location.href, { cache: 'reload' }).catch(() => {});
+                window.location.reload();
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="me-1" style={{ verticalAlign: '-2px' }}>
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                <path d="M21 21v-5h-5" />
+              </svg>
+              Reload App
+            </button>
+            <br />
             <img src="/logo-mono.svg" alt="riff" height="24" style={{ opacity: 0.6 }} />
           </div>
         </div>
