@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Routes, Route, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
@@ -70,34 +70,25 @@ function nextKey() {
   return `page-${++entryCounter}`;
 }
 
-function StackedPage({ goBack, goHome, loc, isTop }: {
+function StackedPage({ goBack, goHome, loc, isTop, onScroll }: {
   goBack: () => void;
   goHome: () => void;
   loc: { pathname: string; search: string; hash: string; state: null; key: string };
   isTop: boolean;
+  onScroll: (scrollTop: number) => void;
 }) {
   const slotRef = useRef<HTMLDivElement>(null);
-  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     const slot = slotRef.current;
     if (!slot) return;
-    const onScroll = () => setScrolled(slot.scrollTop > 180);
-    slot.addEventListener('scroll', onScroll, { passive: true });
-    return () => slot.removeEventListener('scroll', onScroll);
-  }, []);
+    const handler = () => onScroll(slot.scrollTop);
+    slot.addEventListener('scroll', handler, { passive: true });
+    return () => slot.removeEventListener('scroll', handler);
+  }, [onScroll]);
 
   return (
     <div ref={slotRef} className={`page-slot ${isTop ? '' : 'page-slot-hidden'}`}>
-      <div className={`page-nav page-nav-glass${scrolled ? ' visible' : ''}`}>
-        <button className="page-nav-btn" onClick={goBack} aria-label="Back" title="Back">
-          <i className="bi bi-arrow-left"></i>
-        </button>
-        <button className="page-nav-btn" onClick={goHome} aria-label="Home" title="Home">
-          <i className="bi bi-house-fill"></i>
-        </button>
-        <img src="/icon.svg" alt="riff" height="24" className="ms-auto" style={{ opacity: 0.6 }} />
-      </div>
       <div className="page-nav-static mt-3 mb-3">
         <button className="page-nav-btn" onClick={goBack} aria-label="Back" title="Back">
           <i className="bi bi-arrow-left"></i>
@@ -168,6 +159,16 @@ function PageStack() {
   };
 
   const isHome = currentPath === '/';
+  const [navScrolled, setNavScrolled] = useState(false);
+
+  const handleStackScroll = useCallback((scrollTop: number) => {
+    setNavScrolled(scrollTop > 180);
+  }, []);
+
+  // Reset scroll state when navigating
+  useEffect(() => {
+    setNavScrolled(false);
+  }, [currentPath]);
 
   return (
     <>
@@ -188,9 +189,22 @@ function PageStack() {
         const loc = { pathname, search, hash: '', state: null, key: entry.key };
 
         return (
-          <StackedPage key={entry.key} goBack={goBack} goHome={goHome} loc={loc} isTop={isTop} />
+          <StackedPage key={entry.key} goBack={goBack} goHome={goHome} loc={loc} isTop={isTop} onScroll={isTop ? handleStackScroll : () => {}} />
         );
       })}
+
+      {/* Single glass nav bar — absolutely positioned over all page slots */}
+      {!isHome && (
+        <div className={`page-nav-glass${navScrolled ? ' visible' : ''}`}>
+          <button className="page-nav-btn" onClick={goBack} aria-label="Back" title="Back">
+            <i className="bi bi-arrow-left"></i>
+          </button>
+          <button className="page-nav-btn" onClick={goHome} aria-label="Home" title="Home">
+            <i className="bi bi-house-fill"></i>
+          </button>
+          <img src="/icon.svg" alt="riff" height="24" className="ms-auto" style={{ opacity: 0.6 }} />
+        </div>
+      )}
     </>
   );
 }

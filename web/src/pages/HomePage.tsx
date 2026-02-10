@@ -14,7 +14,7 @@ function LandingPage() {
   const [showMore, setShowMore] = useState(false);
 
   return (
-    <div className="landing-cards">
+    <div className="landing-cards pt-3">
       {/* Hero Card */}
       <div className="card landing-card landing-hero">
         <div className="card-body text-center py-5">
@@ -313,7 +313,7 @@ export function HomePage() {
   }
 
   return (
-    <div>
+    <div className="pt-3">
       <div className={`home-glass-bar${scrolled ? ' visible' : ''}`}>
         <span>
           <i className={`bi bi-${headerInfo.icon} me-2`}></i>

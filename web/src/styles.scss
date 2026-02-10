@@ -738,12 +738,18 @@ body {
   }
 
   // Glass headers go full width on mobile
-  .home-glass-bar,
-  .page-nav {
+  .home-glass-bar {
     margin-left: -0.75rem;
     margin-right: -0.75rem;
     padding-left: 0.75rem;
     padding-right: 0.75rem;
+    border-radius: 0;
+  }
+
+  .page-nav-glass {
+    left: 0;
+    right: 0;
+    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
     border-radius: 0;
   }
 
@@ -930,9 +936,8 @@ body {
   pointer-events: none;
   z-index: -1;
 
-  .home-glass-bar,
-  .page-nav {
-    display: none;
+  .home-glass-bar {
+    display: none !important;
   }
 }
 
@@ -955,25 +960,27 @@ body {
   gap: 0.5rem;
 }
 
-.page-nav {
-  @include glass-header;
+// Glass nav bar — absolutely positioned over page slots (like bottom bar but at top)
+.page-nav-glass {
+  position: absolute;
+  top: 0;
+  left: 1rem;
+  right: 1rem;
+  z-index: 10;
+  background: rgba(15, 15, 15, 0.7);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  padding: 0.75rem 1rem;
   border-radius: 0 0 0.375rem 0.375rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0;
+  opacity: 0;
+  pointer-events: none;
 
-  &.page-nav-glass {
-    position: sticky;
-    display: flex;
-    opacity: 0;
-    pointer-events: none;
-    margin-bottom: -54px; // Collapse space so it doesn't push content
-
-    &.visible {
-      opacity: 1;
-      pointer-events: auto;
-    }
+  &.visible {
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 
