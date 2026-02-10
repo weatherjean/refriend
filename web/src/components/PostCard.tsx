@@ -10,6 +10,7 @@ import { ImageLightbox } from './ImageLightbox';
 import { PostMenu } from './PostMenu';
 import { VideoEmbed } from './VideoEmbed';
 import { ActorListModal } from './ActorListModal';
+import { QuoteCard } from './QuoteCard';
 
 interface SuggestionActions {
   onApprove: () => void;
@@ -286,7 +287,11 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete, feedSlug, on
             <div
               ref={contentRef}
               className={`post-content ${linkToPost ? 'post-content-truncated' : ''}`}
-              dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(
+                post.quoted_post
+                  ? post.content.replace(/<p class="quote-inline">.*?<\/p>/s, '')
+                  : post.content
+              ) }}
             />
             {linkToPost && isTruncated && (
               <button
@@ -373,6 +378,11 @@ export function PostCard({ post, linkToPost = true, isOP, onDelete, feedSlug, on
               <VideoEmbed
                 video={post.video_embed}
               />
+            )}
+
+            {/* Quote Card */}
+            {post.quoted_post && (
+              <QuoteCard post={post.quoted_post} />
             )}
           </>
         )}

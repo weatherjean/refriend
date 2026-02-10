@@ -89,6 +89,7 @@ export interface Post {
   content: string;
   url: string | null;
   in_reply_to_id: number | null;
+  quote_post_id: number | null;
   addressed_to: string[];  // ActivityPub to/cc recipients (actor URIs)
   likes_count: number;
   boosts_count: number;
@@ -777,7 +778,7 @@ export class DB {
 
   // ============ Posts ============
 
-  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score" | "addressed_to" | "link_preview" | "video_embed" | "type" | "title"> & { public_id?: string; created_at?: string; addressed_to?: string[]; link_preview?: LinkPreview | null; video_embed?: VideoEmbed | null; type?: string; title?: string | null }): Promise<Post> {
+  async createPost(post: Omit<Post, "id" | "public_id" | "created_at" | "likes_count" | "boosts_count" | "replies_count" | "hot_score" | "addressed_to" | "link_preview" | "video_embed" | "type" | "title" | "quote_post_id"> & { public_id?: string; created_at?: string; addressed_to?: string[]; link_preview?: LinkPreview | null; video_embed?: VideoEmbed | null; type?: string; title?: string | null }): Promise<Post> {
     return this.query(async (client) => {
       await client.queryArray`BEGIN`;
       try {
@@ -882,6 +883,12 @@ export class DB {
     });
   }
 
+  async updatePostQuoteId(postId: number, quotePostId: number): Promise<void> {
+    await this.query(async (client) => {
+      await client.queryArray`UPDATE posts SET quote_post_id = ${quotePostId} WHERE id = ${postId}`;
+    });
+  }
+
   async getPostById(id: number): Promise<Post | null> {
     return this.query(async (client) => {
       const result = await client.queryObject<Post>`SELECT * FROM posts WHERE id = ${id}`;
@@ -968,6 +975,7 @@ export class DB {
       content: row.content as string,
       url: row.url as string | null,
       in_reply_to_id: row.in_reply_to_id as number | null,
+      quote_post_id: row.quote_post_id as number | null,
       addressed_to: (row.addressed_to as string[]) || [],
       likes_count: row.likes_count as number,
       boosts_count: (row.boosts_count as number) || 0,
@@ -1017,7 +1025,7 @@ export class DB {
   }
 
   private readonly postWithActorSelect = `
-    p.id, p.public_id, p.uri, p.actor_id, p.type, p.title, p.content, p.url, p.in_reply_to_id, p.addressed_to, p.likes_count, p.boosts_count, p.replies_count, p.sensitive, p.link_preview, p.video_embed, p.created_at,
+    p.id, p.public_id, p.uri, p.actor_id, p.type, p.title, p.content, p.url, p.in_reply_to_id, p.quote_post_id, p.addressed_to, p.likes_count, p.boosts_count, p.replies_count, p.sensitive, p.link_preview, p.video_embed, p.created_at,
     a.id as author_id, a.public_id as author_public_id, a.uri as author_uri, a.handle as author_handle, a.name as author_name,
     a.bio as author_bio, a.avatar_url as author_avatar_url, a.inbox_url as author_inbox_url,
     a.shared_inbox_url as author_shared_inbox_url, a.url as author_url, a.user_id as author_user_id,

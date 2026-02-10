@@ -911,6 +911,77 @@ Deno.test({
       });
     });
 
+    // ============ Quote Posts ============
+    await t.step("Quote Posts", async (t) => {
+      await t.step("quote_post_id round-trips through DB", async () => {
+        await cleanDatabase();
+        const db = await getTestDB();
+
+        const { actor } = await createTestUser({ username: "quoter", email: "quoter@test.com" });
+        const { actor: author2 } = await createTestUser({ username: "quoted", email: "quoted@test.com" });
+
+        const originalPost = await createTestPost(author2, { content: "Original post" });
+        const quotingPost = await createTestPost(actor, { content: "Quoting this" });
+
+        // Set quote link
+        await db.updatePostQuoteId(quotingPost.id, originalPost.id);
+
+        // Verify it persists
+        const fetched = await db.getPostById(quotingPost.id);
+        assertEquals(fetched!.quote_post_id, originalPost.id);
+      });
+
+      await t.step("quote_post_id is null by default", async () => {
+        await cleanDatabase();
+        const { actor } = await createTestUser({ username: "poster", email: "poster@test.com" });
+        const post = await createTestPost(actor, { content: "Normal post" });
+        assertEquals(post.quote_post_id, null);
+      });
+
+      await t.step("API response includes quoted_post when set", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+        const db = await getTestDB();
+
+        await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
+        const session = await loginUser(api, "viewer@test.com", "password123");
+
+        const { actor: author } = await createTestUser({ username: "author", email: "author@test.com" });
+        const originalPost = await createTestPost(author, { content: "Original content" });
+        const quotingPost = await createTestPost(author, { content: "Quote post" });
+        await db.updatePostQuoteId(quotingPost.id, originalPost.id);
+
+        const res = await testRequest(api, "GET", `/posts/${quotingPost.public_id}`, {
+          cookie: session.cookie, csrfToken: session.csrfToken,
+        });
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        assertExists(data.post.quoted_post);
+        assertEquals(data.post.quoted_post.id, originalPost.public_id);
+        assertEquals(data.post.quoted_post.content, "<p>Original content</p>");
+        assertExists(data.post.quoted_post.author);
+        assertExists(data.post.quoted_post.attachments);
+      });
+
+      await t.step("API response has quoted_post null when not set", async () => {
+        await cleanDatabase();
+        const api = await createTestApi();
+
+        await createTestUser({ username: "viewer", email: "viewer@test.com", password: "password123" });
+        const session = await loginUser(api, "viewer@test.com", "password123");
+
+        const { actor } = await createTestUser({ username: "author", email: "author@test.com" });
+        const post = await createTestPost(actor, { content: "Normal post" });
+
+        const res = await testRequest(api, "GET", `/posts/${post.public_id}`, {
+          cookie: session.cookie, csrfToken: session.csrfToken,
+        });
+        assertEquals(res.status, 200);
+        const data = await res.json();
+        assertEquals(data.post.quoted_post, null);
+      });
+    });
+
     await closeTestDB();
   },
   sanitizeResources: false,

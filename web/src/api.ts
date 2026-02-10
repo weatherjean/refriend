@@ -95,6 +95,15 @@ export interface Post {
     boosts_count: number;
     replies_count: number;
   } | null;
+  quoted_post: {
+    id: string;
+    uri: string;
+    content: string;
+    url: string | null;
+    created_at: string;
+    author: Actor | null;
+    attachments: Attachment[];
+  } | null;
   boosted_by?: {
     id: string;
     handle: string;

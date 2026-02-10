@@ -75,6 +75,33 @@ export interface EnrichedPost {
       created_at: string;
     } | null;
   } | null;
+  quoted_post: {
+    id: string;
+    uri: string;
+    content: string;
+    url: string | null;
+    created_at: string;
+    author: {
+      id: string;
+      uri: string;
+      handle: string;
+      name: string | null;
+      bio: string | null;
+      avatar_url: string | null;
+      url: string | null;
+      is_local: boolean;
+      actor_type: string;
+      created_at: string;
+    } | null;
+    attachments: {
+      id: number;
+      url: string;
+      media_type: string;
+      alt_text: string | null;
+      width: number | null;
+      height: number | null;
+    }[];
+  } | null;
   sensitive: boolean;
   attachments: {
     id: number;

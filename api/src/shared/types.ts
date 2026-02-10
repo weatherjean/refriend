@@ -86,6 +86,7 @@ export interface Post {
   content: string;
   url: string | null;
   in_reply_to_id: number | null;
+  quote_post_id: number | null;
   addressed_to: string[];  // ActivityPub to/cc recipients (actor URIs)
   likes_count: number;
   boosts_count: number;

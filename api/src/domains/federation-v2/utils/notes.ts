@@ -20,6 +20,7 @@ import {
 import type { DB } from "../../../db.ts";
 import { persistActor } from "./actor.ts";
 import { validateAndSanitizeContent } from "./content.ts";
+import { resolveAndLinkQuote } from "./quotes.ts";
 import { fetchOpenGraph } from "../../posts/service.ts";
 
 /**
@@ -274,6 +275,9 @@ export async function fetchAndStoreNote(
     } catch {
       // Attachments may not be present
     }
+
+    // Side-effect: resolve quote relationship (FEP-044f)
+    await resolveAndLinkQuote(db, ctx, domain, note, post.id);
 
     console.log(`[Reply] Fetched and stored parent post: ${post.id}`);
     return post.id;

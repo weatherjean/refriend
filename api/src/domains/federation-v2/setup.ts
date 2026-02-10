@@ -46,6 +46,7 @@ import type { DB, Actor } from "../../db.ts";
 import { persistActor } from "./utils/actor.ts";
 import { validateAndSanitizeContent, MAX_CONTENT_SIZE } from "./utils/content.ts";
 import { fetchAndStoreNote } from "./utils/notes.ts";
+import { resolveAndLinkQuote } from "./utils/quotes.ts";
 import { safeSendActivity } from "./utils/send.ts";
 import { invalidateProfileCache } from "../../cache.ts";
 import { updatePostScore, updateParentPostScore } from "../../scoring.ts";
@@ -769,6 +770,10 @@ export function registerInboxHandlers(
 
       console.log(`[Create] Post from ${authorActor.handle}: ${post.id}`);
 
+      // Side-effect: resolve quote relationship (FEP-044f)
+      if (object) {
+        await resolveAndLinkQuote(_db, ctx, _domain, object, post.id);
+      }
 
       // Reply notifications and score updates
       if (inReplyToId) {

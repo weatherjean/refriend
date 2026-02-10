@@ -396,8 +396,38 @@ export async function enrichPostsBatch(
     }
   }
 
+  // Collect quoted post IDs
+  const quotePostIds = posts
+    .filter((p) => p.quote_post_id)
+    .map((p) => p.quote_post_id!);
+
+  // Fetch quoted posts if needed
+  const quotedPostsMap = new Map<number, PostWithActor>();
+  const quotedPostMediaMap = new Map<number, Array<{ id: number; url: string; media_type: string; alt_text: string | null; width: number | null; height: number | null }>>();
+  if (quotePostIds.length > 0) {
+    const uniqueQuoteIds = [...new Set(quotePostIds)];
+    const quotedPostsByIdMap = await db.getPostsByIds(uniqueQuoteIds);
+    const quotedPosts = [...quotedPostsByIdMap.values()];
+    const quotedActorIds = [...new Set(quotedPosts.map((p) => p.actor_id))];
+    const [quotedActors, quotedMedia] = await Promise.all([
+      db.getActorsByIds(quotedActorIds),
+      repository.getBatchPostMedia(db, uniqueQuoteIds),
+    ]);
+
+    for (const quoted of quotedPosts) {
+      quotedPostsMap.set(quoted.id, {
+        ...quoted,
+        author: quotedActors.get(quoted.actor_id)!,
+      });
+    }
+    for (const [id, media] of quotedMedia) {
+      quotedPostMediaMap.set(id, media);
+    }
+  }
+
   return posts.map((post) => {
     const parentPost = post.in_reply_to_id ? parentPostsMap.get(post.in_reply_to_id) : null;
+    const quotedPost = post.quote_post_id ? quotedPostsMap.get(post.quote_post_id) : null;
     const booster = boosterMap.get(post.id);
 
     return {
@@ -426,6 +456,15 @@ export async function enrichPostsBatch(
         likes_count: parentPost.likes_count ?? 0,
         boosts_count: (parentPost as Post & { boosts_count?: number }).boosts_count ?? 0,
         replies_count: parentPost.replies_count ?? 0,
+      } : null,
+      quoted_post: quotedPost ? {
+        id: quotedPost.public_id,
+        uri: quotedPost.uri,
+        content: quotedPost.content,
+        url: quotedPost.url,
+        created_at: formatDate(quotedPost.created_at),
+        author: quotedPost.author ? sanitizeActor(quotedPost.author, domain) : null,
+        attachments: quotedPostMediaMap.get(quotedPost.id) ?? [],
       } : null,
       sensitive: post.sensitive ?? false,
       attachments: mediaMap.get(post.id) ?? [],
