@@ -69,14 +69,19 @@ async function fetchStats(db: DB): Promise<ServerStats> {
       ),
       engagement_stats AS (
         SELECT
-          (SELECT COUNT(*) FROM likes) AS total_likes,
-          (SELECT COUNT(*) FROM boosts) AS total_boosts,
-          (SELECT COUNT(*) FROM posts WHERE in_reply_to_id IS NOT NULL) AS total_replies
+          (SELECT COUNT(*) FROM likes l JOIN posts p ON l.post_id = p.id JOIN actors a ON p.actor_id = a.id WHERE a.user_id IS NOT NULL) AS total_likes,
+          (SELECT COUNT(*) FROM boosts b JOIN posts p ON b.post_id = p.id JOIN actors a ON p.actor_id = a.id WHERE a.user_id IS NOT NULL) AS total_boosts,
+          (SELECT COUNT(*) FROM posts p JOIN actors a ON p.actor_id = a.id WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NOT NULL) AS total_replies
       ),
       social_stats AS (
-        SELECT COUNT(*) AS total_follows
-        FROM follows
-        WHERE status = 'accepted'
+        SELECT
+          COUNT(*) AS total_follows,
+          COUNT(*) FILTER (WHERE fa.user_id IS NOT NULL) AS total_followers_received,
+          COUNT(*) FILTER (WHERE fb.user_id IS NOT NULL) AS total_following_sent
+        FROM follows f
+        JOIN actors fa ON f.following_id = fa.id
+        JOIN actors fb ON f.follower_id = fb.id
+        WHERE f.status = 'accepted'
       ),
       federation_stats AS (
         SELECT
@@ -96,7 +101,7 @@ async function fetchStats(db: DB): Promise<ServerStats> {
         ms.posts_with_media,
         h.hashtag_count,
         e.total_likes, e.total_boosts, e.total_replies,
-        so.total_follows,
+        so.total_follows, so.total_followers_received, so.total_following_sent,
         f.local_actors, f.remote_actors, f.total_actors,
         la.cnt AS local_actor_cnt
       FROM server_stats s, content_stats c, media_stats ms, hashtag_stats h,
@@ -148,10 +153,10 @@ async function fetchStats(db: DB): Promise<ServerStats> {
       social: {
         total_follows: Number(row.total_follows),
         avg_followers_per_user: localActorCnt > 0
-          ? Math.round((Number(row.total_follows) / localActorCnt) * 100) / 100
+          ? Math.round((Number(row.total_followers_received) / localActorCnt) * 100) / 100
           : 0,
         avg_following_per_user: localActorCnt > 0
-          ? Math.round((Number(row.total_follows) / localActorCnt) * 100) / 100
+          ? Math.round((Number(row.total_following_sent) / localActorCnt) * 100) / 100
           : 0,
       },
       federation: {
