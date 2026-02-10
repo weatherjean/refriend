@@ -168,17 +168,31 @@ function PageStack() {
   const homeSlotRef = useRef<HTMLDivElement>(null);
 
   const handleStackScroll = useCallback((scrollTop: number) => {
-    setNavScrolled(scrollTop > 180);
+    setNavScrolled(scrollTop > 200);
+    if (scrollTop > 200) {
+      const slot = document.querySelector('.page-slot:not(.page-slot-hidden)');
+      const h4 = slot?.querySelector('h4');
+      setPageTitle(h4?.textContent?.trim() || '');
+    }
   }, []);
 
   // Track home page scroll for back-to-top button
   useEffect(() => {
     const slot = homeSlotRef.current;
     if (!slot) return;
-    const handler = () => setHomeScrolled(slot.scrollTop > 300);
+    const handler = () => {
+      const scrolled = slot.scrollTop > 200;
+      setHomeScrolled(scrolled);
+      if (scrolled) {
+        const h4 = slot.querySelector('h4');
+        setPageTitle(h4?.textContent?.trim() || '');
+      }
+    };
     slot.addEventListener('scroll', handler, { passive: true });
     return () => slot.removeEventListener('scroll', handler);
   }, []);
+
+  const [pageTitle, setPageTitle] = useState('');
 
   // Reset scroll state when navigating
   useEffect(() => {
@@ -208,17 +222,31 @@ function PageStack() {
         );
       })}
 
-      {/* Floating back-to-top button */}
-      <button
-        className={`back-to-top-btn${isHome ? (homeScrolled ? ' visible' : '') : (navScrolled ? ' visible' : '')}`}
-        onClick={() => {
-          const slot = document.querySelector('.page-slot:not(.page-slot-hidden)');
-          slot?.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        aria-label="Back to top"
-      >
-        <i className="bi bi-arrow-up"></i>
-      </button>
+      {/* Floating glass nav bar — appears on scroll */}
+      <div className={`page-nav-glass${(isHome ? homeScrolled : navScrolled) ? ' visible' : ''}`}>
+        {!isHome && (
+          <>
+            <button className="page-nav-btn" onClick={goBack} aria-label="Back" title="Back">
+              <i className="bi bi-arrow-left"></i>
+            </button>
+            <button className="page-nav-btn" onClick={goHome} aria-label="Home" title="Home">
+              <i className="bi bi-house-fill"></i>
+            </button>
+          </>
+        )}
+        {pageTitle && <span className="page-nav-title">{pageTitle}</span>}
+        <button
+          className="page-nav-btn ms-auto"
+          onClick={() => {
+            const slot = document.querySelector('.page-slot:not(.page-slot-hidden)');
+            slot?.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          aria-label="Back to top"
+          title="Back to top"
+        >
+          <i className="bi bi-arrow-up"></i>
+        </button>
+      </div>
     </>
   );
 }

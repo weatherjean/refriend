@@ -774,6 +774,14 @@ body {
 
 // Mobile responsive styles
 @media (max-width: 991.98px) {
+  // Prevent body scroll on mobile — only page-slot should scroll
+  html, body {
+    overflow: hidden;
+    height: 100vh;
+    height: 100dvh;
+    overscroll-behavior: none;
+  }
+
   // Hide sidebar by default on mobile (z-index higher than modal at 1050)
   .sidebar {
     position: fixed;
@@ -814,8 +822,8 @@ body {
 
   // Main content takes full width on mobile — padding moves to page slots
   .main-content .page-slot {
-    padding-top: env(safe-area-inset-top, 0px); // Notch space only — sticky headers handle rest
-    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); // Space for bottom bar + safe area
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); // Space for bottom bar + safe area
     padding-left: 0.75rem;
     padding-right: 0.75rem;
   }
@@ -826,13 +834,6 @@ body {
     margin-right: -0.75rem;
     padding-left: 0.75rem;
     padding-right: 0.75rem;
-    border-radius: 0;
-  }
-
-  .page-nav-glass {
-    left: 0;
-    right: 0;
-    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
     border-radius: 0;
   }
 
@@ -1061,10 +1062,19 @@ body {
   gap: 0.5rem;
   opacity: 0;
   pointer-events: none;
+  transition: opacity 0.2s ease;
 
   &.visible {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  @media (max-width: 991.98px) {
+    position: fixed;
+    left: 0;
+    right: 0;
+    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+    border-radius: 0 0 0.75rem 0.75rem;
   }
 }
 
@@ -1114,42 +1124,15 @@ body {
   }
 }
 
-// Floating back-to-top button
-.back-to-top-btn {
-  position: absolute;
-  bottom: 1rem;
-  right: 1rem;
-  z-index: 10;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(15, 15, 15, 0.7);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
+.page-nav-title {
+  font-family: $font-family-monospace;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  letter-spacing: -0.02em;
   color: var(--bs-body-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease;
-  font-size: 1.1rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-
-  &.visible {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.18);
-  }
-
-  @media (max-width: 991.98px) {
-    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
-  }
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 // Community cards
