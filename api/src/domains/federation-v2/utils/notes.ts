@@ -30,8 +30,11 @@ export async function fetchAndStoreNote(
   ctx: Context<void>,
   db: DB,
   domain: string,
-  noteUri: string
+  noteUri: string,
+  depth = 0,
 ): Promise<number | null> {
+  // Prevent infinite recursion from quote cycles (A→B→A)
+  if (depth >= 3) return null;
   // Check if we already have it
   const existing = await db.getPostByUri(noteUri);
   if (existing) return existing.id;
@@ -277,7 +280,7 @@ export async function fetchAndStoreNote(
     }
 
     // Side-effect: resolve quote relationship (FEP-044f)
-    await resolveAndLinkQuote(db, ctx, domain, note, post.id);
+    await resolveAndLinkQuote(db, ctx, domain, note, post.id, depth);
 
     console.log(`[Reply] Fetched and stored parent post: ${post.id}`);
     return post.id;

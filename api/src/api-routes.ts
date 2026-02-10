@@ -14,6 +14,7 @@ import { generalRateLimit } from "./middleware/rate-limit.ts";
 import { csrfMiddleware } from "./middleware/csrf.ts";
 
 // Domain routes
+import { isPrivateUrl } from "./domains/posts/service.ts";
 import { createNotificationRoutes } from "./domains/notifications/routes.ts";
 import { createUserRoutes } from "./domains/users/routes.ts";
 import { createSocialRoutes } from "./domains/social/routes.ts";
@@ -137,35 +138,7 @@ export function createApiRoutes(
     }
 
     // Block private/internal hostnames to prevent SSRF
-    const hostname = parsedUrl.hostname.toLowerCase();
-    const isPrivateHostname = (h: string): boolean => {
-      // Localhost variants
-      if (h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "0.0.0.0") return true;
-      // .local domains
-      if (h.endsWith(".local") || h.endsWith(".localhost")) return true;
-      // Check for IP addresses
-      const ipv4Match = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-      if (ipv4Match) {
-        const [, a, b, c] = ipv4Match.map(Number);
-        // 10.x.x.x
-        if (a === 10) return true;
-        // 172.16.x.x - 172.31.x.x
-        if (a === 172 && b >= 16 && b <= 31) return true;
-        // 192.168.x.x
-        if (a === 192 && b === 168) return true;
-        // 169.254.x.x (link-local)
-        if (a === 169 && b === 254) return true;
-        // 127.x.x.x (loopback)
-        if (a === 127) return true;
-        // 0.x.x.x
-        if (a === 0) return true;
-      }
-      // IPv6 private ranges (simplified check)
-      if (h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80")) return true;
-      return false;
-    };
-
-    if (isPrivateHostname(hostname)) {
+    if (isPrivateUrl(parsedUrl)) {
       return c.json({ error: "Private addresses not allowed" }, 400);
     }
 
@@ -200,7 +173,7 @@ export function createApiRoutes(
         if (location) {
           try {
             const redirectUrl = new URL(location, url);
-            if (isPrivateHostname(redirectUrl.hostname.toLowerCase())) {
+            if (isPrivateUrl(redirectUrl)) {
               return c.json({ error: "Redirect to private address blocked" }, 400);
             }
             // Allow redirect by returning a redirect response to client

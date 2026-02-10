@@ -164,7 +164,7 @@ export async function checkRateLimit(
  * a trusted reverse proxy that overwrites the header. In production, configure
  * TRUST_PROXY=true only if behind nginx/cloudflare/etc that sets the header.
  */
-export function getRateLimitIdentifier(req: Request, userId?: number): string {
+export function getRateLimitIdentifier(req: Request, userId?: number, remoteAddr?: string): string {
   // If user is authenticated, use their ID for more accurate limiting
   if (userId) {
     return `user:${userId}`;
@@ -191,8 +191,12 @@ export function getRateLimitIdentifier(req: Request, userId?: number): string {
     return `ip:${realIp}`;
   }
 
-  // Fallback for development or direct connections
-  // In production behind a proxy, this will be the proxy's IP
+  // Fallback: use socket-level remote address from Deno.serve connection info
+  if (remoteAddr && /^[\d.:a-fA-F]+$/.test(remoteAddr)) {
+    return `ip:${remoteAddr}`;
+  }
+
+  // Last resort — should not happen in production (always behind proxy or direct Deno.serve)
   return `ip:unknown`;
 }
 

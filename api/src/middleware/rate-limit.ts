@@ -13,7 +13,9 @@ import { checkRateLimit, getRateLimitIdentifier } from "../cache.ts";
 export function rateLimit(action: string) {
   return async (c: Context, next: Next) => {
     const userId = c.get("user")?.id;
-    const identifier = getRateLimitIdentifier(c.req.raw, userId);
+    // deno-lint-ignore no-explicit-any
+    const remoteAddr = (c.env as any)?.remoteAddr?.hostname as string | undefined;
+    const identifier = getRateLimitIdentifier(c.req.raw, userId, remoteAddr);
 
     const result = await checkRateLimit(identifier, action);
 

@@ -20,6 +20,7 @@ export async function resolveAndLinkQuote(
   domain: string,
   object: unknown,
   postId: number,
+  depth = 0,
 ): Promise<void> {
   try {
     if (!(object instanceof Note)) return;
@@ -32,7 +33,7 @@ export async function resolveAndLinkQuote(
 
     // If not found, try to fetch and store it
     if (!quotedPost) {
-      const fetchedId = await fetchAndStoreNote(ctx, db, domain, quoteUri);
+      const fetchedId = await fetchAndStoreNote(ctx, db, domain, quoteUri, depth + 1);
       if (fetchedId) {
         quotedPost = await db.getPostById(fetchedId);
       }

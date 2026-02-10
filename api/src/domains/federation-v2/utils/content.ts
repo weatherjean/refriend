@@ -69,10 +69,15 @@ export function sanitizeHtml(html: string): string {
       const attrValue = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? "";
 
       if (allowedAttrsForTag.has(attrName)) {
-        // For href, ensure it's not javascript: or data:
+        // For href, ensure it's not javascript:, data:, or vbscript:
+        // Decode HTML entities first to catch &#106;avascript: and similar bypasses
         if (attrName === "href") {
-          const trimmedValue = attrValue.trim().toLowerCase();
-          if (trimmedValue.startsWith("javascript:") || trimmedValue.startsWith("data:")) {
+          const decoded = attrValue
+            .replace(/&#x([0-9a-f]+);?/gi, (_, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
+            .replace(/&#(\d+);?/gi, (_, dec: string) => String.fromCodePoint(parseInt(dec, 10)))
+            .replace(/&amp;/gi, "&");
+          const trimmedValue = decoded.trim().toLowerCase();
+          if (trimmedValue.startsWith("javascript:") || trimmedValue.startsWith("data:") || trimmedValue.startsWith("vbscript:")) {
             filteredAttrs.push('href="#"');
             continue;
           }

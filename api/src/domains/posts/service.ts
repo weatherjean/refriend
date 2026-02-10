@@ -78,27 +78,44 @@ export async function processContent(_db: DB, text: string, domain: string): Pro
 /**
  * Check if a URL points to a private/internal IP address
  */
+/**
+ * Check if an IPv4 address (as 4 octets) is private/reserved.
+ */
+function isPrivateIPv4(a: number, b: number, _c: number, _d: number): boolean {
+  if (a === 10) return true;                          // 10.0.0.0/8
+  if (a === 172 && b >= 16 && b <= 31) return true;   // 172.16.0.0/12
+  if (a === 192 && b === 168) return true;             // 192.168.0.0/16
+  if (a === 169 && b === 254) return true;             // 169.254.0.0/16 (link-local)
+  if (a === 127) return true;                          // 127.0.0.0/8 (loopback)
+  if (a === 0) return true;                            // 0.0.0.0/8
+  return false;
+}
+
 export function isPrivateUrl(url: URL): boolean {
   const hostname = url.hostname.toLowerCase();
 
-  // Block localhost
-  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
-    return true;
-  }
+  // Block localhost and .local domains
+  if (hostname === 'localhost' || hostname === '0.0.0.0' || hostname === '::1') return true;
+  if (hostname.endsWith('.local') || hostname.endsWith('.localhost')) return true;
 
-  // Block private IP ranges
+  // Block private IPv4 ranges
   const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (ipv4Match) {
-    const [, a, b] = ipv4Match.map(Number);
-    // 10.x.x.x
-    if (a === 10) return true;
-    // 172.16.x.x - 172.31.x.x
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    // 192.168.x.x
-    if (a === 192 && b === 168) return true;
-    // 169.254.x.x (link-local)
-    if (a === 169 && b === 254) return true;
+    const [, a, b, c, d] = ipv4Match.map(Number);
+    if (isPrivateIPv4(a, b, c, d)) return true;
   }
+
+  // Block IPv4-mapped IPv6 (::ffff:127.0.0.1, ::ffff:192.168.1.1, etc.)
+  const mappedMatch = hostname.match(/^::ffff:(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (mappedMatch) {
+    const [, a, b, c, d] = mappedMatch.map(Number);
+    if (isPrivateIPv4(a, b, c, d)) return true;
+  }
+
+  // Block IPv6 private/reserved ranges
+  if (hostname === '::' || hostname === '::1') return true;
+  if (hostname.startsWith('fc') || hostname.startsWith('fd')) return true;   // ULA (fc00::/7)
+  if (hostname.startsWith('fe80')) return true;                               // Link-local
 
   return false;
 }
@@ -124,14 +141,36 @@ export async function fetchOpenGraph(url: string, timeoutMs: number = 3000): Pro
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         signal: controller.signal,
         headers: {
           'User-Agent': 'Riff/1.0 (OpenGraph fetcher)',
           'Accept': 'text/html',
         },
-        redirect: 'follow',
+        redirect: 'manual',
       });
+
+      // Follow at most 1 redirect, validating the target isn't a private IP
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        if (!location) return null;
+        let redirectUrl: URL;
+        try {
+          redirectUrl = new URL(location, url);
+        } catch {
+          return null;
+        }
+        if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') return null;
+        if (isPrivateUrl(redirectUrl)) return null;
+        response = await fetch(redirectUrl.href, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Riff/1.0 (OpenGraph fetcher)',
+            'Accept': 'text/html',
+          },
+          redirect: 'manual',
+        });
+      }
 
       clearTimeout(timeoutId);
 
@@ -144,7 +183,38 @@ export async function fetchOpenGraph(url: string, timeoutMs: number = 3000): Pro
         return null;
       }
 
-      const html = await response.text();
+      // Limit response size to 1MB to prevent OOM from malicious servers
+      const MAX_OG_SIZE = 1024 * 1024;
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength, 10) > MAX_OG_SIZE) {
+        return null;
+      }
+
+      let html: string;
+      if (!response.body) {
+        html = await response.text();
+      } else {
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let totalSize = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          totalSize += value.byteLength;
+          if (totalSize > MAX_OG_SIZE) {
+            reader.cancel();
+            return null;
+          }
+          chunks.push(value);
+        }
+        const combined = new Uint8Array(totalSize);
+        let offset = 0;
+        for (const chunk of chunks) {
+          combined.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        html = new TextDecoder().decode(combined);
+      }
 
       // Parse OpenGraph tags using regex (simple approach, no external deps)
       const getMetaContent = (property: string): string | null => {

@@ -76,7 +76,7 @@ app.use("*", async (c, next) => {
     "img-src 'self' data: https: http: blob:; " +
     "media-src 'self' https: http: blob:; " +
     "font-src 'self'; " +
-    "connect-src 'self' https: http:; " +
+    "connect-src 'self'; " +
     "frame-ancestors 'none';"
   );
 });
