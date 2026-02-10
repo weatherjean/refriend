@@ -71,7 +71,7 @@ async function fetchStats(db: DB): Promise<ServerStats> {
         SELECT
           (SELECT COUNT(*) FROM likes l JOIN posts p ON l.post_id = p.id JOIN actors a ON p.actor_id = a.id WHERE a.user_id IS NOT NULL) AS total_likes,
           (SELECT COUNT(*) FROM boosts b JOIN posts p ON b.post_id = p.id JOIN actors a ON p.actor_id = a.id WHERE a.user_id IS NOT NULL) AS total_boosts,
-          (SELECT COUNT(*) FROM posts p JOIN actors a ON p.actor_id = a.id WHERE a.user_id IS NOT NULL AND p.in_reply_to_id IS NOT NULL) AS total_replies
+          (SELECT COUNT(*) FROM posts p JOIN posts parent ON p.in_reply_to_id = parent.id JOIN actors a ON parent.actor_id = a.id WHERE a.user_id IS NOT NULL) AS total_replies
       ),
       social_stats AS (
         SELECT
