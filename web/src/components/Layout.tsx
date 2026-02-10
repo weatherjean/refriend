@@ -9,6 +9,7 @@ import { TagBadge } from './TagBadge';
 import { Avatar } from './Avatar';
 import { ToastContainer } from './ToastContainer';
 import { CookieBanner } from './CookieBanner';
+import { PushPrompt } from './PushPrompt';
 
 interface LayoutProps {
   children: ReactNode;
@@ -185,11 +186,11 @@ export function Layout({ children }: LayoutProps) {
                 </div>
                 <div className="d-flex gap-2">
                   <Link
-                    to={`/a/${username}`}
+                    to="/settings"
                     className="btn btn-outline-secondary btn-sm flex-grow-1"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <i className="bi bi-person-fill me-1"></i> Profile
+                    <i className="bi bi-gear-fill me-1"></i> Settings
                   </Link>
                   <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="btn btn-outline-secondary btn-sm flex-grow-1">
                     <i className="bi bi-box-arrow-right me-1"></i> Logout
@@ -286,6 +287,7 @@ export function Layout({ children }: LayoutProps) {
 
       <ToastContainer />
       <CookieBanner />
+      <PushPrompt />
     </div>
   );
 }

@@ -7,6 +7,18 @@
 import type { DB } from "../../db.ts";
 import type { NotificationType, NotificationWithActor } from "../../shared/types.ts";
 import * as repository from "./repository.ts";
+import type { NotificationPreferences } from "./repository.ts";
+import { sendPushNotification } from "../push/service.ts";
+import { logger } from "../../logger.ts";
+
+/** Map notification types to preference column names */
+const TYPE_TO_PREF: Partial<Record<NotificationType, keyof NotificationPreferences>> = {
+  like: 'likes',
+  reply: 'replies',
+  mention: 'mentions',
+  boost: 'boosts',
+  follow: 'follows',
+};
 
 export interface NotificationDTO {
   id: number;
@@ -135,7 +147,77 @@ export async function createNotification(
   postId: number | null = null,
   feedId: number | null = null
 ): Promise<void> {
-  return repository.createNotification(db, type, actorId, targetActorId, postId, feedId);
+  // Don't notify yourself (repository also checks, but skip push work too)
+  if (actorId === targetActorId) return;
+
+  // Check if the target actor has this notification type enabled
+  const prefKey = TYPE_TO_PREF[type];
+  if (prefKey) {
+    const prefs = await repository.getNotificationPreferences(db, targetActorId);
+    if (!prefs[prefKey]) return;
+  }
+
+  await repository.createNotification(db, type, actorId, targetActorId, postId, feedId);
+
+  // Fire-and-forget push notification
+  triggerPush(db, type, actorId, targetActorId, postId, feedId).catch((err) => {
+    logger.error("[Push] Error triggering push notification:", err);
+  });
+}
+
+/**
+ * Look up actor/post/feed details and send a push notification.
+ * Uses a single JOIN query instead of multiple sequential roundtrips.
+ */
+async function triggerPush(
+  db: DB,
+  type: NotificationType,
+  actorId: number,
+  targetActorId: number,
+  postId: number | null,
+  feedId: number | null,
+): Promise<void> {
+  const row = await db.query(async (client) => {
+    const r = await client.queryObject<{
+      actor_name: string | null;
+      actor_handle: string;
+      post_public_id: string | null;
+      post_content: string | null;
+      post_author_handle: string | null;
+      feed_slug: string | null;
+    }>`
+      SELECT
+        a.name       AS actor_name,
+        a.handle     AS actor_handle,
+        p.public_id  AS post_public_id,
+        p.content    AS post_content,
+        pa.handle    AS post_author_handle,
+        f.slug       AS feed_slug
+      FROM actors a
+      LEFT JOIN posts p  ON p.id  = ${postId}
+      LEFT JOIN actors pa ON pa.id = p.actor_id
+      LEFT JOIN feeds f  ON f.id  = ${feedId}
+      WHERE a.id = ${actorId}
+    `;
+    return r.rows[0] ?? null;
+  });
+
+  if (!row) return;
+
+  const postContentPreview = row.post_content
+    ?.replace(/<[^>]*>/g, "").slice(0, 100);
+
+  await sendPushNotification(
+    db,
+    targetActorId,
+    type,
+    row.actor_name || row.actor_handle,
+    row.actor_handle.split("@")[0],
+    row.post_author_handle?.split("@")[0],
+    row.post_public_id ?? undefined,
+    postContentPreview,
+    row.feed_slug ?? undefined,
+  );
 }
 
 /**
@@ -149,4 +231,25 @@ export async function removeNotification(
   postId: number | null = null
 ): Promise<void> {
   return repository.removeNotification(db, type, actorId, targetActorId, postId);
+}
+
+/**
+ * Get notification preferences for an actor
+ */
+export async function getNotificationPreferences(
+  db: DB,
+  actorId: number
+): Promise<NotificationPreferences> {
+  return repository.getNotificationPreferences(db, actorId);
+}
+
+/**
+ * Update notification preferences for an actor
+ */
+export async function updateNotificationPreferences(
+  db: DB,
+  actorId: number,
+  prefs: Partial<NotificationPreferences>
+): Promise<NotificationPreferences> {
+  return repository.updateNotificationPreferences(db, actorId, prefs);
 }

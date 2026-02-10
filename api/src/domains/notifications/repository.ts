@@ -7,6 +7,14 @@
 import type { DB } from "../../db.ts";
 import type { NotificationType, NotificationWithActor } from "../../shared/types.ts";
 
+export interface NotificationPreferences {
+  likes: boolean;
+  replies: boolean;
+  mentions: boolean;
+  boosts: boolean;
+  follows: boolean;
+}
+
 /**
  * Create a notification
  * Does not notify if actor is targeting themselves
@@ -228,5 +236,61 @@ export async function deleteNotifications(
         WHERE target_actor_id = ${targetActorId}
       `;
     }
+  });
+}
+
+const DEFAULT_PREFERENCES: NotificationPreferences = {
+  likes: true,
+  replies: true,
+  mentions: true,
+  boosts: true,
+  follows: true,
+};
+
+/**
+ * Get notification preferences for an actor (defaults to all-true if no row exists)
+ */
+export async function getNotificationPreferences(
+  db: DB,
+  actorId: number
+): Promise<NotificationPreferences> {
+  return await db.query(async (client) => {
+    const result = await client.queryObject<NotificationPreferences>`
+      SELECT likes, replies, mentions, boosts, follows
+      FROM notification_preferences
+      WHERE actor_id = ${actorId}
+    `;
+    return result.rows[0] ?? { ...DEFAULT_PREFERENCES };
+  });
+}
+
+/**
+ * Upsert notification preferences for an actor
+ */
+export async function updateNotificationPreferences(
+  db: DB,
+  actorId: number,
+  prefs: Partial<NotificationPreferences>
+): Promise<NotificationPreferences> {
+  return await db.query(async (client) => {
+    const result = await client.queryObject<NotificationPreferences>`
+      INSERT INTO notification_preferences (actor_id, likes, replies, mentions, boosts, follows)
+      VALUES (
+        ${actorId},
+        ${prefs.likes ?? true},
+        ${prefs.replies ?? true},
+        ${prefs.mentions ?? true},
+        ${prefs.boosts ?? true},
+        ${prefs.follows ?? true}
+      )
+      ON CONFLICT (actor_id) DO UPDATE SET
+        likes = COALESCE(${prefs.likes ?? null}, notification_preferences.likes),
+        replies = COALESCE(${prefs.replies ?? null}, notification_preferences.replies),
+        mentions = COALESCE(${prefs.mentions ?? null}, notification_preferences.mentions),
+        boosts = COALESCE(${prefs.boosts ?? null}, notification_preferences.boosts),
+        follows = COALESCE(${prefs.follows ?? null}, notification_preferences.follows)
+      RETURNING likes, replies, mentions, boosts, follows
+    `;
+    return result.rows[0];
   });
 }

@@ -1,14 +1,13 @@
-type TabType = 'posts' | 'replies' | 'boosts' | 'boosts_posts' | 'settings';
+type TabType = 'posts' | 'replies' | 'boosts' | 'boosts_posts';
 
 interface ProfileTabsProps {
   activeTab: TabType;
   showBoosts: boolean;
-  showSettings?: boolean;
   actorType?: 'Person' | 'Group';
   onTabChange: (tab: TabType) => void;
 }
 
-export function ProfileTabs({ activeTab, showBoosts, showSettings, actorType, onTabChange }: ProfileTabsProps) {
+export function ProfileTabs({ activeTab, showBoosts, actorType, onTabChange }: ProfileTabsProps) {
   const isGroup = actorType === 'Group';
 
   const contentTabs: { key: TabType; label: string; show: boolean }[] = isGroup
@@ -36,17 +35,6 @@ export function ProfileTabs({ activeTab, showBoosts, showSettings, actorType, on
           </button>
         </li>
       ))}
-      {showSettings && (
-        <li className="nav-item ms-auto">
-          <button
-            className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => onTabChange('settings')}
-            title="Settings"
-          >
-            <i className="bi bi-gear-fill"></i>
-          </button>
-        </li>
-      )}
     </ul>
   );
 }

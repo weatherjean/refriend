@@ -3,7 +3,8 @@
     "dev": "deno run -A --unstable-kv --unstable-temporal --watch src/main.ts",
     "start": "deno run -A --unstable-kv --unstable-temporal src/main.ts",
     "seed": "deno run -A src/seeder.ts",
-    "test": "deno test -A --unstable-kv --unstable-temporal --no-check src/test/*.integration.test.ts"
+    "test": "deno test -A --unstable-kv --unstable-temporal --no-check src/test/*.integration.test.ts",
+    "generate-vapid": "deno run -A src/generate-vapid-keys.ts"
   },
   "imports": {
     "@hongminhee/x-forwarded-fetch": "jsr:@hongminhee/x-forwarded-fetch@^0.2.0",
@@ -15,7 +16,8 @@
     "@fedify/testing": "jsr:@fedify/testing@^1.10.0",
     "postgres": "https://deno.land/x/postgres@v0.19.3/mod.ts",
     "stringify-entities": "npm:stringify-entities@^4.0.4",
-    "@aws-sdk/client-s3": "npm:@aws-sdk/client-s3@^3.975.0"
+    "@aws-sdk/client-s3": "npm:@aws-sdk/client-s3@^3.975.0",
+    "web-push": "npm:web-push@^3.6.7"
   },
   "unstable": ["kv", "temporal"],
   "compilerOptions": {

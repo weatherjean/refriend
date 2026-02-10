@@ -23,6 +23,7 @@ import { createTagRoutes } from "./domains/tags/routes.ts";
 import { createSearchRoutes } from "./domains/search/index.ts";
 import { createFeedRoutes } from "./domains/feeds/routes.ts";
 import { createStatsRoutes } from "./domains/stats/routes.ts";
+import { createPushRoutes } from "./domains/push/routes.ts";
 
 // Storage for video caching
 import { getCachedMedia, cacheRemoteMedia } from "./storage.ts";
@@ -140,6 +141,9 @@ export function createApiRoutes(
 
   // Stats: /stats (public, no auth)
   api.route("/", createStatsRoutes());
+
+  // Push notifications: /push/*
+  api.route("/push", createPushRoutes());
 
   // Media proxy for remote videos/images that block CORS
   // Only proxies media that failed direct loading due to CORS

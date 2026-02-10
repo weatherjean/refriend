@@ -8,6 +8,13 @@ import { ScrollLockProvider } from './context/ScrollLockContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import './styles.scss'
 
+// Register service worker for push notifications
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch((err) => {
+    console.warn('Service worker registration failed:', err);
+  });
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>

@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import { Actor, profile, auth } from '../api';
+import { useState, useEffect } from 'react';
+import { Actor, profile, auth, notifications, NotificationPreferences } from '../api';
 import { Avatar } from './Avatar';
 import { AlertMessage } from './AlertMessage';
 import { LoadingButton } from './LoadingButton';
 import { useAvatarUpload, useMessage } from '../hooks';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 interface ProfileSettingsTabProps {
   actor: Actor;
@@ -33,6 +34,33 @@ export function ProfileSettingsTab({ actor, onUpdate, onLogout }: ProfileSetting
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
   const { message: passwordMessage, showSuccess: showPasswordSuccess, showError: showPasswordError, clear: clearPasswordMessage } = useMessage();
+
+  // Push notifications
+  const pushNotifications = usePushNotifications(true);
+
+  // Notification preferences
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences | null>(null);
+  const [savingPrefs, setSavingPrefs] = useState(false);
+  const { message: prefsMessage, showSuccess: showPrefsSuccess, showError: showPrefsError, clear: clearPrefsMessage } = useMessage();
+
+  useEffect(() => {
+    notifications.getPreferences().then(setNotifPrefs).catch(() => {});
+  }, []);
+
+  const handleSavePreferences = async () => {
+    if (!notifPrefs) return;
+    setSavingPrefs(true);
+    clearPrefsMessage();
+    try {
+      const updated = await notifications.updatePreferences(notifPrefs);
+      setNotifPrefs(updated);
+      showPrefsSuccess('Notification preferences saved');
+    } catch (err) {
+      showPrefsError(err instanceof Error ? err.message : 'Failed to save preferences');
+    } finally {
+      setSavingPrefs(false);
+    }
+  };
 
   // Delete account state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -258,6 +286,143 @@ export function ProfileSettingsTab({ actor, onUpdate, onLogout }: ProfileSetting
           </LoadingButton>
         </div>
       </div>
+
+      {/* Push Notifications Card */}
+      {pushNotifications.supported && (
+        <div className="card mb-4">
+          <div className="card-header">
+            <h6 className="mb-0">Push Notifications</h6>
+          </div>
+          <div className="card-body">
+            {pushNotifications.permission === 'denied' ? (
+              <p className="text-muted small mb-0">
+                Notifications are blocked by your browser. To re-enable, update the notification permission in your browser's site settings.
+              </p>
+            ) : pushNotifications.subscribed ? (
+              <div className="d-flex align-items-center justify-content-between">
+                <div>
+                  <span className="text-success me-2"><i className="bi bi-check-circle-fill"></i></span>
+                  Push notifications are enabled
+                </div>
+                <button
+                  className="btn btn-outline-secondary btn-sm"
+                  onClick={pushNotifications.unsubscribe}
+                  disabled={pushNotifications.loading}
+                >
+                  {pushNotifications.loading ? 'Disabling...' : 'Disable'}
+                </button>
+              </div>
+            ) : (
+              <div className="d-flex align-items-center justify-content-between">
+                <span className="text-muted small">Get notified about replies, likes, and follows even when the app is closed.</span>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={pushNotifications.subscribe}
+                  disabled={pushNotifications.loading}
+                >
+                  {pushNotifications.loading ? 'Enabling...' : 'Enable'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Notification Preferences Card */}
+      {notifPrefs && (
+        <div className="card mb-4">
+          <div className="card-header">
+            <h6 className="mb-0">Notification Preferences</h6>
+          </div>
+          <div className="card-body">
+            <AlertMessage message={prefsMessage} onDismiss={clearPrefsMessage} />
+            <p className="text-muted small mb-3">Choose which notifications you receive.</p>
+
+            <div className="mb-2">
+              <div className="form-check form-switch">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="prefLikes"
+                  checked={notifPrefs.likes}
+                  onChange={(e) => setNotifPrefs({ ...notifPrefs, likes: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="prefLikes">
+                  Likes <span className="text-muted small">— Someone likes your post</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="mb-2">
+              <div className="form-check form-switch">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="prefReplies"
+                  checked={notifPrefs.replies}
+                  onChange={(e) => setNotifPrefs({ ...notifPrefs, replies: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="prefReplies">
+                  Replies <span className="text-muted small">— Someone replies to your post</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="mb-2">
+              <div className="form-check form-switch">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="prefMentions"
+                  checked={notifPrefs.mentions}
+                  onChange={(e) => setNotifPrefs({ ...notifPrefs, mentions: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="prefMentions">
+                  Mentions <span className="text-muted small">— Someone mentions you</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="mb-2">
+              <div className="form-check form-switch">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="prefBoosts"
+                  checked={notifPrefs.boosts}
+                  onChange={(e) => setNotifPrefs({ ...notifPrefs, boosts: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="prefBoosts">
+                  Boosts <span className="text-muted small">— Someone boosts your post</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="mb-3">
+              <div className="form-check form-switch">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="prefFollows"
+                  checked={notifPrefs.follows}
+                  onChange={(e) => setNotifPrefs({ ...notifPrefs, follows: e.target.checked })}
+                />
+                <label className="form-check-label" htmlFor="prefFollows">
+                  Follows <span className="text-muted small">— Someone follows you</span>
+                </label>
+              </div>
+            </div>
+
+            <LoadingButton
+              loading={savingPrefs}
+              loadingText="Saving..."
+              onClick={handleSavePreferences}
+            >
+              Save Preferences
+            </LoadingButton>
+          </div>
+        </div>
+      )}
 
       {/* Danger Zone Card */}
       <div className="card border-danger">

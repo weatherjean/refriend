@@ -26,6 +26,7 @@ import { safeSendActivity } from "../federation-v2/index.ts";
 import { rateLimit } from "../../middleware/rate-limit.ts";
 import { parseIntSafe } from "../../shared/utils.ts";
 import { getHotFeedCache } from "../../hot-feed.ts";
+import { createNotification } from "../notifications/service.ts";
 
 interface PostsEnv {
   Variables: {
@@ -538,6 +539,11 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
 
     // Create notifications for mentioned users
     await service.notifyMentions(db, mentions, actor.id, post.id, domain);
+
+    // Notify parent post author about the reply
+    if (replyToPost && replyToAuthor) {
+      await createNotification(db, 'reply', actor.id, replyToAuthor.id, post.id);
+    }
 
     console.log(`[Create] Post from ${actor.handle}: ${post.id}`);
 

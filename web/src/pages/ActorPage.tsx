@@ -10,7 +10,6 @@ import { LoadMoreButton } from '../components/LoadMoreButton';
 import { ActorListModal } from '../components/ActorListModal';
 import { ProfileHeader } from '../components/ProfileHeader';
 import { ProfileTabs } from '../components/ProfileTabs';
-import { ProfileSettingsTab } from '../components/ProfileSettingsTab';
 import { TabContent } from '../components/TabContent';
 import { SortToggle } from '../components/SortToggle';
 import { ReplyThread } from '../components/PostThread';
@@ -18,7 +17,7 @@ import { usePagination } from '../hooks';
 
 export function ActorPage() {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   // Core profile state
   const [actor, setActor] = useState<Actor | null>(null);
@@ -31,7 +30,8 @@ export function ActorPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [followLoading, setFollowLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'boosts' | 'boosts_posts' | 'settings'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'boosts' | 'boosts_posts'>('posts');
+
   const [postSort, setPostSort] = useState<'new' | 'hot'>('new');
 
   // Follower/following state
@@ -126,7 +126,7 @@ export function ActorPage() {
     setBoostsLoaded(false);
     setBoostsPostsLoaded(false);
     setPinnedPosts([]);
-    setActiveTab('posts'); // will be overridden for Groups after profile loads
+    setActiveTab('posts'); // will be overridden for Groups
     setFollowersLoaded(false);
     setFollowingLoaded(false);
     setFollowers([]);
@@ -339,7 +339,6 @@ export function ActorPage() {
       <ProfileTabs
         activeTab={activeTab}
         showBoosts={true}
-        showSettings={isOwnProfile}
         actorType={actor.actor_type}
         onTabChange={setActiveTab}
       />
@@ -419,15 +418,6 @@ export function ActorPage() {
             <LoadMoreButton loading={loadingMoreBoosts} onClick={loadMoreBoosts} />
           )}
         </TabContent>
-      )}
-
-      {/* Settings Tab */}
-      {activeTab === 'settings' && isOwnProfile && actor && (
-        <ProfileSettingsTab
-          actor={actor}
-          onUpdate={(updated) => setActor(updated)}
-          onLogout={logout}
-        />
       )}
 
       <ActorListModal

@@ -67,6 +67,50 @@ export function createNotificationRoutes(): Hono<NotificationsEnv> {
     return c.json({ ok: true });
   });
 
+  // GET /notifications/preferences - Get notification preferences
+  routes.get("/preferences", async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const db = c.get("db");
+    const prefs = await service.getNotificationPreferences(db, actor.id);
+
+    return c.json(prefs);
+  });
+
+  // PUT /notifications/preferences - Update notification preferences
+  routes.put("/preferences", async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    const ALLOWED_KEYS = ["likes", "replies", "mentions", "boosts", "follows"];
+    const prefs: Record<string, boolean> = {};
+    for (const key of ALLOWED_KEYS) {
+      if (key in body) {
+        if (typeof body[key] !== "boolean") {
+          return c.json({ error: `${key} must be a boolean` }, 400);
+        }
+        prefs[key] = body[key] as boolean;
+      }
+    }
+
+    const db = c.get("db");
+    const updated = await service.updateNotificationPreferences(db, actor.id, prefs);
+
+    return c.json(updated);
+  });
+
   // DELETE /notifications - Delete notifications
   routes.delete("/", async (c) => {
     const actor = c.get("actor");

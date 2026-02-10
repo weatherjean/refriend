@@ -604,6 +604,25 @@ export const stats = {
   get: () => fetchJson<ServerStats>('/stats'),
 };
 
+// Push Notifications
+export const push = {
+  getVapidKey: () =>
+    fetchJson<{ key: string }>('/push/vapid-key'),
+  subscribe: (subscription: PushSubscriptionJSON) =>
+    fetchJson<{ ok: boolean }>('/push/subscribe', {
+      method: 'POST',
+      body: JSON.stringify({
+        endpoint: subscription.endpoint,
+        keys: subscription.keys,
+      }),
+    }),
+  unsubscribe: (endpoint: string) =>
+    fetchJson<{ ok: boolean }>('/push/subscribe', {
+      method: 'DELETE',
+      body: JSON.stringify({ endpoint }),
+    }),
+};
+
 // Notifications
 export interface Notification {
   id: number;
@@ -630,6 +649,14 @@ export interface Notification {
   } | null;
 }
 
+export interface NotificationPreferences {
+  likes: boolean;
+  replies: boolean;
+  mentions: boolean;
+  boosts: boolean;
+  follows: boolean;
+}
+
 export const notifications = {
   getAll: (limit = 50, before?: number) =>
     fetchJson<{ notifications: Notification[]; next_cursor: number | null }>(
@@ -645,6 +672,13 @@ export const notifications = {
   delete: (ids?: number[]) =>
     fetchJson<{ ok: boolean }>(`/notifications${ids?.length ? `?ids=${ids.join(',')}` : ''}`, {
       method: 'DELETE',
+    }),
+  getPreferences: () =>
+    fetchJson<NotificationPreferences>('/notifications/preferences'),
+  updatePreferences: (prefs: Partial<NotificationPreferences>) =>
+    fetchJson<NotificationPreferences>('/notifications/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(prefs),
     }),
 };
 

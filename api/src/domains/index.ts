@@ -60,6 +60,13 @@ export type {
   ServerStats,
 } from "./stats/index.ts";
 
+// Push Notifications Domain
+export {
+  createPushRoutes,
+  initVapid,
+  sendPushNotification,
+} from "./push/index.ts";
+
 // Federation Domain
 export {
   federation,

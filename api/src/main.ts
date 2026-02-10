@@ -17,6 +17,7 @@ import { initCache } from "./cache.ts";
 import { logger } from "./logger.ts";
 import { startHotFeedLoop } from "./hot-feed.ts";
 import { runMigrations } from "./migrate.ts";
+import { initVapid } from "./domains/push/service.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8000");
 const DATABASE_URL = Deno.env.get("DATABASE_URL") || "postgres://riff:riff@localhost:5432/riff";
@@ -42,6 +43,9 @@ await initStorage();
 
 // Initialize KV cache
 await initCache();
+
+// Initialize Web Push VAPID keys
+await initVapid();
 
 // Start hot feed background refresh
 startHotFeedLoop(db);
