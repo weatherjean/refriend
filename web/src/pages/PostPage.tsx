@@ -7,7 +7,6 @@ import { PostThread } from '../components/PostThread';
 import { PostComposer } from '../components/PostComposer';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { LoadMoreButton } from '../components/LoadMoreButton';
-import { SortToggle } from '../components/SortToggle';
 import { useAuth } from '../context/AuthContext';
 import { usePagination } from '../hooks';
 
@@ -19,14 +18,13 @@ export function PostPage() {
   const [ancestors, setAncestors] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [replySort, setReplySort] = useState<'new' | 'hot'>('hot');
   const [opAuthorId, setOpAuthorId] = useState<string | null>(null);
   const [showReplyComposer, setShowReplyComposer] = useState(false);
   const fetchReplies = useCallback(async (cursor?: number) => {
-    const data = await postsApi.getReplies(id!, replySort, cursor);
+    const data = await postsApi.getReplies(id!, cursor);
     setOpAuthorId(data.op_author_id);
     return { items: data.replies, next_cursor: data.next_cursor };
-  }, [id, replySort]);
+  }, [id]);
 
   const {
     items: replies,
@@ -35,7 +33,7 @@ export function PostPage() {
     hasMore,
     loadMore,
     refresh: refreshReplies,
-  } = usePagination<Post>({ fetchFn: fetchReplies, key: `${id}-${replySort}`, autoLoad: false });
+  } = usePagination<Post>({ fetchFn: fetchReplies, key: id!, autoLoad: false });
 
   // Load post and ancestors
   useEffect(() => {
@@ -54,12 +52,12 @@ export function PostPage() {
     load();
   }, [id, user]);
 
-  // Load replies when post loads or sort changes
+  // Load replies when post loads
   useEffect(() => {
     if (post) {
       refreshReplies();
     }
-  }, [post, replySort, refreshReplies]);
+  }, [post, refreshReplies]);
 
   const handleReply = async (content: string, attachments: AttachmentInput[], sensitive: boolean, linkUrl?: string) => {
     if (!post) return;
@@ -120,7 +118,6 @@ export function PostPage() {
               <i className="bi bi-chat-dots-fill me-2"></i>
               Replies ({formatCount(post.replies_count ?? 0)})
             </h5>
-            <SortToggle value={replySort} onChange={setReplySort} />
           </div>
           {replies.map((reply) => (
             <PostCard

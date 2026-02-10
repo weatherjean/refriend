@@ -1191,16 +1191,16 @@ export class DB {
     });
   }
 
-  async getRepliesWithActor(postId: number, limit = 20, after?: number, sort: 'new' | 'hot' = 'new', opActorId?: number): Promise<PostWithActor[]> {
+  async getRepliesWithActor(postId: number, limit = 20, after?: number, opActorId?: number): Promise<PostWithActor[]> {
     return this.query(async (client) => {
-      const secondaryOrder = sort === 'hot' ? 'p.hot_score DESC, p.id DESC' : 'p.id DESC';
+      // Sort: OP replies first, then by reply count (most discussion), then chronologically
+      const secondaryOrder = 'p.replies_count DESC, p.id ASC';
       const params: unknown[] = [postId];
       let nextParam = 2;
 
       const afterParam = after ? `$${nextParam++}` : null;
       if (after) params.push(after);
 
-      // Sort OP replies first, then by selected sort
       let orderBy: string;
       if (opActorId) {
         orderBy = `(p.actor_id = $${nextParam++}) DESC, ${secondaryOrder}`;

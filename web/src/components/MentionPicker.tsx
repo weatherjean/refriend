@@ -5,9 +5,25 @@ import { Avatar } from './Avatar';
 
 interface MentionPickerProps {
   query: string; // The text after @
-  onSelect: (actor: Actor) => void;
+  onSelect: (mentionText: string) => void;
   onClose: () => void;
   position: { top: number; left: number };
+}
+
+/**
+ * Build the mention text for an actor.
+ * Local: "username"
+ * Remote: "username@domain"
+ */
+function buildMentionText(actor: Actor): string {
+  const username = getUsername(actor.handle);
+  if (actor.is_local) {
+    return username;
+  }
+  // Remote — extract domain from handle, fall back to URI
+  const domainMatch = actor.handle.match(/^@?[^@]+@(.+)$/);
+  const domain = domainMatch?.[1] || (() => { try { return new URL(actor.uri).host; } catch { return null; } })();
+  return domain ? `${username}@${domain}` : username;
 }
 
 export function MentionPicker({ query, onSelect, onClose, position }: MentionPickerProps) {
@@ -39,6 +55,11 @@ export function MentionPicker({ query, onSelect, onClose, position }: MentionPic
     return () => clearTimeout(debounce);
   }, [query]);
 
+  const selectActor = (actor: Actor) => {
+    const mentionText = buildMentionText(actor);
+    onSelect(mentionText);
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (results.length === 0) return;
@@ -51,7 +72,7 @@ export function MentionPicker({ query, onSelect, onClose, position }: MentionPic
         setSelectedIndex(i => (i - 1 + results.length) % results.length);
       } else if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
-        onSelect(results[selectedIndex]);
+        selectActor(results[selectedIndex]);
       } else if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
@@ -103,7 +124,7 @@ export function MentionPicker({ query, onSelect, onClose, position }: MentionPic
                 key={actor.id}
                 type="button"
                 className={`list-group-item list-group-item-action d-flex align-items-center py-2 ${index === selectedIndex ? 'active' : ''}`}
-                onClick={() => onSelect(actor)}
+                onClick={() => selectActor(actor)}
                 onMouseEnter={() => setSelectedIndex(index)}
               >
                 <Avatar src={actor.avatar_url} name={username} size="xs" className="me-2" />

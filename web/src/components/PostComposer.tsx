@@ -1,8 +1,7 @@
 import { useState, useRef, ChangeEvent } from 'react';
-import { media, AttachmentInput, type Actor } from '../api';
+import { media, AttachmentInput } from '../api';
 import { resizeImageWithDimensions, ResizedImage } from '../utils/imageUtils';
 import { MentionPicker } from './MentionPicker';
-import { getUsername } from '../utils';
 
 const MAX_CHARACTERS = 500;
 const MAX_IMAGES = 4;
@@ -52,7 +51,7 @@ export function PostComposer({
   const hasImages = images.length > 0;
 
   const validateUrl = (url: string): boolean => {
-    if (!url.trim()) return true; // Empty is valid (no link)
+    if (!url.trim()) return true;
     try {
       const parsed = new URL(url);
       return parsed.protocol === 'http:' || parsed.protocol === 'https:';
@@ -137,21 +136,18 @@ export function PostComposer({
     }
   };
 
-  const handleMentionSelect = (actor: Actor) => {
-    // Use full handle for remote users, just username for local
-    const mention = actor.is_local
-      ? getUsername(actor.handle)
-      : actor.handle.replace(/^@/, ''); // Remove leading @ since we add it
+  // MentionPicker now passes the ready-to-use mention text (e.g. "alice" or "alice@mastodon.social")
+  const handleMentionSelect = (mentionText: string) => {
     const beforeMention = content.slice(0, mentionStartIndex);
     const afterMention = content.slice(mentionStartIndex + 1 + mentionQuery.length);
 
-    const newContent = `${beforeMention}@${mention} ${afterMention}`;
+    const newContent = `${beforeMention}@${mentionText} ${afterMention}`;
     setContent(newContent);
     setShowMentionPicker(false);
 
     setTimeout(() => {
       if (textareaRef.current) {
-        const newCursorPos = mentionStartIndex + mention.length + 2;
+        const newCursorPos = mentionStartIndex + mentionText.length + 2;
         textareaRef.current.focus();
         textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
       }

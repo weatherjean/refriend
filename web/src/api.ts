@@ -321,9 +321,8 @@ export const posts = {
     return fetchJson<PaginatedPosts>(`/posts/hot${queryStr ? '?' + queryStr : ''}`);
   },
   get: (id: string) => fetchJson<{ post: Post; ancestors: Post[] }>(`/posts/${id}`),
-  getReplies: (id: string, sort?: 'new' | 'hot', after?: number) => {
+  getReplies: (id: string, after?: number) => {
     const params = new URLSearchParams();
-    if (sort) params.set('sort', sort);
     if (after) params.set('after', after.toString());
     const query = params.toString();
     return fetchJson<{ replies: Post[]; op_author_id: string | null; next_cursor: number | null }>(

@@ -1,11 +1,11 @@
 import { useState, useRef, ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { posts, media, AttachmentInput, type Actor } from '../api';
+import { posts, media, AttachmentInput } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { resizeImageWithDimensions, ResizedImage } from '../utils/imageUtils';
 import { MentionPicker } from '../components/MentionPicker';
 import { PageHeader } from '../components/PageHeader';
-import { getUsername, getPostLink } from '../utils';
+import { getPostLink } from '../utils';
 
 const MAX_CHARACTERS = 500;
 const MAX_IMAGES = 4;
@@ -157,19 +157,18 @@ export function NewPostPage() {
     }
   };
 
-  // Handle mention selection
-  const handleMentionSelect = (actor: Actor) => {
-    const username = getUsername(actor.handle);
+  // MentionPicker passes the ready-to-use mention text (e.g. "alice" or "alice@mastodon.social")
+  const handleMentionSelect = (mentionText: string) => {
     const beforeMention = content.slice(0, mentionStartIndex);
     const afterMention = content.slice(mentionStartIndex + 1 + mentionQuery.length);
 
-    const newContent = `${beforeMention}@${username} ${afterMention}`;
+    const newContent = `${beforeMention}@${mentionText} ${afterMention}`;
     setContent(newContent);
     setShowMentionPicker(false);
 
     setTimeout(() => {
       if (textareaRef.current) {
-        const newCursorPos = mentionStartIndex + username.length + 2;
+        const newCursorPos = mentionStartIndex + mentionText.length + 2;
         textareaRef.current.focus();
         textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
       }

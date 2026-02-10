@@ -314,11 +314,11 @@ export function ActorPage() {
         onShowFollowing={() => setShowFollowing(true)}
       />
 
-      {!actor.is_local && actor.url && (
+      {!actor.is_local && (actor.url || actor.uri) && (
         <p>
-          <a href={actor.url} target="_blank" rel="noopener noreferrer" className="btn btn-outline-secondary btn-sm">
+          <a href={actor.url || actor.uri} target="_blank" rel="noopener noreferrer" className="btn btn-outline-secondary btn-sm">
             <i className="bi bi-box-arrow-up-right me-1"></i>
-            View on {new URL(actor.url).host}
+            View on {new URL(actor.url || actor.uri).host}
           </a>
         </p>
       )}
@@ -350,8 +350,8 @@ export function ActorPage() {
           loading={postsLoading}
           empty={posts.length === 0}
           emptyIcon={actor.is_local ? 'file-text' : 'globe'}
-          emptyTitle={actor.is_local ? 'No posts yet.' : 'No posts from this user yet.'}
-          emptyDescription={actor.is_local ? undefined : 'New posts will appear after you follow them.'}
+          emptyTitle={actor.is_local ? 'No posts yet.' : 'No posts received yet.'}
+          emptyDescription={actor.is_local ? undefined : 'This doesn\'t mean they haven\'t posted — only that nobody on this server follows them yet, so we\'re not receiving their posts. Use the "View on" button above to check their activity on their home server.'}
         >
           {posts.length > 0 && (
             <div className="d-flex justify-content-end mb-3">
@@ -372,8 +372,9 @@ export function ActorPage() {
         <TabContent
           loading={!repliesLoaded}
           empty={replies.length === 0}
-          emptyIcon="chat"
-          emptyTitle="No replies yet."
+          emptyIcon={actor.is_local ? 'chat' : 'globe'}
+          emptyTitle={actor.is_local ? 'No replies yet.' : 'No replies received yet.'}
+          emptyDescription={actor.is_local ? undefined : 'This doesn\'t mean they haven\'t replied to anything — only that nobody on this server follows them yet, so we\'re not receiving their activity. Use the "View on" button above to check their activity on their home server.'}
         >
           {replies.map((post) => (
             <ReplyThread key={post.id} reply={post} />
@@ -389,8 +390,9 @@ export function ActorPage() {
         <TabContent
           loading={!boostsPostsLoaded}
           empty={boostsPosts.length === 0}
-          emptyIcon="arrow-repeat"
-          emptyTitle="No boosted posts yet."
+          emptyIcon={actor.is_local ? 'arrow-repeat' : 'globe'}
+          emptyTitle={actor.is_local ? 'No boosted posts yet.' : 'No boosted posts received yet.'}
+          emptyDescription={actor.is_local ? undefined : 'This doesn\'t mean they haven\'t boosted anything — only that nobody on this server follows them yet, so we\'re not receiving their activity. Use the "View on" button above to check their activity on their home server.'}
         >
           {boostsPosts.map((post) => (
             <PostCard key={post.id} post={post} />
@@ -406,8 +408,9 @@ export function ActorPage() {
         <TabContent
           loading={!boostsLoaded}
           empty={boosts.length === 0}
-          emptyIcon="arrow-repeat"
-          emptyTitle="No boosts yet."
+          emptyIcon={actor.is_local ? 'arrow-repeat' : 'globe'}
+          emptyTitle={actor.is_local ? 'No boosts yet.' : 'No boosts received yet.'}
+          emptyDescription={actor.is_local ? undefined : 'This doesn\'t mean they haven\'t boosted anything — only that nobody on this server follows them yet, so we\'re not receiving their activity. Use the "View on" button above to check their activity on their home server.'}
         >
           {boosts.map((post) => (
             <PostCard key={post.id} post={post} />

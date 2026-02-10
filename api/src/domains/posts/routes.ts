@@ -168,13 +168,12 @@ export function createPostRoutes(federation: Federation<void>): Hono<PostsEnv> {
 
     const limit = Math.min(parseIntSafe(c.req.query("limit")) ?? 20, 50);
     const after = parseIntSafe(c.req.query("after")) ?? undefined;
-    const sort = c.req.query("sort") === "hot" ? "hot" : "new";
 
     // Get the parent post's author to identify OP replies
     const parentAuthor = await db.getActorById(post.actor_id);
 
-    // Use optimized batch method with pagination - pass OP actor ID to sort OP replies first
-    const replies = await db.getRepliesWithActor(post.id, limit + 1, after, sort, post.actor_id);
+    // Sort by reply count (most discussion first), then chronologically — OP replies pinned first
+    const replies = await db.getRepliesWithActor(post.id, limit + 1, after, post.actor_id);
 
     const hasMore = replies.length > limit;
     const resultReplies = hasMore ? replies.slice(0, limit) : replies;
