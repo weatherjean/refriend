@@ -11,7 +11,7 @@ import type { DB } from "../../db.ts";
 import type { Actor } from "../../shared/types.ts";
 import { persistActor } from "../federation-v2/utils/actor.ts";
 import { sanitizeActor, type SanitizedActor } from "../users/types.ts";
-import { enrichPostsBatch } from "../posts/service.ts";
+import { enrichPostsBatch, isPrivateUrl } from "../posts/service.ts";
 import type { EnrichedPost } from "../posts/types.ts";
 export interface SearchUserResult extends SanitizedActor {
   is_following: boolean;
@@ -81,17 +81,8 @@ export async function search(
                   console.warn(`[search] WebFinger returned actor from different domain: ${actorUrl.host} != ${handleDomain}`);
                   continue;
                 }
-                const hostname = actorUrl.hostname;
-                if (
-                  hostname === "localhost" ||
-                  hostname === "127.0.0.1" ||
-                  hostname.startsWith("192.168.") ||
-                  hostname.startsWith("10.") ||
-                  hostname.startsWith("172.") ||
-                  hostname === "::1" ||
-                  hostname === "0.0.0.0"
-                ) {
-                  console.warn(`[search] WebFinger returned private/internal IP: ${hostname}`);
+                if (isPrivateUrl(actorUrl)) {
+                  console.warn(`[search] WebFinger returned private/internal URL: ${actorUrl.hostname}`);
                   continue;
                 }
                 validHrefs.push(link.href);

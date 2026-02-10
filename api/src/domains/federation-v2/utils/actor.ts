@@ -6,6 +6,7 @@
 
 import { Group, type Actor as APActor } from "@fedify/fedify";
 import type { DB, Actor } from "../../../db.ts";
+import { isPrivateUrl } from "../../posts/service.ts";
 
 /**
  * Persist a remote actor to the database
@@ -34,6 +35,16 @@ export async function persistActor(db: DB, domain: string, actor: APActor): Prom
   const inboxUrl = actor.inboxId?.href;
   if (!inboxUrl) return null;
 
+  // Block actors with private/internal inbox URLs (SSRF prevention)
+  try {
+    if (isPrivateUrl(new URL(inboxUrl))) {
+      console.warn(`[federation] Rejecting actor with private inbox URL: ${inboxUrl}`);
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
   // Extract and truncate name (max 200 chars)
   let name = typeof actor.name === "string"
     ? actor.name
@@ -53,7 +64,16 @@ export async function persistActor(db: DB, domain: string, actor: APActor): Prom
   let avatarUrl: string | null = null;
   const icon = await actor.getIcon();
   if (icon && "url" in icon && icon.url) {
-    avatarUrl = icon.url instanceof URL ? icon.url.href : String(icon.url);
+    const rawUrl = icon.url instanceof URL ? icon.url.href : String(icon.url);
+    try {
+      if (!isPrivateUrl(new URL(rawUrl))) {
+        avatarUrl = rawUrl;
+      } else {
+        console.warn(`[federation] Rejecting private avatar URL: ${rawUrl}`);
+      }
+    } catch {
+      // Invalid URL, skip avatar
+    }
   }
 
   const actorUrl = actor.url;
@@ -100,7 +120,11 @@ export async function persistActor(db: DB, domain: string, actor: APActor): Prom
     bio,
     avatar_url: avatarUrl,
     inbox_url: inboxUrl,
-    shared_inbox_url: actor.endpoints?.sharedInbox?.href ?? null,
+    shared_inbox_url: (() => {
+      const href = actor.endpoints?.sharedInbox?.href;
+      if (!href) return null;
+      try { return isPrivateUrl(new URL(href)) ? null : href; } catch { return null; }
+    })(),
     url: urlString,
     actor_type: isGroup ? "Group" : "Person",
     follower_count: followerCount,
